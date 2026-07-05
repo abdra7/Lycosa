@@ -116,6 +116,20 @@ async def client(
     app.dependency_overrides.clear()
 
 
+@pytest_asyncio.fixture
+async def qdrant():
+    """In-memory Qdrant: real vector-search code paths, no server."""
+    from qdrant_client import AsyncQdrantClient
+
+    from app.services.knowledge import store
+
+    client = AsyncQdrantClient(":memory:")
+    store.set_qdrant(client)
+    yield client
+    store.set_qdrant(None)
+    await client.close()
+
+
 _URL_FROM_NAME = "__derive_from_name__"
 
 

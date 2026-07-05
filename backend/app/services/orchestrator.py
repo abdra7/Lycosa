@@ -15,9 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import ExecutionStatus, Node, Task, TaskExecution, TaskStatus
+from app.models.task import TaskType
 from app.schemas.task import TaskCreate
 from app.services.audit import audit
 from app.services.classifier import classify, preferred_roles
+from app.services.knowledge.router import retrieve
 from app.services.scheduler import rank_candidates
 
 logger = logging.getLogger("lycosa.orchestrator")
@@ -57,7 +59,12 @@ async def submit_task(
     task_type = classify(body.prompt, body.type)
     task = Task(
         type=task_type,
-        payload={"prompt": body.prompt, "model": body.model, "options": body.options},
+        payload={
+            "prompt": body.prompt,
+            "model": body.model,
+            "options": body.options,
+            "knowledge_query": body.knowledge_query,
+        },
         created_by_user_id=created_by_user_id,
         created_by_api_key_id=created_by_api_key_id,
     )
@@ -73,6 +80,28 @@ async def submit_task(
         detail={"type": task_type.value},
     )
     await db.commit()
+
+    # knowledge injection: explicit query wins; retrieval-type tasks use the
+    # prompt itself. The agent never learns where knowledge lives (FR-9).
+    prompt = body.prompt
+    knowledge_query = body.knowledge_query or (
+        body.prompt if task_type == TaskType.RETRIEVAL else None
+    )
+    if knowledge_query:
+        try:
+            knowledge = await retrieve(
+                db,
+                knowledge_query,
+                requested_by_user_id=created_by_user_id,
+                requested_by_api_key_id=created_by_api_key_id,
+            )
+            if knowledge.chunks:
+                prompt = (
+                    "Use the following retrieved context to complete the task.\n\n"
+                    f"{knowledge.context_text}\n\n---\n\nTask: {body.prompt}"
+                )
+        except Exception:
+            logger.exception("knowledge retrieval failed; dispatching without context")
 
     candidates = await rank_candidates(db, task_type, model=body.model)
     max_attempts = get_settings().task_max_attempts
@@ -114,7 +143,7 @@ async def submit_task(
             continue
 
         try:
-            outcome = await _dispatch(node, model, body.prompt, body.options)
+            outcome = await _dispatch(node, model, prompt, body.options)
         except httpx.HTTPError as exc:
             last_error = f"node {node.name}: {exc}"
             logger.warning("dispatch attempt %d failed: %s", attempt, last_error)

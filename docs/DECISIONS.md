@@ -317,3 +317,44 @@ engine calls the same `submit_task` per step. Upgrade path: a queue/worker
 pool behind the same endpoint returning 202 + polling, without schema
 changes. Nodes with an unassigned role are schedulable via their
 recommendation by design (fresh fabric works out of the box).
+
+---
+
+## ADR-013: Knowledge plane — controller-hosted Qdrant, pluggable embedders, federated-lite router
+
+**Date:** 2026-07-05
+
+**Context:** FR-6/FR-9 need ingest → embed → retrieve where callers never
+name a node, designed so multiple knowledge nodes can federate later. The
+controller must not require a GPU or huge ML dependencies.
+
+**Decision:**
+- **Layout:** metadata in Postgres (KnowledgeCollection, Document,
+  EmbeddingJob trace, RetrievalRequest audit); vectors in Qdrant, one Qdrant
+  collection per KnowledgeCollection (`kc_<uuid>`), chunk text kept in point
+  payloads. `KnowledgeCollection.node_id` exists (null = controller-hosted)
+  so multi-node ownership needs no schema change.
+- **Embedders** behind an `Embedder` protocol, chosen by
+  `EMBEDDING_BACKEND`: `hashing` (default — deterministic bag-of-words
+  projection, 384-dim, zero downloads, keyword-level relevance, hermetic
+  tests) and `fastembed` (ONNX MiniLM, CPU-only, semantic; `[embeddings]`
+  extra, ~90 MB model on first use). Each collection records its backend;
+  queries are embedded with the collection's own backend. Switching a
+  collection's backend requires re-ingestion (backlog: re-embed job).
+- **Ingestion** is synchronous per upload (consistent with ADR-012), 20 MB
+  cap, pypdf for PDFs, paragraph-aware ~800-char chunks; failures land on
+  the document row (`failed` + error), never a 500.
+- **Router:** named collection scopes the search; otherwise federated-lite —
+  search every collection, merge by score (stable sort keeps freshest
+  collection first on ties), top-k. Returns chunks + assembled
+  `context_text`. Every retrieval is recorded (query, latency, count,
+  requester).
+- **Orchestrator:** `knowledge_query` (explicit) or retrieval-type tasks
+  (implicit, via prompt) trigger retrieval; context is prepended to the
+  dispatched prompt. Agents receive text only — storage location never
+  leaks (FR-9). Retrieval failure degrades to dispatch-without-context.
+
+**Consequences:** RAG works out of the box with zero model downloads;
+semantic quality is one env var away. Qdrant in-memory mode lets unit tests
+exercise real vector-search code. Real federation later = implement the
+router interface over per-node Qdrant instances; API contract unchanged.
