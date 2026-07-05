@@ -1,0 +1,20 @@
+[Unit]
+Description=Lycosa Local Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# put LYCOSA_CONTROLLER_URL / LYCOSA_API_KEY (and overrides) in this file:
+EnvironmentFile=/etc/lycosa/agent.env
+ExecStart=/usr/local/bin/lycosa-agent run
+Restart=on-failure
+RestartSec=10
+# hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

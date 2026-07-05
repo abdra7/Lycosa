@@ -40,6 +40,33 @@ class HardwareProfile(BaseModel):
 class NodeRegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     hardware_profile: HardwareProfile
+    # exec API contact info (sent by the Local Agent; ADR-011)
+    agent_url: str | None = Field(default=None, max_length=255)
+    agent_token: str | None = Field(default=None, min_length=16, max_length=128)
+
+
+class GpuMetrics(BaseModel):
+    util_percent: float | None = Field(default=None, ge=0, le=100)
+    mem_used_gb: float | None = Field(default=None, ge=0)
+    temp_c: float | None = None
+
+
+class NodeMetrics(BaseModel):
+    cpu_percent: float = Field(ge=0, le=100)
+    ram_percent: float = Field(ge=0, le=100)
+    ram_used_gb: float | None = Field(default=None, ge=0)
+    disk_percent: float | None = Field(default=None, ge=0, le=100)
+    gpus: list[GpuMetrics] = []
+    running_tasks: int = Field(default=0, ge=0)
+
+
+class HeartbeatRequest(BaseModel):
+    metrics: NodeMetrics
+
+
+class HeartbeatResponse(BaseModel):
+    status: str = "ok"
+    heartbeat_interval_seconds: int
 
 
 class NodePatch(BaseModel):
@@ -64,5 +91,8 @@ class NodeOut(BaseModel):
     storage_gb: float | None
     os_name: str | None
     hardware_profile: dict[str, Any] | None
+    last_heartbeat_at: datetime | None
+    metrics: dict[str, Any] | None
+    agent_url: str | None  # agent_token is deliberately never exposed
     created_at: datetime
     updated_at: datetime

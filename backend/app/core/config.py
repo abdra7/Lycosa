@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 120  # per window, per API key / client IP
     rate_limit_window_seconds: int = 60
 
+    # node liveness (ADR-011): timeout should be ~3x the agent interval
+    agent_heartbeat_interval_seconds: int = 15
+    heartbeat_timeout_seconds: int = 45
+    offline_sweep_interval_seconds: int = 15
+
 
 @lru_cache
 def get_settings() -> Settings:

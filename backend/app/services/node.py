@@ -1,13 +1,15 @@
-"""Node registry service: registration (create or re-register), inventory, updates."""
+"""Node registry service: registration, inventory, updates, liveness."""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models import ApiKey, Node
 from app.models.node import NodeStatus
-from app.schemas.node import HardwareProfile, NodePatch, NodeRegisterRequest
+from app.schemas.node import HardwareProfile, NodeMetrics, NodePatch, NodeRegisterRequest
 from app.services.audit import audit
 from app.services.recommendation import get_recommender
 
@@ -52,6 +54,11 @@ async def register_node(
         await db.flush()
         api_key.node_id = node.id
         created = True
+
+    if body.agent_url is not None:
+        node.agent_url = body.agent_url
+    if body.agent_token is not None:
+        node.agent_token = body.agent_token
 
     await audit(
         db,
@@ -106,3 +113,54 @@ async def patch_node(
     await db.commit()
     await db.refresh(node)
     return node
+
+
+async def record_heartbeat(
+    db: AsyncSession, node: Node, metrics: NodeMetrics, api_key_id: uuid.UUID
+) -> None:
+    """Store latest metrics and mark the node online. Only the offline→online
+    transition is audited; individual heartbeats would be noise."""
+    came_online = node.status != NodeStatus.ONLINE
+    node.last_heartbeat_at = datetime.now(UTC)
+    node.metrics = metrics.model_dump()
+    node.status = NodeStatus.ONLINE
+    if came_online:
+        await audit(
+            db,
+            action="node.online",
+            actor_api_key_id=api_key_id,
+            resource_type="node",
+            resource_id=str(node.id),
+        )
+    await db.commit()
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+async def sweep_offline_nodes(db: AsyncSession) -> int:
+    """Flip online nodes to offline when their last heartbeat is older than
+    HEARTBEAT_TIMEOUT_SECONDS. Returns how many were flipped. Runs from the
+    lifespan background task (and directly from tests)."""
+    timeout = timedelta(seconds=get_settings().heartbeat_timeout_seconds)
+    cutoff = datetime.now(UTC) - timeout
+
+    online = list(
+        (await db.execute(select(Node).where(Node.status == NodeStatus.ONLINE))).scalars()
+    )
+    flipped = 0
+    for node in online:
+        if node.last_heartbeat_at is None or _as_utc(node.last_heartbeat_at) < cutoff:
+            node.status = NodeStatus.OFFLINE
+            await audit(
+                db,
+                action="node.offline",
+                resource_type="node",
+                resource_id=str(node.id),
+                detail={"reason": "heartbeat timeout"},
+            )
+            flipped += 1
+    if flipped:
+        await db.commit()
+    return flipped
