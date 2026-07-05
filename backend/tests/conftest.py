@@ -116,6 +116,44 @@ async def client(
     app.dependency_overrides.clear()
 
 
+_URL_FROM_NAME = "__derive_from_name__"
+
+
+async def make_node(
+    db_session: AsyncSession,
+    name: str,
+    *,
+    status: str = "online",
+    role: str | None = None,
+    recommended_role: str | None = None,
+    agent_url: str | None = _URL_FROM_NAME,
+    agent_token: str | None = "test-agent-token-0123456789abcdef",
+    ram_gb: float = 32,
+    gpu_vram_gb: float | None = None,
+    metrics: dict | None = None,
+    models: list[str] | None = None,
+):
+    """Directly seed a Node row (bypasses registration) for scheduler tests."""
+    from app.models import Node
+
+    node = Node(
+        name=name,
+        status=status,
+        role=role,
+        recommended_role=recommended_role,
+        agent_url=f"http://{name}:8010" if agent_url == _URL_FROM_NAME else agent_url,
+        agent_token=agent_token,
+        ram_gb=ram_gb,
+        gpu_vram_gb=gpu_vram_gb,
+        metrics=metrics,
+        hardware_profile={"runtimes": [{"name": "ollama", "models": models or ["llama3:8b"]}]},
+    )
+    db_session.add(node)
+    await db_session.commit()
+    await db_session.refresh(node)
+    return node
+
+
 async def login(client: AsyncClient, email: str, password: str = PASSWORD) -> str:
     response = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200, response.text

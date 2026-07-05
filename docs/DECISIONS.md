@@ -282,3 +282,38 @@ already implies fabric compromise. Hardening path (backlog): mTLS or an
 enrollment handshake per node, plus per-dispatch nonces. Metrics history is
 not retained on the controller (only the latest snapshot); Prometheus owns
 time series in Sprint 9.
+
+---
+
+## ADR-012: Synchronous task dispatch v1; keyword classifier; ordered-candidate failover
+
+**Date:** 2026-07-05
+
+**Context:** FR-5 needs submit → classify → schedule → dispatch → result with
+failover. A distributed queue adds operational surface the LAN v1 doesn't
+need yet.
+
+**Decision:**
+- **Sync dispatch:** `POST /api/v1/tasks` executes within the request and
+  returns the finished task (per-attempt timeout
+  `TASK_DISPATCH_TIMEOUT_SECONDS`, default 120 s; at most
+  `TASK_MAX_ATTEMPTS` nodes tried). Every attempt is persisted as a
+  TaskExecution row *before* the network call, so traces survive crashes.
+- **Classifier:** explicit `type` wins; otherwise ordered keyword rules map
+  the prompt to coding/retrieval/vision/tool, defaulting to general. Each
+  type has a role-preference list consumed by the scheduler. An LLM-based
+  classifier can replace `classify()` behind the same signature.
+- **Scheduler:** candidates = online nodes with agent contact info whose
+  effective role (assigned, else recommended) is in the preference list;
+  scored by role rank (dominant), RAM/VRAM, model availability bonus, minus
+  cpu/running-task load. Returns an ordered list; the orchestrator walks it
+  for failover — agent-down and agent-reported failures both advance to the
+  next candidate.
+
+**Consequences:** Results are immediate and the trace is complete
+(queued/assigned/started/finished timestamps + per-node attempts). Long
+tasks hold an HTTP request open — acceptable on LAN, and Sprint 7's workflow
+engine calls the same `submit_task` per step. Upgrade path: a queue/worker
+pool behind the same endpoint returning 202 + polling, without schema
+changes. Nodes with an unassigned role are schedulable via their
+recommendation by design (fresh fabric works out of the box).
