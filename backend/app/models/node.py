@@ -2,7 +2,7 @@ import enum
 import uuid
 from typing import Any
 
-from sqlalchemy import Enum, ForeignKey, String
+from sqlalchemy import Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, JSONVariant, TimestampMixin, UUIDPkMixin
@@ -14,9 +14,21 @@ class NodeStatus(enum.StrEnum):
     OFFLINE = "offline"
 
 
+class NodeRole(enum.StrEnum):
+    AI_COMPUTE = "ai_compute"
+    HYBRID = "hybrid"
+    KNOWLEDGE = "knowledge"
+    TOOL = "tool"
+    VISION = "vision"
+    STORAGE = "storage"
+
+
 class Node(UUIDPkMixin, TimestampMixin, Base):
-    """A device in the fabric. Registration/hardware profile owned by Sprint 2,
-    role recommendation by Sprint 3 — this sprint only defines the shape."""
+    """A device in the fabric.
+
+    `hardware_profile` holds the raw registration payload; the normalized
+    columns are denormalized from it for scheduler queries (Sprint 5).
+    """
 
     __tablename__ = "nodes"
 
@@ -29,6 +41,14 @@ class Node(UUIDPkMixin, TimestampMixin, Base):
     )
     role: Mapped[str | None] = mapped_column(String(50))
     hardware_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONVariant)
+
+    # normalized from hardware_profile at registration time
+    cpu_cores: Mapped[int | None] = mapped_column(Integer)
+    ram_gb: Mapped[float | None] = mapped_column(Float)
+    gpu_count: Mapped[int | None] = mapped_column(Integer)
+    gpu_vram_gb: Mapped[float | None] = mapped_column(Float)  # max VRAM of any single card
+    storage_gb: Mapped[float | None] = mapped_column(Float)
+    os_name: Mapped[str | None] = mapped_column(String(50))
 
     agents: Mapped[list["Agent"]] = relationship(back_populates="node")
 

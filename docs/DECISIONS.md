@@ -159,3 +159,63 @@ Windows, and Linux, distributed as OS-native installers (.dmg / .msi /
   backend Docker image builds.
 - Install becomes two-part: headless controller via compose + desktop app
   downloaded per-OS.
+
+---
+
+## ADR-007: Consistent error envelope on the API edge
+
+**Date:** 2026-07-05
+
+**Context:** FR-2 requires the gateway to return clear, machine-readable
+errors; ad-hoc FastAPI defaults mix `{"detail": ...}` shapes.
+
+**Decision:** Every non-2xx response uses
+`{"error": {"code": "<machine_code>", "message": "<human text>", "details": [...]}}`.
+Exception handlers cover HTTPException, request-validation errors (422 with
+per-field `{"field", "message"}` entries), and a catch-all 500 that logs the
+traceback but returns an opaque message.
+
+**Consequences:** The desktop dashboard and agents parse one error shape.
+Any handler raising HTTPException automatically conforms; internals never
+leak to clients.
+
+---
+
+## ADR-008: In-process sliding-window rate limiting (v1)
+
+**Date:** 2026-07-05
+
+**Context:** The gateway needs rate limiting, but the controller currently
+runs as a single api container.
+
+**Decision:** A small in-process middleware keyed by API key (first 16
+chars) or client IP, sliding window via monotonic-clock deque, configured by
+`RATE_LIMIT_ENABLED/REQUESTS/WINDOW_SECONDS`. `/healthz`, `/docs`,
+`/openapi.json` are exempt. 429 responses carry Retry-After and the ADR-007
+envelope. No external dependency.
+
+**Consequences:** Limits are per-process and reset on restart — acceptable
+for the LAN single-container controller. Horizontal scaling requires
+swapping the backing store for Redis behind the same middleware; that is a
+known upgrade path, not a redesign.
+
+---
+
+## ADR-009: One API key = one node identity; idempotent re-registration
+
+**Date:** 2026-07-05
+
+**Context:** Nodes authenticate registration with API keys (FR-2). Reboots
+and reinstalls must not create duplicate node rows.
+
+**Decision:** `POST /nodes/register` requires an API key with the `node`
+role. An unbound key creates a node and binds to it (`api_keys.node_id`,
+201); a bound key updates its node's name/profile (200). Users cannot
+register nodes. Normalized scheduling columns (cpu_cores, ram_gb, gpu_count,
+max gpu_vram_gb, storage_gb, os_name) are derived from the raw JSONB profile
+at registration time.
+
+**Consequences:** Node identity is stable across restarts; revoking the key
+severs the node's access. A machine wanting multiple logical nodes needs
+multiple keys (intentional). Sprint 4's agent uses this same contract for
+its startup registration.
