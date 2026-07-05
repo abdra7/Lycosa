@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     default_admin_email: str = "admin@lycosa.local"
     default_admin_password: str = "change-me"
 
+    rate_limit_enabled: bool = True
+    rate_limit_requests: int = 120  # per window, per API key / client IP
+    rate_limit_window_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:
