@@ -1,0 +1,24 @@
+name: Tech debt
+description: Cleanup, refactor, or known trade-off to revisit
+labels: [tech-debt]
+body:
+  - type: textarea
+    id: debt
+    attributes:
+      label: What's the debt?
+      description: |
+        What shortcut or trade-off exists, and where? Link the ADR in
+        docs/DECISIONS.md if it documents the trade-off.
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: Why it matters
+      description: What does this debt cost us or block?
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: Proposed remediation

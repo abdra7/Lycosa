@@ -44,6 +44,9 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
     }
   }
 
+  static const _installCommand =
+      'curl -fsSL https://raw.githubusercontent.com/abdra7/Lycosa/main/scripts/install-agent.sh | bash';
+
   String get _command {
     final baseUrl =
         ref.read(sessionProvider).value?.activeProfile?.baseUrl ?? 'http://<controller>:8000';
@@ -123,6 +126,18 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
         SelectableText(
           _minted!.apiKey,
           style: const TextStyle(fontFamily: 'monospace'),
+        ),
+        const SizedBox(height: 12),
+        const Text('Install the agent (once per machine):'),
+        const SizedBox(height: 4),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(8),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: const SelectableText(
+            _installCommand,
+            style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
         ),
         const SizedBox(height: 12),
         const Text('Run on the new machine:'),

@@ -474,3 +474,48 @@ control planes would swap in a broker behind the same publish/subscribe
 seam. Prometheus alerting has no Alertmanager (rules are visible in the
 Prometheus UI; operator-facing alerts arrive via the WS event) — routing
 to email/chat is a backlog item.
+
+---
+
+## ADR-017: Packaging & release — install scripts, GHCR image, tag-driven installer matrix
+
+**Date:** 2026-07-05
+
+**Context:** Sprint 10 must make Lycosa installable from GitHub by someone
+who has never seen the repo: a headless controller (ADR-002's compose stack),
+a desktop app with per-OS installers (ADR-006), and a joinable agent — plus
+a repeatable way to cut releases.
+
+**Decision:**
+- **Controller install:** `scripts/install.sh` (bash) and `scripts/install.ps1`
+  (PowerShell) wrap the documented compose command. Contract: verify
+  Docker/Compose v2/git → clone if run standalone (`curl | bash` supported;
+  prompts read from `/dev/tty`) → generate `.env` from `.env.example` with
+  random `JWT_SECRET`/`POSTGRES_PASSWORD`/Grafana password → prompt for admin
+  credentials (env overrides `LYCOSA_ADMIN_EMAIL`/`LYCOSA_ADMIN_PASSWORD` for
+  non-interactive use; password generated if skipped) → `compose up --build -d`
+  → poll `/healthz` → print the LAN controller URL. Re-runs are idempotent:
+  an existing `.env` is never regenerated.
+- **Release pipeline:** pushing a `v*` tag runs `.github/workflows/release.yml`,
+  which (a) builds and pushes `ghcr.io/abdra7/lycosa-backend:<version>` +
+  `:latest`, (b) builds desktop installers on a 3-OS matrix — macOS `.dmg`
+  via `hdiutil` (no extra tooling), Windows per-user `.exe` via Inno Setup
+  (`dashboard/installers/windows/lycosa.iss`; VC++ runtime DLLs bundled;
+  chosen over `.msi` for far simpler tooling at equal operator value), Linux
+  `.AppImage` + `.tar.gz` (AppImage covers the ".deb" intent with one
+  distro-agnostic artifact) — and (c) creates the GitHub Release with notes
+  extracted from the version's `CHANGELOG.md` section.
+- **Versioning:** single source per component — backend version comes from
+  package metadata (`app/version.py`, surfaced in `/healthz` and OpenAPI),
+  dashboard from `pubspec.yaml` (mirrored in `lib/core/app_info.dart` for
+  display). Components share one release tag; `CHANGELOG.md` follows
+  Keep-a-Changelog with an `Unreleased` section.
+- Installers are unsigned in v0 (macOS Gatekeeper right-click-open, Windows
+  SmartScreen "run anyway") — code signing requires paid certificates and is
+  deferred until distribution warrants it.
+
+**Consequences:** A release is exactly `git tag v0.x.0 && git push --tags`;
+everything publishable is built by CI, nothing on a laptop. The install
+story is the README's front door: controller one-liner, per-OS desktop
+download, dashboard-minted agent join command. Unsigned binaries will show
+OS warnings — documented, and the first thing to revisit if adoption grows.

@@ -36,6 +36,7 @@ dashboard/.flutter-plugins
 dashboard/.flutter-plugins-dependencies
 dashboard/.packages
 dashboard/build/
+dashboard/installers/windows/output/
 dashboard/.pub-cache/
 dashboard/.pub/
 dashboard/**/generated_plugin_registrant.dart

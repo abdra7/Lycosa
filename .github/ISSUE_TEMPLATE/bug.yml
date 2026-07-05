@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in Lycosa doesn't work as documented
+labels: [bug]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - backend (controller API)
+        - agent (node runtime)
+        - dashboard (desktop app)
+        - install scripts / packaging
+        - infra (compose, prometheus, grafana)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag, or `git rev-parse --short HEAD`
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        `docker compose -f infra/docker-compose.yml logs api` for the
+        controller, agent stdout for nodes. Redact secrets.
+      render: text

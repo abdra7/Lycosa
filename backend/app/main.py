@@ -16,6 +16,7 @@ from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS
 from app.core.ratelimit import RateLimitMiddleware
 from app.db.session import get_sessionmaker
 from app.services.node import sweep_offline_nodes
+from app.version import APP_VERSION
 
 logger = logging.getLogger("lycosa.lifespan")
 
@@ -46,7 +47,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Lycosa Control Plane",
     description="Distributed multi-agent AI orchestration platform — control plane API.",
-    version="0.1.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -80,4 +81,4 @@ app.mount("/metrics", make_asgi_app())
 @app.get("/healthz", tags=["health"])
 async def healthz() -> dict[str, str]:
     """Liveness probe. Returns 200 when the API process is up."""
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
