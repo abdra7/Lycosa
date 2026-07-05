@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/session.dart';
+import '../nodes/nodes_screen.dart';
 
 class _Section {
   const _Section(this.label, this.icon, this.owner);
@@ -80,20 +81,23 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(section.icon, size: 56, color: Theme.of(context).hintColor),
-                  const SizedBox(height: 12),
-                  Text(section.label,
-                      style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 4),
-                  Text('Arrives in sub-phase ${section.owner}',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ],
-              ),
-            ),
+            child: _selected == 0
+                ? const NodesScreen()
+                : Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(section.icon,
+                            size: 56, color: Theme.of(context).hintColor),
+                        const SizedBox(height: 12),
+                        Text(section.label,
+                            style: Theme.of(context).textTheme.headlineSmall),
+                        const SizedBox(height: 4),
+                        Text('Arrives in sub-phase ${section.owner}',
+                            style: Theme.of(context).textTheme.bodyMedium),
+                      ],
+                    ),
+                  ),
           ),
         ],
       ),
