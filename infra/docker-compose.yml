@@ -35,6 +35,10 @@ services:
   api:
     build: ../backend
     env_file: ../.env
+    command: >
+      sh -c "alembic upgrade head
+      && python scripts/seed_admin.py
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     depends_on:
