@@ -121,6 +121,160 @@ class MintedApiKey {
       );
 }
 
+class TaskExecutionInfo {
+  TaskExecutionInfo({
+    required this.nodeId,
+    required this.attempt,
+    required this.status,
+    this.output,
+    this.error,
+  });
+
+  final String nodeId;
+  final int attempt;
+  final String status;
+  final String? output;
+  final String? error;
+
+  factory TaskExecutionInfo.fromJson(Map<String, dynamic> json) =>
+      TaskExecutionInfo(
+        nodeId: json['node_id'] as String,
+        attempt: json['attempt'] as int,
+        status: json['status'] as String,
+        output: json['output'] as String?,
+        error: json['error'] as String?,
+      );
+}
+
+class TaskInfo {
+  TaskInfo({
+    required this.id,
+    required this.type,
+    required this.status,
+    required this.payload,
+    this.result,
+    this.error,
+    this.nodeId,
+    required this.queuedAt,
+    this.finishedAt,
+    this.executions = const [],
+  });
+
+  final String id;
+  final String type;
+  final String status;
+  final Map<String, dynamic> payload;
+  final Map<String, dynamic>? result;
+  final String? error;
+  final String? nodeId;
+  final DateTime queuedAt;
+  final DateTime? finishedAt;
+  final List<TaskExecutionInfo> executions;
+
+  String get prompt => payload['prompt'] as String? ?? '';
+  String? get output => result?['output'] as String?;
+
+  factory TaskInfo.fromJson(Map<String, dynamic> json) => TaskInfo(
+        id: json['id'] as String,
+        type: json['type'] as String,
+        status: json['status'] as String,
+        payload: json['payload'] as Map<String, dynamic>? ?? const {},
+        result: json['result'] as Map<String, dynamic>?,
+        error: json['error'] as String?,
+        nodeId: json['node_id'] as String?,
+        queuedAt: DateTime.parse(json['queued_at'] as String),
+        finishedAt: json['finished_at'] != null
+            ? DateTime.parse(json['finished_at'] as String)
+            : null,
+        executions: (json['executions'] as List? ?? const [])
+            .map((e) => TaskExecutionInfo.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+class WorkflowInfo {
+  WorkflowInfo({
+    required this.id,
+    required this.name,
+    this.description,
+    required this.definition,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final Map<String, dynamic> definition;
+
+  factory WorkflowInfo.fromJson(Map<String, dynamic> json) => WorkflowInfo(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String?,
+        definition: json['definition'] as Map<String, dynamic>? ?? const {},
+      );
+}
+
+class StepRunInfo {
+  StepRunInfo({
+    required this.stepId,
+    required this.kind,
+    required this.status,
+    required this.attempt,
+    this.output,
+    this.error,
+  });
+
+  final String stepId;
+  final String kind;
+  final String status;
+  final int attempt;
+  final String? output;
+  final String? error;
+
+  factory StepRunInfo.fromJson(Map<String, dynamic> json) => StepRunInfo(
+        stepId: json['step_id'] as String,
+        kind: json['kind'] as String,
+        status: json['status'] as String,
+        attempt: json['attempt'] as int,
+        output: json['output'] as String?,
+        error: json['error'] as String?,
+      );
+}
+
+class WorkflowRunInfo {
+  WorkflowRunInfo({
+    required this.id,
+    required this.workflowId,
+    required this.status,
+    required this.input,
+    this.currentStep,
+    this.error,
+    this.stepRuns = const [],
+  });
+
+  final String id;
+  final String workflowId;
+  final String status; // running | paused | succeeded | failed
+  final String input;
+  final String? currentStep;
+  final String? error;
+  final List<StepRunInfo> stepRuns;
+
+  bool get isPaused => status == 'paused';
+  bool get isFinished => status == 'succeeded' || status == 'failed';
+
+  factory WorkflowRunInfo.fromJson(Map<String, dynamic> json) => WorkflowRunInfo(
+        id: json['id'] as String,
+        workflowId: json['workflow_id'] as String,
+        status: json['status'] as String,
+        input: json['input'] as String,
+        currentStep: json['current_step'] as String?,
+        error: json['error'] as String?,
+        stepRuns: (json['step_runs'] as List? ?? const [])
+            .map((e) => StepRunInfo.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 /// Hand-written typed client for the Lycosa controller API (ADR-015).
 class ApiClient {
   ApiClient({required this.baseUrl, this.token, http.Client? httpClient})
@@ -222,6 +376,86 @@ class ApiClient {
           body: jsonEncode({'name': name, 'role': 'node'}),
         ));
     return MintedApiKey.fromJson(_decode(response));
+  }
+
+  /// Submit a task; v1 runs synchronously, so the response is final.
+  Future<TaskInfo> submitTask({
+    required String prompt,
+    String? type,
+    String? model,
+    String? knowledgeQuery,
+  }) async {
+    final response = await _send(() => _http.post(
+          _uri('/api/v1/tasks'),
+          headers: _headers,
+          body: jsonEncode({
+            'prompt': prompt,
+            'type': ?type,
+            'model': ?model,
+            'knowledge_query': ?knowledgeQuery,
+          }),
+        ));
+    return TaskInfo.fromJson(_decode(response));
+  }
+
+  Future<List<TaskInfo>> listTasks({String? status}) async {
+    final query = status != null ? '?status=$status' : '';
+    final response =
+        await _send(() => _http.get(_uri('/api/v1/tasks$query'), headers: _headers));
+    return _decodeList(response)
+        .map((e) => TaskInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<WorkflowInfo>> listWorkflows() async {
+    final response =
+        await _send(() => _http.get(_uri('/api/v1/workflows'), headers: _headers));
+    return _decodeList(response)
+        .map((e) => WorkflowInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<WorkflowInfo> createWorkflow({
+    required String name,
+    String? description,
+    required Map<String, dynamic> definition,
+  }) async {
+    final response = await _send(() => _http.post(
+          _uri('/api/v1/workflows'),
+          headers: _headers,
+          body: jsonEncode({
+            'name': name,
+            'description': ?description,
+            'definition': definition,
+          }),
+        ));
+    return WorkflowInfo.fromJson(_decode(response));
+  }
+
+  /// Runs synchronously until finished or paused at an approval step.
+  Future<WorkflowRunInfo> runWorkflow(String workflowId, String input) async {
+    final response = await _send(() => _http.post(
+          _uri('/api/v1/workflows/$workflowId/run'),
+          headers: _headers,
+          body: jsonEncode({'input': input}),
+        ));
+    return WorkflowRunInfo.fromJson(_decode(response));
+  }
+
+  Future<WorkflowRunInfo> getRun(String workflowId, String runId) async {
+    final response = await _send(() => _http
+        .get(_uri('/api/v1/workflows/$workflowId/runs/$runId'), headers: _headers));
+    return WorkflowRunInfo.fromJson(_decode(response));
+  }
+
+  Future<WorkflowRunInfo> approveRun(
+      String workflowId, String runId, bool approved) async {
+    final response = await _send(() => _http.post(
+          _uri('/api/v1/workflows/$workflowId/runs/$runId/approve'),
+          headers: _headers,
+          body: jsonEncode({'approved': approved}),
+        ));
+    return WorkflowRunInfo.fromJson(_decode(response));
   }
 
   List<dynamic> _decodeList(http.Response response) {
