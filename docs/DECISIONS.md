@@ -64,3 +64,66 @@ grafana 11.1.0) for reproducible boots.
 The longer `-f` command is documented in the README; Sprint 10's install
 script will wrap it. If interpolation is ever needed, pass
 `--project-directory .` or `--env-file .env` explicitly.
+
+---
+
+## ADR-003: JWT access tokens backed by server-side session records
+
+**Date:** 2026-07-05
+
+**Context:** FR-1 needs login/logout. Pure stateless JWTs cannot be revoked
+on logout; pure DB sessions lose the self-describing token benefits.
+
+**Decision:** Hybrid: login issues an HS256 JWT (PyJWT, `JWT_SECRET`,
+expiry from `ACCESS_TOKEN_EXPIRE_MINUTES`) whose `jti` is stored hashed in
+the `sessions` table. Every authenticated request validates signature +
+expiry *and* that the session row is neither revoked nor expired. Logout
+sets `revoked_at`, killing the token immediately.
+
+**Consequences:** One DB lookup per authenticated request (acceptable at
+LAN scale; a cache layer can absorb it later). Tokens are revocable,
+auditable, and listable per user. No refresh tokens yet — sessions simply
+expire; that's a backlog item if longer-lived dashboard sessions are needed.
+
+---
+
+## ADR-004: pwdlib (argon2id) for passwords; prefix+SHA-256 for API keys
+
+**Date:** 2026-07-05
+
+**Context:** Passlib is unmaintained and breaks with modern bcrypt.
+API keys need constant-time verification without argon2's per-request cost.
+
+**Decision:** User passwords are hashed with argon2id via `pwdlib`
+(`PasswordHash.recommended()`). API keys use the format
+`lyc_<prefix>_<secret>`; only the prefix (indexed lookup) and the SHA-256
+of the full key are stored, compared with `hmac.compare_digest`. Keys carry
+a role (typically `node`), optional node binding, expiry, and revocation.
+
+**Consequences:** A leaked database exposes no usable credentials. API-key
+auth is cheap (one hash) which matters for high-frequency node heartbeats
+from Sprint 4 on. Key rotation = revoke + issue new.
+
+---
+
+## ADR-005: RBAC via a unified Principal; tests on SQLite, migrations on Postgres
+
+**Date:** 2026-07-05
+
+**Context:** Two credential types (user JWT, service API key) must flow
+through one authorization model; the test suite must run without external
+services (CI, contributor machines).
+
+**Decision:** A single `Principal` (type, id, role) is produced by
+`get_current_principal` regardless of credential type; routes guard with
+`require_roles(...)`. Roles are DB rows (`admin`, `operator`, `node`)
+seeded by `scripts/seed_admin.py`. Tests run against in-memory SQLite
+(aiosqlite) using a `JSON().with_variant(JSONB, "postgresql")` column type;
+Alembic migrations are written by hand and verified against real Postgres
+(upgrade → downgrade → upgrade) in the compose stack.
+
+**Consequences:** Later sprints add endpoints with one dependency line and
+get RBAC + both auth paths for free. SQLite/Postgres divergence is
+contained to the JSON variant and timezone normalization (`as_utc`); any
+future Postgres-only feature (e.g. JSONB operators) needs integration
+tests against the compose Postgres instead.

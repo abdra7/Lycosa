@@ -12,13 +12,20 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "pwdlib[argon2]>=0.2",
+    "pyjwt>=2.8",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",
+    "pytest-asyncio>=0.23",
     "httpx>=0.27",
     "ruff>=0.5",
+    "aiosqlite>=0.20",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -42,3 +49,4 @@ select = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+asyncio_mode = "auto"
