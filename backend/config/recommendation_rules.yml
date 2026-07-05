@@ -1,0 +1,119 @@
+# Node-role recommendation rules (ADR-010).
+# Tunable without code changes: tier thresholds + per-role weighted conditions.
+#
+# A role's score = (sum of matched condition weights) / (sum of all its weights).
+# The highest-scoring role wins; ties resolve in the order roles appear here.
+
+tiers:
+  # value must be >= threshold to enter the tier; below the lowest = base tier
+  gpu_vram_gb: # per single card (max across cards); base tier: none (no GPU)
+    low: 0.001
+    mid: 10
+    high: 20
+  ram_gb: # base tier: low
+    mid: 16
+    high: 48
+    very_high: 96
+  cpu_cores: # logical cores; base tier: low
+    mid: 8
+    high: 16
+  storage_gb: # base tier: small
+    large: 1000
+    very_large: 4000
+
+roles:
+  ai_compute:
+    - signal: gpu_tier
+      in: [high]
+      weight: 0.45
+      reason: "High-VRAM GPU (20+ GB per card) can host large local models"
+    - signal: ram_tier
+      in: [very_high]
+      weight: 0.35
+      reason: "Very large RAM (96+ GB) supports big model contexts and batching"
+    - signal: cpu_tier
+      in: [high]
+      weight: 0.10
+      reason: "Many CPU cores keep tokenization and I/O off the GPU's critical path"
+    - signal: has_llm_runtime
+      equals: true
+      weight: 0.10
+      reason: "An LLM runtime (Ollama/llama.cpp) is already installed"
+
+  hybrid:
+    - signal: gpu_tier
+      in: [mid, high]
+      weight: 0.35
+      reason: "Capable GPU can serve models while the node also runs tools"
+    - signal: ram_tier
+      in: [high]
+      weight: 0.30
+      reason: "Large (but not extreme) RAM fits mixed model + tool workloads"
+    - signal: cpu_tier
+      in: [high]
+      weight: 0.25
+      reason: "Strong CPU handles concurrent tool execution alongside inference"
+    - signal: has_llm_runtime
+      equals: true
+      weight: 0.10
+      reason: "An LLM runtime (Ollama/llama.cpp) is already installed"
+
+  vision:
+    - signal: has_vision_hint
+      equals: true
+      weight: 0.60
+      reason: "Vision capability detected (camera or vision-capable models)"
+    - signal: gpu_tier
+      in: [low, mid, high]
+      weight: 0.40
+      reason: "GPU accelerates image/video inference"
+
+  knowledge:
+    - signal: gpu_tier
+      in: [none]
+      weight: 0.35
+      reason: "No GPU: embedding search and retrieval run well on CPU"
+    - signal: ram_tier
+      in: [low, mid]
+      weight: 0.25
+      reason: "Modest RAM is sufficient for vector search workloads"
+    - signal: cpu_tier
+      in: [low, mid]
+      weight: 0.20
+      reason: "Modest CPU fits index and retrieval workloads"
+    - signal: storage_tier
+      in: [large]
+      weight: 0.20
+      reason: "Roomy storage can hold document collections and indexes"
+
+  storage:
+    - signal: storage_tier
+      in: [very_large]
+      weight: 0.55
+      reason: "Very large storage (4+ TB) suits archival and dataset hosting"
+    - signal: gpu_tier
+      in: [none]
+      weight: 0.20
+      reason: "No GPU to waste: storage duty doesn't need one"
+    - signal: ram_tier
+      in: [low, mid]
+      weight: 0.15
+      reason: "Modest RAM is sufficient for serving files"
+    - signal: cpu_tier
+      in: [low, mid]
+      weight: 0.10
+      reason: "Modest CPU is sufficient for serving files"
+
+  tool:
+    - signal: gpu_tier
+      in: [none]
+      weight: 0.40
+      reason: "CPU-only node is a natural fit for tool execution"
+    - signal: ram_tier
+      in: [low]
+      weight: 0.30
+      reason: "Small RAM still runs script/tool workloads comfortably"
+    - signal: cpu_tier
+      in: [low, mid]
+      weight: 0.30
+      reason: "Modest CPU handles individual tool invocations"

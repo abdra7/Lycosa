@@ -10,6 +10,7 @@ WORKDIR /srv/lycosa
 COPY pyproject.toml alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+COPY config ./config
 COPY scripts ./scripts
 
 RUN pip install --no-cache-dir .

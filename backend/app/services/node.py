@@ -9,6 +9,7 @@ from app.models import ApiKey, Node
 from app.models.node import NodeStatus
 from app.schemas.node import HardwareProfile, NodePatch, NodeRegisterRequest
 from app.services.audit import audit
+from app.services.recommendation import get_recommender
 
 
 def _apply_profile(node: Node, profile: HardwareProfile) -> None:
@@ -19,6 +20,13 @@ def _apply_profile(node: Node, profile: HardwareProfile) -> None:
     node.gpu_vram_gb = max((gpu.vram_gb for gpu in profile.gpus), default=None)
     node.storage_gb = profile.storage_gb
     node.os_name = profile.os.name
+
+    # recompute the recommendation on every (re-)registration; the assigned
+    # `role` is operator-owned and never modified here
+    recommendation = get_recommender().recommend(profile)
+    node.recommended_role = recommendation.role
+    node.recommendation_confidence = recommendation.confidence
+    node.recommendation_rationale = recommendation.rationale
 
 
 async def register_node(
