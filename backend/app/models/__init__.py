@@ -3,6 +3,7 @@
 
 from app.models.audit import AuditLog
 from app.models.node import Agent, AgentCapability, Node, NodeStatus
+from app.models.task import ExecutionStatus, Task, TaskExecution, TaskStatus, TaskType
 from app.models.user import ApiKey, Role, Session, User
 
 __all__ = [
@@ -10,9 +11,14 @@ __all__ = [
     "AgentCapability",
     "ApiKey",
     "AuditLog",
+    "ExecutionStatus",
     "Node",
     "NodeStatus",
     "Role",
     "Session",
+    "Task",
+    "TaskExecution",
+    "TaskStatus",
+    "TaskType",
     "User",
 ]

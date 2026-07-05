@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     heartbeat_timeout_seconds: int = 45
     offline_sweep_interval_seconds: int = 15
 
+    # task dispatch (ADR-012)
+    task_dispatch_timeout_seconds: int = 120
+    task_max_attempts: int = 3
+
 
 @lru_cache
 def get_settings() -> Settings:
