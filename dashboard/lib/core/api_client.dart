@@ -32,6 +32,95 @@ class Principal {
   String get displayName => email ?? name ?? id;
 }
 
+/// A node in the fabric, as returned by /api/v1/nodes.
+class NodeInfo {
+  NodeInfo({
+    required this.id,
+    required this.name,
+    required this.status,
+    this.role,
+    this.recommendedRole,
+    this.recommendationConfidence,
+    this.recommendationRationale = const [],
+    this.cpuCores,
+    this.ramGb,
+    this.gpuCount,
+    this.gpuVramGb,
+    this.storageGb,
+    this.osName,
+    this.hardwareProfile,
+    this.lastHeartbeatAt,
+    this.metrics,
+    this.agentUrl,
+  });
+
+  final String id;
+  final String name;
+  final String status; // registered | online | offline
+  final String? role;
+  final String? recommendedRole;
+  final double? recommendationConfidence;
+  final List<String> recommendationRationale;
+  final int? cpuCores;
+  final double? ramGb;
+  final int? gpuCount;
+  final double? gpuVramGb;
+  final double? storageGb;
+  final String? osName;
+  final Map<String, dynamic>? hardwareProfile;
+  final DateTime? lastHeartbeatAt;
+  final Map<String, dynamic>? metrics;
+  final String? agentUrl;
+
+  factory NodeInfo.fromJson(Map<String, dynamic> json) => NodeInfo(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        status: json['status'] as String,
+        role: json['role'] as String?,
+        recommendedRole: json['recommended_role'] as String?,
+        recommendationConfidence:
+            (json['recommendation_confidence'] as num?)?.toDouble(),
+        recommendationRationale:
+            (json['recommendation_rationale'] as List?)?.cast<String>() ?? const [],
+        cpuCores: json['cpu_cores'] as int?,
+        ramGb: (json['ram_gb'] as num?)?.toDouble(),
+        gpuCount: json['gpu_count'] as int?,
+        gpuVramGb: (json['gpu_vram_gb'] as num?)?.toDouble(),
+        storageGb: (json['storage_gb'] as num?)?.toDouble(),
+        osName: json['os_name'] as String?,
+        hardwareProfile: json['hardware_profile'] as Map<String, dynamic>?,
+        lastHeartbeatAt: json['last_heartbeat_at'] != null
+            ? DateTime.parse(json['last_heartbeat_at'] as String)
+            : null,
+        metrics: json['metrics'] as Map<String, dynamic>?,
+        agentUrl: json['agent_url'] as String?,
+      );
+}
+
+const nodeRoles = [
+  'ai_compute',
+  'hybrid',
+  'knowledge',
+  'tool',
+  'vision',
+  'storage',
+];
+
+/// One-time response from minting an API key: the full key appears only here.
+class MintedApiKey {
+  MintedApiKey({required this.id, required this.name, required this.apiKey});
+
+  final String id;
+  final String name;
+  final String apiKey;
+
+  factory MintedApiKey.fromJson(Map<String, dynamic> json) => MintedApiKey(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        apiKey: json['api_key'] as String,
+      );
+}
+
 /// Hand-written typed client for the Lycosa controller API (ADR-015).
 class ApiClient {
   ApiClient({required this.baseUrl, this.token, http.Client? httpClient})
@@ -100,6 +189,46 @@ class ApiClient {
   Future<Principal> me() async {
     final response = await _send(() => _http.get(_uri('/api/v1/me'), headers: _headers));
     return Principal.fromJson(_decode(response));
+  }
+
+  Future<List<NodeInfo>> listNodes({String? status}) async {
+    final query = status != null ? '?status=$status' : '';
+    final response =
+        await _send(() => _http.get(_uri('/api/v1/nodes$query'), headers: _headers));
+    final list = _decodeList(response);
+    return list.map((e) => NodeInfo.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<NodeInfo> getNode(String id) async {
+    final response =
+        await _send(() => _http.get(_uri('/api/v1/nodes/$id'), headers: _headers));
+    return NodeInfo.fromJson(_decode(response));
+  }
+
+  Future<NodeInfo> patchNode(String id, {String? role, String? name}) async {
+    final response = await _send(() => _http.patch(
+          _uri('/api/v1/nodes/$id'),
+          headers: _headers,
+          body: jsonEncode({'role': ?role, 'name': ?name}),
+        ));
+    return NodeInfo.fromJson(_decode(response));
+  }
+
+  /// Admin: mint a node-role API key. The full key is returned exactly once.
+  Future<MintedApiKey> createNodeApiKey(String name) async {
+    final response = await _send(() => _http.post(
+          _uri('/api/v1/admin/api-keys'),
+          headers: _headers,
+          body: jsonEncode({'name': name, 'role': 'node'}),
+        ));
+    return MintedApiKey.fromJson(_decode(response));
+  }
+
+  List<dynamic> _decodeList(http.Response response) {
+    if (response.statusCode >= 400) {
+      _decode(response); // throws with envelope
+    }
+    return jsonDecode(response.body) as List<dynamic>;
   }
 
   void close() => _http.close();
