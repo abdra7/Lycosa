@@ -12,6 +12,9 @@ class TaskCreate(BaseModel):
     type: TaskType | None = None  # omit to let the classifier decide
     model: str | None = None  # omit to use the chosen node's first available model
     options: dict[str, Any] = {}
+    # when set (or for retrieval-type tasks, using the prompt), the Knowledge
+    # Router injects retrieved context into the prompt before dispatch
+    knowledge_query: str | None = None
 
 
 class TaskExecutionOut(BaseModel):

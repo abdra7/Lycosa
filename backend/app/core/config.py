@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     task_dispatch_timeout_seconds: int = 120
     task_max_attempts: int = 3
 
+    # knowledge plane (ADR-013)
+    embedding_backend: str = "hashing"  # hashing | fastembed
+    embedding_dim: int = 384
+
 
 @lru_cache
 def get_settings() -> Settings:
