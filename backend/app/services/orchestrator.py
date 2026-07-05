@@ -14,6 +14,9 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.events import get_event_bus
+from app.core.logging import task_id_var
+from app.core.metrics import TASK_DURATION, TASK_FAILOVERS, TASKS_TOTAL
 from app.models import ExecutionStatus, Node, Task, TaskExecution, TaskStatus
 from app.models.task import TaskType
 from app.schemas.task import TaskCreate
@@ -70,6 +73,8 @@ async def submit_task(
     )
     db.add(task)
     await db.flush()
+    task_id_var.set(str(task.id))  # correlation id for every log line below
+    get_event_bus().publish("task.started", {"task_id": str(task.id), "type": task_type.value})
     await audit(
         db,
         action="task.submit",
@@ -125,6 +130,8 @@ async def submit_task(
         task.assigned_at = datetime.now(UTC)
         task.node_id = node.id
 
+        if attempt > 1:
+            TASK_FAILOVERS.inc()
         execution = TaskExecution(
             task_id=task.id, node_id=node.id, attempt=attempt, status=ExecutionStatus.RUNNING
         )
@@ -206,4 +213,17 @@ async def _finish(
     )
     await db.commit()
     await db.refresh(task)
+
+    def as_utc(dt: datetime) -> datetime:  # SQLite returns naive datetimes
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+    TASKS_TOTAL.labels(task.type.value, status.value).inc()
+    TASK_DURATION.labels(task.type.value).observe(
+        (as_utc(task.finished_at) - as_utc(task.queued_at)).total_seconds()
+    )
+    get_event_bus().publish(
+        "task.finished",
+        {"task_id": str(task.id), "status": status.value, "error": error},
+    )
+    task_id_var.set(None)
     return task

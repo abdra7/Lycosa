@@ -15,6 +15,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.events import get_event_bus
+from app.core.logging import workflow_run_id_var
+from app.core.metrics import WORKFLOW_RUNS, WORKFLOW_STEPS
 from app.db.session import get_runtime_sessionmaker
 from app.models import (
     RunStatus,
@@ -83,6 +86,11 @@ async def start_run(
     )
     db.add(run)
     await db.flush()
+    workflow_run_id_var.set(str(run.id))  # log correlation for the whole run
+    get_event_bus().publish(
+        "workflow.started",
+        {"run_id": str(run.id), "workflow_id": str(workflow.id), "name": workflow.name},
+    )
     await audit(
         db,
         action="workflow.run.started",
@@ -180,14 +188,22 @@ async def _execute_from(
             )
             await db.commit()
             await db.refresh(run)
+            WORKFLOW_STEPS.labels(step.kind, "pending_approval").inc()
+            get_event_bus().publish("workflow.paused", {"run_id": str(run.id), "step": step.id})
             return run
 
         try:
             output = await _run_step_with_retries(db, run, step, user_id, api_key_id)
         except _StepFailed as exc:
+            WORKFLOW_STEPS.labels(step.kind, "failed").inc()
             return await _finish(db, run, RunStatus.FAILED, error=f"step {step.id!r} failed: {exc}")
         _record_output(run, step.id, output)
         await db.commit()
+        WORKFLOW_STEPS.labels(step.kind, "succeeded").inc()
+        get_event_bus().publish(
+            "workflow.step.completed",
+            {"run_id": str(run.id), "step": step.id, "kind": step.kind},
+        )
 
     return await _finish(db, run, RunStatus.SUCCEEDED)
 
@@ -310,4 +326,21 @@ async def _finish(
     )
     await db.commit()
     await db.refresh(run)
+
+    WORKFLOW_RUNS.labels(status.value).inc()
+    bus = get_event_bus()
+    bus.publish(
+        "workflow.finished",
+        {"run_id": str(run.id), "status": status.value, "error": error},
+    )
+    if status == RunStatus.FAILED:
+        bus.publish(
+            "alert.created",
+            {
+                "severity": "warning",
+                "message": f"Workflow run {run.id} failed: {error}",
+                "run_id": str(run.id),
+            },
+        )
+    workflow_run_id_var.set(None)
     return run

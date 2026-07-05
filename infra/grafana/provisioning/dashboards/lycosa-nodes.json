@@ -1,0 +1,54 @@
+{
+  "uid": "lycosa-nodes",
+  "title": "Lycosa — Node Health",
+  "tags": ["lycosa"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": {"from": "now-30m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Nodes by status",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "lycosa_nodes", "legendFormat": "{{status}}"}
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Node CPU %",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent", "max": 100}, "overrides": []},
+      "targets": [
+        {"expr": "lycosa_node_cpu_percent", "legendFormat": "{{node}}"}
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Node RAM %",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent", "max": 100}, "overrides": []},
+      "targets": [
+        {"expr": "lycosa_node_ram_percent", "legendFormat": "{{node}}"}
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Running tasks per node",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 15},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "lycosa_node_running_tasks", "legendFormat": "{{node}}"}
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

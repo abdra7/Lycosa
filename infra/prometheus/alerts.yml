@@ -1,0 +1,38 @@
+groups:
+  - name: lycosa
+    rules:
+      - alert: NodeOffline
+        expr: lycosa_nodes{status="offline"} > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} node(s) offline"
+          description: "One or more Lycosa nodes stopped heartbeating."
+
+      - alert: WorkflowFailures
+        expr: increase(lycosa_workflow_runs_total{status="failed"}[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Workflow run(s) failed in the last 5 minutes"
+
+      - alert: RetrievalLatencyDegraded
+        expr: >
+          histogram_quantile(0.95,
+            rate(lycosa_retrieval_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Knowledge retrieval p95 latency above 2s"
+
+      - alert: ApiErrorRateHigh
+        expr: >
+          sum(rate(lycosa_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(lycosa_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 5% of API requests are failing"

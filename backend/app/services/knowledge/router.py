@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.metrics import RETRIEVAL_DURATION, RETRIEVALS_TOTAL
 from app.models import KnowledgeCollection, RetrievalRequest
 from app.services.knowledge.embedder import get_embedder
 from app.services.knowledge.store import qdrant_name, search
@@ -95,6 +96,8 @@ async def retrieve(
     chunks = chunks[:top_k]
 
     latency_ms = (time.perf_counter() - started) * 1000
+    RETRIEVALS_TOTAL.inc()
+    RETRIEVAL_DURATION.observe(latency_ms / 1000)
     db.add(
         RetrievalRequest(
             query=query,
