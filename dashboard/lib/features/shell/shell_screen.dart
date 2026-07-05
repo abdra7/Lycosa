@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/session.dart';
+import '../admin/admin_screen.dart';
+import '../knowledge/knowledge_screen.dart';
 import '../nodes/nodes_screen.dart';
 import '../tasks/tasks_screen.dart';
 import '../workflows/workflows_screen.dart';
@@ -36,7 +38,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider).value!;
     final principal = session.principal!;
-    final section = _sections[_selected];
 
     return Scaffold(
       appBar: AppBar(
@@ -87,21 +88,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               0 => const NodesScreen(),
               1 => const TasksScreen(),
               2 => const WorkflowsScreen(),
-              _ => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(section.icon,
-                          size: 56, color: Theme.of(context).hintColor),
-                      const SizedBox(height: 12),
-                      Text(section.label,
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(height: 4),
-                      Text('Arrives in sub-phase ${section.owner}',
-                          style: Theme.of(context).textTheme.bodyMedium),
-                    ],
-                  ),
-                ),
+              3 => const KnowledgeScreen(),
+              _ => const AdminScreen(),
             },
           ),
         ],

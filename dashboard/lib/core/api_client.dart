@@ -275,6 +275,145 @@ class WorkflowRunInfo {
       );
 }
 
+class CollectionInfo {
+  CollectionInfo({
+    required this.id,
+    required this.name,
+    this.description,
+    required this.embeddingBackend,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final String embeddingBackend;
+
+  factory CollectionInfo.fromJson(Map<String, dynamic> json) => CollectionInfo(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String?,
+        embeddingBackend: json['embedding_backend'] as String,
+      );
+}
+
+class DocumentInfo {
+  DocumentInfo({
+    required this.id,
+    required this.filename,
+    required this.status,
+    required this.chunkCount,
+    required this.sizeBytes,
+    this.error,
+  });
+
+  final String id;
+  final String filename;
+  final String status; // uploaded | embedded | failed
+  final int chunkCount;
+  final int sizeBytes;
+  final String? error;
+
+  factory DocumentInfo.fromJson(Map<String, dynamic> json) => DocumentInfo(
+        id: json['id'] as String,
+        filename: json['filename'] as String,
+        status: json['status'] as String,
+        chunkCount: json['chunk_count'] as int,
+        sizeBytes: json['size_bytes'] as int,
+        error: json['error'] as String?,
+      );
+}
+
+class RetrievedChunkInfo {
+  RetrievedChunkInfo({
+    required this.text,
+    required this.source,
+    required this.collection,
+    required this.score,
+  });
+
+  final String text;
+  final String source;
+  final String collection;
+  final double score;
+
+  factory RetrievedChunkInfo.fromJson(Map<String, dynamic> json) =>
+      RetrievedChunkInfo(
+        text: json['text'] as String,
+        source: json['source'] as String,
+        collection: json['collection'] as String,
+        score: (json['score'] as num).toDouble(),
+      );
+}
+
+class AuditLogEntry {
+  AuditLogEntry({
+    required this.createdAt,
+    required this.action,
+    this.resourceType,
+    this.resourceId,
+    this.actorUserId,
+    this.actorApiKeyId,
+    this.ipAddress,
+  });
+
+  final DateTime createdAt;
+  final String action;
+  final String? resourceType;
+  final String? resourceId;
+  final String? actorUserId;
+  final String? actorApiKeyId;
+  final String? ipAddress;
+
+  String get actor => actorUserId != null
+      ? 'user'
+      : actorApiKeyId != null
+          ? 'api key'
+          : '—';
+
+  factory AuditLogEntry.fromJson(Map<String, dynamic> json) => AuditLogEntry(
+        createdAt: DateTime.parse(json['created_at'] as String),
+        action: json['action'] as String,
+        resourceType: json['resource_type'] as String?,
+        resourceId: json['resource_id'] as String?,
+        actorUserId: json['actor_user_id'] as String?,
+        actorApiKeyId: json['actor_api_key_id'] as String?,
+        ipAddress: json['ip_address'] as String?,
+      );
+}
+
+class ApiKeyInfo {
+  ApiKeyInfo({
+    required this.id,
+    required this.name,
+    required this.keyPrefix,
+    this.nodeId,
+    this.lastUsedAt,
+    this.revokedAt,
+  });
+
+  final String id;
+  final String name;
+  final String keyPrefix;
+  final String? nodeId;
+  final DateTime? lastUsedAt;
+  final DateTime? revokedAt;
+
+  bool get isRevoked => revokedAt != null;
+
+  factory ApiKeyInfo.fromJson(Map<String, dynamic> json) => ApiKeyInfo(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        keyPrefix: json['key_prefix'] as String,
+        nodeId: json['node_id'] as String?,
+        lastUsedAt: json['last_used_at'] != null
+            ? DateTime.parse(json['last_used_at'] as String)
+            : null,
+        revokedAt: json['revoked_at'] != null
+            ? DateTime.parse(json['revoked_at'] as String)
+            : null,
+      );
+}
+
 /// Hand-written typed client for the Lycosa controller API (ADR-015).
 class ApiClient {
   ApiClient({required this.baseUrl, this.token, http.Client? httpClient})
@@ -456,6 +595,80 @@ class ApiClient {
           body: jsonEncode({'approved': approved}),
         ));
     return WorkflowRunInfo.fromJson(_decode(response));
+  }
+
+  Future<List<CollectionInfo>> listCollections() async {
+    final response = await _send(
+        () => _http.get(_uri('/api/v1/knowledge/collections'), headers: _headers));
+    return _decodeList(response)
+        .map((e) => CollectionInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<CollectionInfo> createCollection(String name, {String? description}) async {
+    final response = await _send(() => _http.post(
+          _uri('/api/v1/knowledge/collections'),
+          headers: _headers,
+          body: jsonEncode({'name': name, 'description': ?description}),
+        ));
+    return CollectionInfo.fromJson(_decode(response));
+  }
+
+  Future<List<DocumentInfo>> listDocuments(String collectionId) async {
+    final response = await _send(() => _http.get(
+        _uri('/api/v1/knowledge/collections/$collectionId/documents'),
+        headers: _headers));
+    return _decodeList(response)
+        .map((e) => DocumentInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Multipart upload; the document is ingested synchronously, so the
+  /// returned status is final (embedded or failed).
+  Future<DocumentInfo> uploadDocument(
+      String collectionId, String filename, List<int> bytes) async {
+    final request = http.MultipartRequest(
+        'POST', _uri('/api/v1/knowledge/collections/$collectionId/documents'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    final response = await _send(
+        () async => http.Response.fromStream(await _http.send(request)));
+    return DocumentInfo.fromJson(_decode(response));
+  }
+
+  Future<List<RetrievedChunkInfo>> retrieve(String query,
+      {String? collection, int topK = 5}) async {
+    final response = await _send(() => _http.post(
+          _uri('/api/v1/knowledge/retrieve'),
+          headers: _headers,
+          body: jsonEncode(
+              {'query': query, 'collection': ?collection, 'top_k': topK}),
+        ));
+    return ((_decode(response)['chunks'] as List?) ?? const [])
+        .map((e) => RetrievedChunkInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<AuditLogEntry>> listAuditLogs({int limit = 50}) async {
+    final response = await _send(() =>
+        _http.get(_uri('/api/v1/admin/audit-logs?limit=$limit'), headers: _headers));
+    return _decodeList(response)
+        .map((e) => AuditLogEntry.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<ApiKeyInfo>> listApiKeys() async {
+    final response = await _send(
+        () => _http.get(_uri('/api/v1/admin/api-keys'), headers: _headers));
+    return _decodeList(response)
+        .map((e) => ApiKeyInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> revokeApiKey(String id) async {
+    final response = await _send(
+        () => _http.delete(_uri('/api/v1/admin/api-keys/$id'), headers: _headers));
+    if (response.statusCode >= 400) _decode(response);
   }
 
   List<dynamic> _decodeList(http.Response response) {
