@@ -432,3 +432,45 @@ and inherit auth, profile switching, and error shaping for free. Windows
 dev builds require OS Developer Mode (Flutter plugin symlinks) — documented
 in dashboard/README.md. CI runs `flutter analyze` + `flutter test` on
 Ubuntu; desktop release builds are Sprint 10's release-matrix problem.
+
+---
+
+## ADR-016: Observability — JSON logs with correlation ids, Prometheus metrics, in-process WebSocket event bus
+
+**Date:** 2026-07-05
+
+**Context:** NFR-8 requires the platform to be observable by default:
+structured logs, metrics, dashboards, alerts, and a live event stream the
+desktop dashboard can render without polling.
+
+**Decision:**
+- **Logging:** stdlib-only JSON formatter on the root logger (uvicorn
+  loggers propagate through it). Correlation ids live in contextvars —
+  HTTP middleware sets `request_id` (echoed as X-Request-ID), the
+  orchestrator sets `task_id`, the workflow executor sets
+  `workflow_run_id` — so every log line in a dispatch carries its ids.
+- **Metrics:** prometheus-client mounted at `/metrics`: HTTP
+  rate/duration by route template (template, not raw path, to bound
+  cardinality), task totals/duration/failovers, retrieval latency,
+  workflow run/step counters, node-status gauge, and per-node cpu/ram/task
+  gauges fed by heartbeats. Prometheus scrapes the api service; alert
+  rules (NodeOffline, WorkflowFailures, RetrievalLatencyDegraded,
+  ApiErrorRateHigh) and two Grafana dashboards (System Overview, Node
+  Health) are provisioned as code in /infra.
+- **Events:** an in-process EventBus (bounded per-connection queues; slow
+  consumers drop rather than block) feeds `WS /api/v1/events`,
+  authenticated with the same JWT+session validation as REST (token via
+  query param for WS friendliness). Services publish node.connected/
+  disconnected/metrics.updated, task.started/finished,
+  workflow.started/step.completed/paused/finished, and alert.created
+  (node offline, workflow failed). The Flutter shell subscribes with
+  auto-reconnect: alert snackbars, a live status strip, and push-driven
+  invalidation of the node list (polling stays as fallback).
+
+**Consequences:** One `docker compose up` now includes working dashboards
+and alerts, and the desktop app reacts to fabric changes in real time.
+The event bus is single-process like ADR-008's rate limiter — multi-node
+control planes would swap in a broker behind the same publish/subscribe
+seam. Prometheus alerting has no Alertmanager (rules are visible in the
+Prometheus UI; operator-facing alerts arrive via the WS event) — routing
+to email/chat is a backlog item.

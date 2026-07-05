@@ -3,10 +3,13 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.events import get_event_bus
+from app.core.metrics import NODE_CPU, NODE_RAM, NODE_TASKS, NODES
 from app.models import ApiKey, Node
 from app.models.node import NodeStatus
 from app.schemas.node import HardwareProfile, NodeMetrics, NodePatch, NodeRegisterRequest
@@ -115,6 +118,15 @@ async def patch_node(
     return node
 
 
+async def _update_node_gauges(db: AsyncSession) -> None:
+    rows = (
+        await db.execute(select(Node.status, sa_func.count(Node.id)).group_by(Node.status))
+    ).all()
+    counts = {status.value: count for status, count in rows}
+    for status in NodeStatus:
+        NODES.labels(status.value).set(counts.get(status.value, 0))
+
+
 async def record_heartbeat(
     db: AsyncSession, node: Node, metrics: NodeMetrics, api_key_id: uuid.UUID
 ) -> None:
@@ -134,6 +146,18 @@ async def record_heartbeat(
         )
     await db.commit()
 
+    bus = get_event_bus()
+    if came_online:
+        bus.publish("node.connected", {"node_id": str(node.id), "name": node.name})
+    bus.publish(
+        "node.metrics.updated",
+        {"node_id": str(node.id), "name": node.name, "metrics": node.metrics},
+    )
+    NODE_CPU.labels(node.name).set(metrics.cpu_percent)
+    NODE_RAM.labels(node.name).set(metrics.ram_percent)
+    NODE_TASKS.labels(node.name).set(metrics.running_tasks)
+    await _update_node_gauges(db)
+
 
 def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
@@ -150,6 +174,7 @@ async def sweep_offline_nodes(db: AsyncSession) -> int:
         (await db.execute(select(Node).where(Node.status == NodeStatus.ONLINE))).scalars()
     )
     flipped = 0
+    bus = get_event_bus()
     for node in online:
         if node.last_heartbeat_at is None or _as_utc(node.last_heartbeat_at) < cutoff:
             node.status = NodeStatus.OFFLINE
@@ -161,6 +186,16 @@ async def sweep_offline_nodes(db: AsyncSession) -> int:
                 detail={"reason": "heartbeat timeout"},
             )
             flipped += 1
+            bus.publish("node.disconnected", {"node_id": str(node.id), "name": node.name})
+            bus.publish(
+                "alert.created",
+                {
+                    "severity": "warning",
+                    "message": f"Node {node.name!r} went offline (heartbeat timeout)",
+                    "node_id": str(node.id),
+                },
+            )
     if flipped:
         await db.commit()
+        await _update_node_gauges(db)
     return flipped
