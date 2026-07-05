@@ -54,6 +54,9 @@ class NodeOut(BaseModel):
     name: str
     status: NodeStatus
     role: str | None
+    recommended_role: str | None
+    recommendation_confidence: float | None
+    recommendation_rationale: list[str] | None
     cpu_cores: int | None
     ram_gb: float | None
     gpu_count: int | None

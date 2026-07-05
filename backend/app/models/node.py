@@ -42,6 +42,12 @@ class Node(UUIDPkMixin, TimestampMixin, Base):
     role: Mapped[str | None] = mapped_column(String(50))
     hardware_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONVariant)
 
+    # recommendation engine output, recomputed on every (re-)registration;
+    # `role` above stays operator-assigned and is never touched by the engine
+    recommended_role: Mapped[str | None] = mapped_column(String(50))
+    recommendation_confidence: Mapped[float | None] = mapped_column(Float)
+    recommendation_rationale: Mapped[list[str] | None] = mapped_column(JSONVariant)
+
     # normalized from hardware_profile at registration time
     cpu_cores: Mapped[int | None] = mapped_column(Integer)
     ram_gb: Mapped[float | None] = mapped_column(Float)

@@ -219,3 +219,30 @@ at registration time.
 severs the node's access. A machine wanting multiple logical nodes needs
 multiple keys (intentional). Sprint 4's agent uses this same contract for
 its startup registration.
+
+---
+
+## ADR-010: Rule-based node-role recommendation, rules in config, ML behind the same interface
+
+**Date:** 2026-07-05
+
+**Context:** FR-7 wants hardware profile → recommended role with a rationale
+operators can trust. A learned model needs data we don't have yet.
+
+**Decision:** v1 is a transparent rule engine: signals (gpu/ram/cpu/storage
+tiers, LLM-runtime and vision hints) are derived from the profile, then each
+role is scored 0–1 as the weight-fraction of matched conditions defined in
+`backend/config/recommendation_rules.yml` (tunable without code changes;
+ties resolve in config order). Output always includes the winning role,
+confidence (= winning score), human-readable rationale, and *all six*
+scores. The engine sits behind a `Recommender` protocol returned by
+`get_recommender()`; registration recomputes the recommendation on every
+(re-)register but never touches the operator-assigned `role` — accept =
+PATCH role to the recommendation, override = PATCH to anything else, both
+audited.
+
+**Consequences:** Recommendations are explainable and tunable in the field.
+A future ML recommender replaces the rule engine behind the same protocol
+with no caller changes. Rule edits require an api-container restart (rules
+are cached at first use); hot-reload is a backlog item if field-tuning
+becomes frequent.
