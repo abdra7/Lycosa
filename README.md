@@ -16,12 +16,16 @@ workflows, and monitors everything from one dashboard.
 |---|---|
 | `backend/` | FastAPI control plane (orchestrator, scheduler, knowledge router, …) |
 | `agent/` | Local Agent runtime installed on each node |
-| `dashboard/` | Flutter Web operator dashboard |
+| `dashboard/` | Flutter Desktop operator dashboard (native macOS/Windows/Linux) |
 | `infra/` | Docker Compose, Prometheus/Grafana config, future k8s manifests |
 | `docs/` | Architecture decisions, roadmap, project docs |
 | `scripts/` | Install and release tooling |
 
-## Quick start
+## Quick start (headless controller)
+
+This brings up the **headless controller stack** only — API, PostgreSQL,
+Qdrant, Prometheus, and Grafana. There is no web UI in this stack; the
+operator dashboard is a separate native desktop application (see below).
 
 Prerequisites: [Docker](https://docs.docker.com/get-docker/) with Compose v2.
 
@@ -44,6 +48,15 @@ To stop everything:
 ```bash
 docker compose -f infra/docker-compose.yml down
 ```
+
+## Dashboard (desktop app)
+
+The Lycosa dashboard is a **native Flutter Desktop application** for
+macOS, Windows, and Linux, installed separately from per-OS installers —
+it is not part of the Docker stack. On first run it asks for the
+controller API URL and credentials and connects over the LAN.
+Build and install instructions land in a later sprint (see ADR-006 in
+[docs/DECISIONS.md](docs/DECISIONS.md)).
 
 ## Development
 
