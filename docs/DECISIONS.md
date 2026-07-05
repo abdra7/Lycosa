@@ -246,3 +246,39 @@ A future ML recommender replaces the rule engine behind the same protocol
 with no caller changes. Rule edits require an api-container restart (rules
 are cached at first use); hot-reload is a backlog item if field-tuning
 becomes frequent.
+
+---
+
+## ADR-011: Heartbeat liveness with a sweeper; agent exec API secured by a registration-time token
+
+**Date:** 2026-07-05
+
+**Context:** The controller must know which nodes are alive (FR-2/FR-4) and
+must later dispatch tasks to agents (Sprint 5). Agents sit behind the
+controller's API-key auth, but the reverse direction — controller calling
+the agent — needs its own credential.
+
+**Decision:**
+- **Liveness:** agents POST `/api/v1/nodes/heartbeat` (bound node key) every
+  15 s with live metrics; the response echoes the interval so it is
+  controller-tunable. The latest metrics snapshot and `last_heartbeat_at`
+  live on the node row. A lifespan background sweeper flips nodes to
+  `offline` when the last heartbeat is older than `HEARTBEAT_TIMEOUT_SECONDS`
+  (45 s = 3× interval). Only transitions are audited (`node.online` /
+  `node.offline`), not every heartbeat.
+- **Agent exec API:** at startup the agent generates a random token, serves
+  its execution API (uvicorn, port 8010) requiring `X-Agent-Token`, and
+  sends `agent_url` + `agent_token` in its registration payload. The
+  controller stores the token retrievable (not hashed) because it must
+  replay it verbatim when dispatching; it is never exposed via any API
+  response. A new token is generated on every agent restart and re-registered.
+- **Runtime adapters:** the agent's executor talks to a `RuntimeAdapter`
+  protocol; Ollama is the first implementation, llama.cpp/HF slot in later.
+
+**Consequences:** Node health is visible within one heartbeat interval and
+outages within ~1 minute, with an audit trail. The plaintext-in-DB agent
+token is an accepted LAN-scope trade-off: compromise of the controller DB
+already implies fabric compromise. Hardening path (backlog): mTLS or an
+enrollment handshake per node, plus per-dispatch nonces. Metrics history is
+not retained on the controller (only the latest snapshot); Prometheus owns
+time series in Sprint 9.

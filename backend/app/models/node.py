@@ -1,8 +1,9 @@
 import enum
 import uuid
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, JSONVariant, TimestampMixin, UUIDPkMixin
@@ -47,6 +48,15 @@ class Node(UUIDPkMixin, TimestampMixin, Base):
     recommended_role: Mapped[str | None] = mapped_column(String(50))
     recommendation_confidence: Mapped[float | None] = mapped_column(Float)
     recommendation_rationale: Mapped[list[str] | None] = mapped_column(JSONVariant)
+
+    # liveness: set by heartbeats, cleared to offline by the sweeper (ADR-011)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONVariant)
+
+    # exec API contact info sent by the agent at registration; token is the
+    # credential the controller presents when dispatching (ADR-011)
+    agent_url: Mapped[str | None] = mapped_column(String(255))
+    agent_token: Mapped[str | None] = mapped_column(String(128))
 
     # normalized from hardware_profile at registration time
     cpu_cores: Mapped[int | None] = mapped_column(Integer)

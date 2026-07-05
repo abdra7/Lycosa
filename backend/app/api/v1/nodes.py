@@ -2,11 +2,20 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import select
 
 from app.api.deps import DbDep, Principal, PrincipalDep, require_roles
+from app.core.config import get_settings
+from app.models import ApiKey
 from app.models.node import NodeStatus
 from app.models.user import ROLE_ADMIN, ROLE_NODE, ROLE_OPERATOR
-from app.schemas.node import NodeOut, NodePatch, NodeRegisterRequest
+from app.schemas.node import (
+    HeartbeatRequest,
+    HeartbeatResponse,
+    NodeOut,
+    NodePatch,
+    NodeRegisterRequest,
+)
 from app.services import node as node_service
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
@@ -42,6 +51,32 @@ async def register(
     if not created:
         response.status_code = status.HTTP_200_OK
     return NodeOut.model_validate(node)
+
+
+@router.post("/heartbeat", response_model=HeartbeatResponse)
+async def heartbeat(
+    body: HeartbeatRequest, principal: PrincipalDep, db: DbDep
+) -> HeartbeatResponse:
+    """Agent liveness ping with current metrics. Requires a node API key
+    that has already registered (is bound to a node)."""
+    if principal.type != "api_key" or principal.role != ROLE_NODE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Heartbeat requires a node-role API key",
+        )
+    api_key = (await db.execute(select(ApiKey).where(ApiKey.id == principal.id))).scalar_one()
+    if api_key.node_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="API key is not bound to a node; register first",
+        )
+    node = await node_service.get_node(db, api_key.node_id)
+    if node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+    await node_service.record_heartbeat(db, node, body.metrics, api_key_id=principal.id)
+    return HeartbeatResponse(
+        heartbeat_interval_seconds=get_settings().agent_heartbeat_interval_seconds
+    )
 
 
 @router.get("", response_model=list[NodeOut])
