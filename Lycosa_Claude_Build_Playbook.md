@@ -3,7 +3,7 @@
 
 This is a **prompt-engineering playbook**: a start-to-finish set of copy-paste prompts for building **Lycosa** (the distributed multi-agent AI platform from your SDD) using Claude — ideally **Claude Code**, so Claude can create the repo, write files, run tests, and commit. Each phase gives you: what to paste, what you should get back, and the "definition of done" before moving on.
 
-The whole thing is organized as **Agile sprints** so a single person (or a small team) can ship it incrementally, and the end user experience is **GitHub-first** (`git clone` → `docker compose up` → open dashboard).
+The whole thing is organized as **Agile sprints** so a single person (or a small team) can ship it incrementally. The controller stack is **GitHub-first** (`git clone` → `docker compose up` runs the headless backend), and the UI is a **native Flutter Desktop app** (macOS/Windows/Linux) the operator installs and points at the controller.
 
 ---
 
@@ -34,7 +34,7 @@ The whole thing is organized as **Agile sprints** so a single person (or a small
 >
 > **Architecture layers:** Presentation (dashboard) → Access (auth + API gateway) → Control Plane (Orchestrator, Agent Manager, Scheduler, Knowledge Router, Workflow Engine, Node Recommendation Engine) → Execution Plane (Local Agents + runtimes) → Knowledge Plane (ingestion, embeddings, Qdrant vector search) → Observability Plane (Prometheus/Grafana/logs) → Infrastructure (PostgreSQL, Qdrant, cache, Docker).
 >
-> **Tech stack:** Python + FastAPI backend; Flutter / Flutter Web dashboard; PostgreSQL (metadata) + Qdrant (vectors); REST + WebSocket + gRPC; Ollama/llama.cpp for local models; Prometheus + Grafana; Docker + Docker Compose; Kubernetes as a future target.
+> **Tech stack:** Python + FastAPI backend; **Flutter Desktop (native macOS/Windows/Linux)** for the dashboard — NOT Flutter Web; PostgreSQL (metadata) + Qdrant (vectors); REST + WebSocket + gRPC; Ollama/llama.cpp for local models; Prometheus + Grafana; Docker + Docker Compose for the **backend/controller only**; Kubernetes as a future target. The desktop app is shipped as installable release artifacts, not as a container.
 >
 > **Core entities:** User, Role, Session, Node, Agent, AgentCapability, Workflow, WorkflowRun, Task, TaskExecution, KnowledgeCollection, Document, EmbeddingJob, RetrievalRequest, SystemEvent, AuditLog, Plugin.
 >
@@ -78,12 +78,60 @@ Paste this right after the primer, in the very first session only:
 | **5** | Scheduler + Orchestrator | Submit a task → classify → pick a node → run → return result |
 | **6** | Knowledge Plane (RAG) | Ingest docs → embed → Qdrant → retrieve; Knowledge Router |
 | **7** | Workflow Engine | Multi-step planner→coder→test→review workflows with traces |
-| **8** | Dashboard | Flutter Web: nodes, agents, live metrics, workflows, logs |
+| **8** | Dashboard | Flutter **Desktop** (native macOS/Windows/Linux): connect to controller, nodes, agents, live metrics, workflows, logs |
 | **9** | Observability | Prometheus + Grafana + structured logs + alerts + WebSocket streams |
 | **10** | Packaging & GitHub install UX | One-command install, docs, release, `install.sh` |
 | **11+** | Agile maintenance | Backlog grooming, issues, releases, iteration |
 
 Each sprint below is a **ready-to-paste prompt**. Run them in order.
+
+---
+
+## 3a. Architecture change: desktop UI (apply now, after Phase 2)
+
+You're currently between Phase 2 and Phase 3, before any UI work — the ideal point to record this. Paste the following into your Claude Code session to log the decision and align the repo:
+
+> **Architecture change.** We are changing the dashboard from a Flutter **Web** app to a native **Flutter Desktop** application (macOS/Windows/Linux). Do the following, then wait for `go` before continuing to Phase 3:
+>
+> 1. Append the ADR below to `docs/DECISIONS.md` (create the file if missing).
+> 2. Confirm our current `infra/docker-compose.yml` has **no `dashboard` service** (the UI is now a separately-installed desktop binary, not a container). If a dashboard/web service or web build step exists anywhere, remove it and note the removal.
+> 3. Update `README.md` so the "Quick start" describes the headless controller only, and add a placeholder note that the desktop dashboard is installed separately (details land in Sprint 8/10).
+> 4. Make no other code changes — UI work happens in Sprint 8.
+>
+> **ADR entry to append:**
+> ```
+> ## ADR-002: Dashboard is a native Flutter Desktop app, not Flutter Web
+> Date: <today>
+> Status: Accepted (supersedes the Flutter Web assumption)
+>
+> Context:
+> The dashboard was initially assumed to be a Flutter Web app served alongside
+> the backend. The SDD refers to a "Desktop Application" dashboard, and a native
+> desktop client better fits a LAN-first operator tool: OS-native windows/menus,
+> secure credential storage in the OS keychain, and no browser dependency.
+>
+> Decision:
+> Build the dashboard as a native Flutter Desktop application targeting macOS,
+> Windows, and Linux. It is distributed as OS-native installers (.dmg / .msi /
+> .AppImage/.deb) via GitHub Releases, not as a Docker service.
+>
+> Consequences:
+> - docker-compose runs the headless backend only (api, postgres, qdrant,
+>   prometheus, grafana). No dashboard container.
+> - The desktop app has no web origin, so it needs a first-run connection-setup
+>   screen: the operator enters the controller API URL and credentials, stored
+>   in local/secure app config. Multiple controller profiles are supported.
+> - The API must allow cross-origin/remote clients from the desktop app and
+>   continue to expose REST + WebSocket over the LAN.
+> - Release engineering gains a desktop build matrix (macOS/Windows/Linux
+>   runners) in addition to backend Docker image builds.
+> - Install flow becomes two-part: headless controller via compose + desktop
+>   app downloaded per-OS from the release.
+> ```
+>
+> Plan the file edits first, then wait for `go`.
+
+After Claude applies it, commit with: `docs: switch dashboard to native Flutter Desktop (ADR-002)`.
 
 ---
 
@@ -94,9 +142,9 @@ Each sprint below is a **ready-to-paste prompt**. Run them in order.
 > Deliver:
 > 1. Full directory tree per our conventions (`/backend`, `/agent`, `/dashboard`, `/infra`, `/docs`, `/scripts`).
 > 2. `backend/` FastAPI app with a `/healthz` endpoint and a `pyproject.toml` (ruff + pytest configured).
-> 3. `infra/docker-compose.yml` that starts: `postgres`, `qdrant`, `api` (the FastAPI app), and placeholders for `prometheus`/`grafana`. Wire healthchecks.
+> 3. `infra/docker-compose.yml` that starts: `postgres`, `qdrant`, `api` (the FastAPI app), and placeholders for `prometheus`/`grafana`. Wire healthchecks. **Do NOT add a `dashboard` service** — the UI is a native desktop app installed separately, so compose runs the headless backend only.
 > 4. A GitHub Actions workflow `.github/workflows/ci.yml`: lint + test on push/PR.
-> 5. `README.md` with a real "Quick start": `git clone` → `cp .env.example .env` → `docker compose up` → open `http://localhost:8000/docs`.
+> 5. `README.md` with a real "Quick start" for the controller: `git clone` → `cp .env.example .env` → `docker compose up` → verify the API at `http://localhost:8000/docs`. Note that the desktop dashboard is a separate install covered in Sprint 8/10.
 > 6. One passing pytest that hits `/healthz`.
 >
 > Definition of done: `docker compose up` boots all containers healthy; `pytest` is green; `/healthz` returns 200.
@@ -247,24 +295,25 @@ git push -u origin main
 
 ---
 
-## Sprint 8 — Dashboard (Flutter Web)
+## Sprint 8 — Dashboard (Flutter **Desktop**)
 
-> **Phase 8 — Dashboard.** The operational workspace (SDD Dashboard component, Use Case 4).
+> **Phase 8 — Dashboard.** The operational workspace as a **native Flutter Desktop application** for macOS, Windows, and Linux (SDD Dashboard component, Use Case 4). This is NOT a web app — it's a standalone binary the operator installs.
 >
-> Deliver a Flutter Web app in `/dashboard` that talks to our REST + WebSocket API:
-> 1. Auth: login screen, token storage, role-aware navigation.
-> 2. **Node inventory**: table/cards with status, role, model, uptime, health; node detail page with live metrics.
-> 3. Node registration UX that shows the **recommended role** and lets the operator accept/override.
-> 4. **Workflow** views: create/select a workflow, run it, and watch step progress live.
-> 5. **Live metrics**: CPU/GPU/RAM/storage/network charts fed by WebSocket updates.
-> 6. Knowledge view: collections + document counts. Logs/events + alerts panel. User/role management (admin only).
-> 7. Responsive, theme-aware (light/dark) layout for desktop and tablet.
+> Deliver a Flutter Desktop app in `/dashboard` that talks to our REST + WebSocket API over the network:
+> 1. **Connection setup (new, desktop-specific):** on first launch the app has no origin, so it must prompt for the **controller URL** (e.g. `http://<controller-host>:8000`) and store it in local app config (`shared_preferences`/secure storage). Support switching/managing multiple controller profiles. Validate the connection against `/healthz` before proceeding.
+> 2. Auth: login screen, secure token storage (OS keychain where available), role-aware navigation.
+> 3. **Node inventory**: table/cards with status, role, model, uptime, health; node detail page with live metrics.
+> 4. Node registration UX that shows the **recommended role** and lets the operator accept/override.
+> 5. **Workflow** views: create/select a workflow, run it, and watch step progress live.
+> 6. **Live metrics**: CPU/GPU/RAM/storage/network charts fed by WebSocket updates.
+> 7. Knowledge view: collections + document counts. Logs/events + alerts panel. User/role management (admin only).
+> 8. Native desktop concerns: proper window sizing/min-size, native menu bar, theme-aware (light/dark) layout, and enable desktop targets (`flutter config --enable-macos-desktop --enable-windows-desktop --enable-linux-desktop`).
 >
-> Definition of done: log in, see live nodes + metrics, register a node with role recommendation, launch a workflow and watch it progress — all against the running backend.
+> Definition of done: build and run the desktop app on your OS, enter the controller URL, log in, see live nodes + metrics, register a node with role recommendation, and launch a workflow — all against the running backend over the network.
 >
-> Plan first (screen list + state management choice + API client structure), then wait for `go`. Build screen-by-screen; don't dump the whole app in one response.
+> Plan first (screen list including the connection-setup flow + state management choice + API client with configurable base URL), then wait for `go`. Build screen-by-screen; don't dump the whole app in one response.
 
-*(Note: Sprint 8 is large. Run it as sub-prompts: 8a auth+shell+API client, 8b nodes, 8c workflows, 8d metrics/knowledge/logs. Same "plan → go" pattern each time.)*
+*(Note: Sprint 8 is large. Run it as sub-prompts: 8a connection-setup + auth + shell + API client with configurable base URL, 8b nodes, 8c workflows, 8d metrics/knowledge/logs. Same "plan → go" pattern each time.)*
 
 ---
 
@@ -293,24 +342,33 @@ This is the sprint that delivers the **"people install Lycosa from GitHub"** exp
 > **Phase 10 — Packaging & install UX.** Make Lycosa trivially installable from GitHub.
 >
 > Deliver:
-> 1. **Controller install:** a single `docker compose up -d` from a fresh clone brings up the entire controller stack (api, postgres, qdrant, prometheus, grafana) with sane defaults and a first-run admin bootstrap. Provide `.env.example` with every variable documented.
-> 2. **`scripts/install.sh`** (and a Windows `install.ps1`) that: checks Docker, copies `.env.example`, prompts for admin credentials, runs compose, and prints the dashboard URL. Aim for: `curl -fsSL https://raw.githubusercontent.com/abdra7/Lycosa/main/scripts/install.sh | bash`.
-> 3. **Agent install:** documented `pipx install` (or one-liner script) to add a node, with a printed command the dashboard generates (embedding a scoped API key).
-> 4. **README** rewritten as the front door: what Lycosa is, a diagram, 3-step quick start, screenshots placeholder, node-role explainer, and a "Deploy modes" section (single-machine, multi-machine LAN, compose, future k8s).
-> 5. **Release engineering:** version the API and app, add `CHANGELOG.md`, tag `v0.1.0`, and a GitHub Actions release workflow that builds/pushes Docker images and attaches artifacts.
-> 6. `LICENSE`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, and issue/PR templates in `.github/`.
+> 1. **Controller install (headless):** a single `docker compose up -d` from a fresh clone brings up the entire controller stack (api, postgres, qdrant, prometheus, grafana) with sane defaults and a first-run admin bootstrap. **No dashboard container** — the backend is headless. Provide `.env.example` with every variable documented.
+> 2. **`scripts/install.sh`** (and a Windows `install.ps1`) that: checks Docker, copies `.env.example`, prompts for admin credentials, runs compose, and prints the **API/controller URL** the desktop app should connect to. Aim for: `curl -fsSL https://raw.githubusercontent.com/abdra7/Lycosa/main/scripts/install.sh | bash`.
+> 3. **Desktop app packaging (new):** build native installers for the Flutter Desktop dashboard — `.dmg` (macOS), `.msi`/`.exe` (Windows), `.AppImage`/`.deb` (Linux) — via `flutter build macos|windows|linux`. Add a GitHub Actions matrix job that builds all three on their respective runners and attaches them to the GitHub Release. Document that the operator downloads the installer for their OS, launches it, and enters the controller URL on first run.
+> 4. **Agent install:** documented `pipx install` (or one-liner script) to add a node, with a printed command the dashboard generates (embedding a scoped API key).
+> 5. **README** rewritten as the front door: what Lycosa is, a diagram, and TWO install paths clearly separated — (a) controller via compose, (b) desktop dashboard via OS installer download. Include the node-role explainer and a "Deploy modes" section (single-machine, multi-machine LAN, compose, future k8s).
+> 6. **Release engineering:** version the API and app, add `CHANGELOG.md`, tag `v0.1.0`, and a GitHub Actions release workflow that (a) builds/pushes backend Docker images and (b) builds the three desktop installers and attaches them as release artifacts.
+> 7. `LICENSE`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, and issue/PR templates in `.github/`.
 >
-> Definition of done: on a clean machine, `git clone` → `./scripts/install.sh` → open the dashboard → log in → see the "add a node" command. A tagged `v0.1.0` release exists with images published.
+> Definition of done: on a clean machine, `git clone` → `./scripts/install.sh` brings up the headless controller and prints its URL; the operator downloads the desktop installer from the v0.1.0 GitHub Release, launches it, enters the controller URL, logs in, and sees the "add a node" command. A tagged `v0.1.0` release exists with both Docker images and desktop installers published.
 >
 > Plan first (install script flow + release pipeline), then wait for `go`.
 
-**Your GitHub-first user story now reads:**
+**Your install story now has two parts — headless controller + native desktop app:**
 ```bash
+# 1. Controller (on the server/main machine) — headless, no browser UI
 git clone https://github.com/abdra7/Lycosa.git
 cd Lycosa
 ./scripts/install.sh          # or: docker compose up -d
-# open http://localhost:8000 → log in → copy the "add node" command
-pipx install lycosa-agent && lycosa-agent join --url ... --key ...
+# prints the controller API URL, e.g. http://192.168.1.10:8000
+
+# 2. Desktop dashboard (on the operator's machine)
+# download the installer for your OS from the GitHub Release:
+#   Lycosa-macos.dmg / Lycosa-windows.msi / Lycosa-linux.AppImage
+# launch it → enter the controller URL → log in → copy the "add node" command
+
+# 3. Add a node (on each participating device)
+pipx install lycosa-agent && lycosa-agent join --url http://192.168.1.10:8000 --key ...
 ```
 
 ---

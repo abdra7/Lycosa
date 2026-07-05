@@ -13,6 +13,13 @@ from app.models.knowledge import (
 from app.models.node import Agent, AgentCapability, Node, NodeStatus
 from app.models.task import ExecutionStatus, Task, TaskExecution, TaskStatus, TaskType
 from app.models.user import ApiKey, Role, Session, User
+from app.models.workflow import (
+    RunStatus,
+    StepRunStatus,
+    Workflow,
+    WorkflowRun,
+    WorkflowStepRun,
+)
 
 __all__ = [
     "Agent",
@@ -29,10 +36,15 @@ __all__ = [
     "NodeStatus",
     "RetrievalRequest",
     "Role",
+    "RunStatus",
     "Session",
+    "StepRunStatus",
     "Task",
     "TaskExecution",
     "TaskStatus",
     "TaskType",
     "User",
+    "Workflow",
+    "WorkflowRun",
+    "WorkflowStepRun",
 ]

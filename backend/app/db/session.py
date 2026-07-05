@@ -23,5 +23,19 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
 
 async def get_db() -> AsyncIterator[AsyncSession]:
     """Per-request database session dependency."""
-    async with get_sessionmaker()() as session:
+    async with get_runtime_sessionmaker()() as session:
         yield session
+
+
+# Seam for code that needs sessions outside the request scope (parallel
+# workflow branches, background sweeps). Tests install their own factory.
+_sessionmaker_override: async_sessionmaker[AsyncSession] | None = None
+
+
+def get_runtime_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    return _sessionmaker_override if _sessionmaker_override is not None else get_sessionmaker()
+
+
+def set_sessionmaker_override(factory: async_sessionmaker[AsyncSession] | None) -> None:
+    global _sessionmaker_override
+    _sessionmaker_override = factory

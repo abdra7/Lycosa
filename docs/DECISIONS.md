@@ -358,3 +358,41 @@ controller must not require a GPU or huge ML dependencies.
 semantic quality is one env var away. Qdrant in-memory mode lets unit tests
 exercise real vector-search code. Real federation later = implement the
 router interface over per-node Qdrant instances; API contract unchanged.
+
+---
+
+## ADR-014: Workflow engine — declarative steps, template context, pause-at-approval under sync execution
+
+**Date:** 2026-07-05
+
+**Context:** FR-8 needs multi-step orchestration (the SDD
+planner→coder→test→review flow) with branching, retries, parallelism,
+shared context, human approval, and full traces — without introducing a
+worker/queue runtime yet (ADR-012).
+
+**Decision:**
+- **Definitions** are declarative JSON validated at creation (pydantic
+  discriminated union). Step kinds: `task` (runs through the Phase-5
+  orchestrator — scheduling, failover, knowledge injection included),
+  `retrieve` (Knowledge Router), `approval`, `parallel` (task substeps via
+  asyncio.gather, each on its own DB session).
+- **Context propagation** is `{{input}}` / `{{steps.<id>.output}}` template
+  substitution; references and `when` clauses may only point at earlier
+  steps, enforced at creation time. Branching is `when {step,
+  contains|equals}` — unmet ⇒ step recorded `skipped`. Per-step `retries`
+  re-submits the task; every attempt is a WorkflowStepRun row, and task
+  steps link `task_id` to the full Phase-5 execution trace.
+- **Approval under sync execution:** a run executes inside the request
+  until an approval step, persists `paused` + position, and returns; the
+  approve endpoint resumes execution from the next step inside its own
+  request (reject ⇒ run failed). Paused/approved/rejected/finished are all
+  audited.
+
+**Consequences:** No new runtime infrastructure; the dashboard can render
+live status from WorkflowRun/StepRun rows at any point, including while
+paused. Long chains hold an HTTP request open — same trade-off and same
+queue-based upgrade path as ADR-012, unchanged API contract. Parallel
+substep concurrency is per-branch sessions, which required a runtime
+session-factory seam (`get_runtime_sessionmaker`) also usable by future
+background work. `when` is deliberately a two-operator matcher, not an
+expression language.
