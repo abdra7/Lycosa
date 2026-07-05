@@ -127,3 +127,35 @@ get RBAC + both auth paths for free. SQLite/Postgres divergence is
 contained to the JSON variant and timezone normalization (`as_utc`); any
 future Postgres-only feature (e.g. JSONB operators) needs integration
 tests against the compose Postgres instead.
+
+---
+
+## ADR-006: Dashboard is a native Flutter Desktop app, not Flutter Web
+
+**Date:** 2026-07-05
+
+**Status:** Accepted (supersedes the Flutter Web assumption)
+
+**Context:**
+The dashboard was initially assumed to be Flutter Web served alongside the
+backend. The SDD refers to a "Desktop Application" dashboard, and a native
+desktop client better fits a LAN-first operator tool: OS-native windows/menus,
+secure credential storage in the OS keychain, and no browser dependency.
+
+**Decision:**
+Build the dashboard as a native Flutter Desktop application targeting macOS,
+Windows, and Linux, distributed as OS-native installers (.dmg / .msi /
+.AppImage/.deb) via GitHub Releases, not as a Docker service.
+
+**Consequences:**
+- docker-compose runs the headless backend only (api, postgres, qdrant,
+  prometheus, grafana). No dashboard container.
+- The desktop app has no web origin, so it needs a first-run connection-setup
+  screen where the operator enters the controller API URL and credentials,
+  stored in local/secure app config. Multiple controller profiles supported.
+- The API must allow remote/cross-origin desktop clients and keep exposing
+  REST + WebSocket over the LAN.
+- Release engineering gains a desktop build matrix (macOS/Windows/Linux) plus
+  backend Docker image builds.
+- Install becomes two-part: headless controller via compose + desktop app
+  downloaded per-OS.
