@@ -1,0 +1,59 @@
+# --- Secrets / local config ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Python (/backend, /agent) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Alembic ---
+# (migration versions are tracked; local sqlite artifacts are not)
+*.sqlite3
+*.db
+
+# --- Flutter / Dart (/dashboard) ---
+dashboard/.dart_tool/
+dashboard/.flutter-plugins
+dashboard/.flutter-plugins-dependencies
+dashboard/.packages
+dashboard/build/
+dashboard/.pub-cache/
+dashboard/.pub/
+dashboard/**/generated_plugin_registrant.dart
+
+# --- Docker / infra ---
+infra/**/data/
+infra/**/*.local.yml
+
+# --- Node (dashboard web tooling, if any) ---
+node_modules/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
