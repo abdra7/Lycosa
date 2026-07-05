@@ -396,3 +396,39 @@ substep concurrency is per-branch sessions, which required a runtime
 session-factory seam (`get_runtime_sessionmaker`) also usable by future
 background work. `when` is deliberately a two-operator matcher, not an
 expression language.
+
+---
+
+## ADR-015: Dashboard foundation — Riverpod, hand-written API client, keychain profiles, state-driven navigation
+
+**Date:** 2026-07-05
+
+**Context:** ADR-006 made the dashboard a native Flutter Desktop app that
+must manage controller connections itself (no web origin): first-run setup,
+multiple controller profiles, secure credential storage.
+
+**Decision:**
+- **State management: Riverpod** — providers are compile-safe, overridable
+  in tests (the widget tests swap the profile store and API client factory
+  with fakes), and carry no BuildContext coupling.
+- **API client: hand-written typed client** over `package:http`. The API
+  surface is small and versioned; OpenAPI codegen would add a toolchain for
+  little gain. All non-2xx responses parse the ADR-007 envelope into
+  `ApiException` (code, message, per-field details, `friendly` text);
+  transport failures become `ControllerUnreachableException`.
+- **Profiles & secrets:** `ControllerProfile` (name, URL, token) list plus
+  active-profile id in the OS keychain via `flutter_secure_storage`
+  (Windows Credential Manager / macOS Keychain / libsecret), behind a
+  `ProfileStore` interface with an in-memory test double.
+- **Navigation is session-state-driven** (no router package): a root gate
+  renders setup → login → shell from the Riverpod session state. Restoring
+  a profile validates its token against `/me`; 401 wipes the stale token
+  and drops to login. Deep links can motivate go_router later.
+- **Live data:** REST polling until Sprint 9's WebSocket event stream,
+  which will feed the same providers.
+
+**Consequences:** Feature screens (8b–8d) consume `activeApiClientProvider`
+and inherit auth, profile switching, and error shaping for free. Windows
+dev builds require OS Developer Mode (Flutter plugin symlinks) — documented
+in dashboard/README.md. CI runs `flutter analyze` + `flutter test` on
+Ubuntu; desktop release builds are Sprint 10's release-matrix problem.
