@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
 from app.core.security import generate_api_key, hash_password
@@ -25,11 +24,12 @@ PASSWORD = "test-password-123"
 
 
 @pytest_asyncio.fixture
-async def db_engine() -> AsyncIterator[AsyncEngine]:
+async def db_engine(tmp_path) -> AsyncIterator[AsyncEngine]:
+    # file-based (not :memory:) so parallel workflow branches can open
+    # their own connections against the same database
     engine = create_async_engine(
-        "sqlite+aiosqlite://",
-        poolclass=StaticPool,
-        connect_args={"check_same_thread": False},
+        f"sqlite+aiosqlite:///{tmp_path}/test.db",
+        connect_args={"timeout": 15},
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -109,11 +109,15 @@ async def client(
         async with sessionmaker_() as session:
             yield session
 
+    from app.db.session import set_sessionmaker_override
+
     app.dependency_overrides[get_db] = override_get_db
+    set_sessionmaker_override(sessionmaker_)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+    set_sessionmaker_override(None)
 
 
 @pytest_asyncio.fixture
