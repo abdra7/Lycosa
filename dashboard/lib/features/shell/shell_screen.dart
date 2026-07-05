@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/app_info.dart';
 import '../../core/events.dart';
 import '../../core/session.dart';
 import '../admin/admin_screen.dart';
@@ -148,6 +149,7 @@ class _EventStrip extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
+            Text('v$appVersion', style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),

@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose new functionality for Lycosa
+labels: [feature]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      description: Who needs this and why?
+      placeholder: As an operator, I want <goal> so that <value>.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should happen, end to end?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
