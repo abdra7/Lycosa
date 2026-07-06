@@ -25,6 +25,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **LAN scan on Windows (Ticket #106)** — the dashboard's mDNS scan no longer
+  crashes with errno 10042 (`WSAENOPROTOOPT`) when a virtual adapter (VPN
+  tunnel, Docker/WSL switch) refuses multicast group membership; those
+  adapters are now skipped and discovery proceeds over the remaining
+  interfaces.
+
 - **Knowledge ingestion freeze (Ticket #104)** — a document upload whose
   caller disconnects or times out mid-run no longer leaves the document stuck
   in `uploaded` with its embedding job `running` forever: ingestion now runs
