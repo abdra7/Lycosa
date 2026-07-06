@@ -18,6 +18,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Knowledge ingestion freeze (Ticket #104)** — a document upload whose
+  caller disconnects or times out mid-run no longer leaves the document stuck
+  in `uploaded` with its embedding job `running` forever: ingestion now runs
+  shielded on its own DB session (the same treatment task dispatch got in
+  Ticket #102), CPU-bound embedding happens off the event loop in a worker
+  thread, and a 5-minute safety-net timeout marks a stuck run `failed` with
+  an actionable error instead of hanging indefinitely.
+
 - **Task history (Ticket #102)** — completed tasks no longer vanish from the
   dashboard: `POST /api/v1/tasks` dispatch is now shielded from client
   disconnects and runs on its own DB session, so a task whose caller times

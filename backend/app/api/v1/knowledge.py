@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import uuid
 from typing import Annotated
 
@@ -5,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, stat
 from sqlalchemy import select
 
 from app.api.deps import DbDep, Principal, PrincipalDep, require_roles
+from app.db.session import get_runtime_sessionmaker
 from app.models import Document, KnowledgeCollection
 from app.models.user import ROLE_ADMIN, ROLE_OPERATOR
 from app.schemas.knowledge import (
@@ -18,6 +21,8 @@ from app.services.audit import audit
 from app.services.knowledge.embedder import get_embedder
 from app.services.knowledge.ingestion import ingest_document
 from app.services.knowledge.router import UnknownCollectionError, retrieve
+
+logger = logging.getLogger("lycosa.knowledge")
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -92,7 +97,12 @@ async def upload_document(
     """Upload and synchronously ingest a document (text/markdown/code/PDF).
 
     Extraction or embedding problems are reported on the returned document's
-    `status`/`error`, not as a 5xx."""
+    `status`/`error`, not as a 5xx.
+
+    Ingestion runs shielded, on its own DB session: if the caller times out or
+    disconnects mid-run, the pipeline still finishes and records its terminal
+    state (Ticket #104) — the document lands on embedded/failed instead of
+    hanging in 'uploaded' with its job 'running' forever."""
     collection = await _get_collection(db, collection_id)
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
@@ -100,10 +110,26 @@ async def upload_document(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"Document exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
         )
-    document = await ingest_document(
-        db, collection, file.filename or "unnamed", file.content_type, data
-    )
+    filename = file.filename or "unnamed"
+    content_type = file.content_type
+
+    async def _run() -> Document:
+        async with get_runtime_sessionmaker()() as session:
+            return await ingest_document(session, collection, filename, content_type, data)
+
+    dispatch = asyncio.create_task(_run())
+    dispatch.add_done_callback(_log_orphaned_ingestion)
+    document = await asyncio.shield(dispatch)
     return DocumentOut.model_validate(document)
+
+
+def _log_orphaned_ingestion(dispatch: "asyncio.Task[Document]") -> None:
+    """An ingestion that outlives its request has nobody awaiting it; surface
+    unexpected crashes in the log instead of a silent 'never retrieved'."""
+    if not dispatch.cancelled() and dispatch.exception() is not None:
+        logger.error(
+            "document ingestion failed after client disconnect", exc_info=dispatch.exception()
+        )
 
 
 @router.get("/collections/{collection_id}/documents", response_model=list[DocumentOut])
