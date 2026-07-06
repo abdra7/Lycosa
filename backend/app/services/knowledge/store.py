@@ -11,6 +11,17 @@ from app.core.config import get_settings
 _client: AsyncQdrantClient | None = None
 
 
+class KnowledgeStoreError(RuntimeError):
+    """A Qdrant operation failed; message names the service and URL to check."""
+
+
+def _store_error(operation: str, exc: Exception) -> KnowledgeStoreError:
+    url = get_settings().qdrant_url
+    return KnowledgeStoreError(
+        f"Qdrant {operation} failed (url {url}): {exc} — is the qdrant service running?"
+    )
+
+
 def get_qdrant() -> AsyncQdrantClient:
     global _client
     if _client is None:
@@ -30,11 +41,14 @@ def qdrant_name(collection_id: uuid.UUID) -> str:
 
 async def ensure_collection(name: str, dim: int) -> None:
     client = get_qdrant()
-    if not await client.collection_exists(name):
-        await client.create_collection(
-            collection_name=name,
-            vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
-        )
+    try:
+        if not await client.collection_exists(name):
+            await client.create_collection(
+                collection_name=name,
+                vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+            )
+    except Exception as exc:
+        raise _store_error(f"collection setup for {name!r}", exc) from exc
 
 
 async def upsert_chunks(
@@ -44,7 +58,10 @@ async def upsert_chunks(
         PointStruct(id=str(uuid.uuid4()), vector=vector, payload=payload)
         for vector, payload in zip(vectors, payloads, strict=True)
     ]
-    await get_qdrant().upsert(collection_name=name, points=points)
+    try:
+        await get_qdrant().upsert(collection_name=name, points=points)
+    except Exception as exc:
+        raise _store_error(f"upsert into {name!r}", exc) from exc
 
 
 async def search(name: str, vector: list[float], top_k: int) -> list[ScoredPoint]:

@@ -1,10 +1,14 @@
+import sys
 import uuid
+from io import BytesIO
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import EmbeddingJob
+from app.services.knowledge.embedder import EmbedderUnavailableError, get_embedder
 from tests.conftest import ADMIN_EMAIL, OPERATOR_EMAIL, bearer, login
 
 MARKDOWN = b"""# Wolf spiders
@@ -137,6 +141,82 @@ async def test_documents_listed(client: AsyncClient, users: dict, qdrant) -> Non
     assert listed.status_code == 200
     assert len(listed.json()) == 1
     assert listed.json()[0]["filename"] == "spiders.md"
+
+
+def _build_encrypted_pdf() -> bytes:
+    """A password-protected PDF (RC4 so no extra crypto deps are needed)."""
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    writer.encrypt(user_password="secret", algorithm="RC4-128")
+    buffer = BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+async def test_corrupt_pdf_fails_with_clear_error(
+    client: AsyncClient, users: dict, qdrant
+) -> None:
+    """Ticket #101: pypdf parse failures must surface as an actionable message,
+    not a raw parser traceback string."""
+    token = await login(client, OPERATOR_EMAIL)
+    collection = await create_collection(client, token, name="corrupt-docs")
+    document = await upload(
+        client, token, collection["id"], "broken.pdf", b"%PDF-1.4 not a real pdf"
+    )
+
+    assert document["status"] == "failed"
+    assert "could not parse PDF" in document["error"]
+
+
+async def test_encrypted_pdf_fails_with_clear_error(
+    client: AsyncClient, users: dict, qdrant
+) -> None:
+    """Ticket #101: encrypted PDFs must be reported as password-protected."""
+    token = await login(client, OPERATOR_EMAIL)
+    collection = await create_collection(client, token, name="encrypted-docs")
+    document = await upload(
+        client, token, collection["id"], "secret.pdf", _build_encrypted_pdf()
+    )
+
+    assert document["status"] == "failed"
+    assert "password-protected" in document["error"]
+
+
+async def test_qdrant_unreachable_fails_with_clear_error(
+    client: AsyncClient, users: dict
+) -> None:
+    """Ticket #101: a down/unreachable Qdrant must name Qdrant and its URL so the
+    operator knows which service to check."""
+    from qdrant_client import AsyncQdrantClient
+
+    from app.services.knowledge import store
+
+    unreachable = AsyncQdrantClient(url="http://127.0.0.1:1", timeout=1)
+    store.set_qdrant(unreachable)
+    try:
+        token = await login(client, OPERATOR_EMAIL)
+        collection = await create_collection(client, token, name="qdrant-down")
+        document = await upload(client, token, collection["id"], "spiders.md", MARKDOWN)
+    finally:
+        store.set_qdrant(None)
+        await unreachable.close()
+
+    assert document["status"] == "failed"
+    assert "Qdrant" in document["error"]
+
+
+async def test_fastembed_not_installed_gives_actionable_error(monkeypatch) -> None:
+    """Ticket #101: a missing fastembed extra must say how to install it instead
+    of a bare ImportError."""
+    monkeypatch.setitem(sys.modules, "fastembed", None)  # forces ImportError
+    get_embedder.cache_clear()
+    try:
+        with pytest.raises(EmbedderUnavailableError, match="embeddings"):
+            get_embedder("fastembed")
+    finally:
+        get_embedder.cache_clear()
 
 
 async def test_upload_requires_operator(client: AsyncClient, users: dict, qdrant) -> None:

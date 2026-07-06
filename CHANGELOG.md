@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Knowledge ingestion (Ticket #101)** — document upload failures now surface
+  actionable errors instead of raw tracebacks or silent timeouts: corrupt and
+  password-protected PDFs are reported as such, a missing `fastembed` extra or
+  a failed model download says how to fix it, and Qdrant outages name the
+  service and URL to check. The dashboard no longer aborts uploads after 15 s
+  (synchronous ingestion gets a 5-minute budget), shows connection failures,
+  and refreshes the document list even when ingestion fails so failed rows and
+  their errors are visible.
+
 ## [0.1.0] - 2026-07-05
 
 First public release: a LAN-first distributed multi-agent AI orchestration

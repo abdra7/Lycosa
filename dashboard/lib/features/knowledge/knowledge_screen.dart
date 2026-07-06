@@ -190,7 +190,6 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
     try {
       final document = await client.uploadDocument(
           widget.collectionId, file.name, file.bytes!);
-      ref.invalidate(documentsProvider(widget.collectionId));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(document.status == 'embedded'
@@ -202,7 +201,15 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.friendly)));
       }
+    } on ControllerUnreachableException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.friendly)));
+      }
     } finally {
+      // refresh even on failure: the controller records failed documents with
+      // their error, so the row (and its message) should appear in the list
+      ref.invalidate(documentsProvider(widget.collectionId));
       if (mounted) setState(() => _uploading = false);
     }
   }

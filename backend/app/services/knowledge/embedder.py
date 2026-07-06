@@ -18,6 +18,10 @@ from app.core.config import get_settings
 _WORD_RE = re.compile(r"[a-z0-9]+")
 
 
+class EmbedderUnavailableError(RuntimeError):
+    """The configured embedding backend cannot be used; message says how to fix it."""
+
+
 class Embedder(Protocol):
     name: str
     dim: int
@@ -52,9 +56,20 @@ class FastEmbedEmbedder:
     dim = 384  # BAAI/bge-small-en-v1.5
 
     def __init__(self, model: str = "BAAI/bge-small-en-v1.5") -> None:
-        from fastembed import TextEmbedding  # deferred: optional heavy dep
-
-        self._model = TextEmbedding(model_name=model)
+        try:
+            from fastembed import TextEmbedding  # deferred: optional heavy dep
+        except ImportError as exc:
+            raise EmbedderUnavailableError(
+                "fastembed is not installed — install the embeddings extra: "
+                "pip install 'lycosa-backend[embeddings]'"
+            ) from exc
+        try:
+            self._model = TextEmbedding(model_name=model)
+        except Exception as exc:
+            raise EmbedderUnavailableError(
+                f"failed to load fastembed model {model!r} (first use downloads ~90 MB; "
+                f"check the controller's internet access or pre-seed the model cache): {exc}"
+            ) from exc
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         return [vector.tolist() for vector in self._model.embed(texts)]
