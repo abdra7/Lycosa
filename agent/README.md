@@ -47,6 +47,7 @@ serves its execution API on port `8010`.
 | `LYCOSA_HEARTBEAT_INTERVAL_SECONDS` | `15` | Initial heartbeat interval |
 | `LYCOSA_EXEC_HOST` / `LYCOSA_EXEC_PORT` | `0.0.0.0` / `8010` | Execution API bind |
 | `LYCOSA_ADVERTISE_URL` | autodetected LAN IP | URL the controller uses to reach this agent |
+| `LYCOSA_DISCOVERY_ENABLED` | `true` | Announce this agent over mDNS for the dashboard LAN scan |
 | `LYCOSA_OLLAMA_URL` | `http://localhost:11434` | Local Ollama instance |
 
 ## Run as a service (systemd)

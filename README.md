@@ -121,6 +121,27 @@ The node registers itself, gets a recommended role, and starts heartbeating.
 See [agent/README.md](agent/README.md) for configuration and running the
 agent as a systemd service.
 
+### Finding devices on the LAN
+
+Running agents announce themselves over mDNS (`_lycosa-agent._tcp`). In the
+dashboard, **Nodes → Discovered on LAN → Scan** lists every machine running
+`lycosa-agent` on your network and flags the ones not yet registered with
+the controller. Discovery is advisory — joining the fabric still uses the
+minted-key flow above. Set `LYCOSA_DISCOVERY_ENABLED=false` on an agent to
+opt out.
+
+If devices don't appear or stay unreachable, check firewalls on both ends:
+
+| Port | Protocol | Machine | Used for |
+|---|---|---|---|
+| 8000 | TCP | controller host | REST API + dashboard traffic |
+| 8010 | TCP | each agent | task dispatch (agent exec API) |
+| 5353 | UDP (multicast) | agents + dashboard machine | mDNS discovery |
+
+The agent binds `0.0.0.0` by default and advertises its detected LAN IP; on
+multi-homed machines set `LYCOSA_ADVERTISE_URL` to the address the
+controller can actually reach.
+
 ## Deploy modes
 
 - **Single machine** — controller and one agent on the same box: a personal

@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:lycosa_dashboard/core/api_client.dart';
 import 'package:lycosa_dashboard/core/profiles.dart';
 import 'package:lycosa_dashboard/core/session.dart';
+import 'package:lycosa_dashboard/features/nodes/discovery.dart';
 import 'package:lycosa_dashboard/features/nodes/node_detail_screen.dart';
 import 'package:lycosa_dashboard/features/nodes/nodes_screen.dart';
 
@@ -57,7 +58,8 @@ MockClient fakeController({
   });
 }
 
-Widget appWith(MockClient controller, {required Widget home}) {
+Widget appWith(MockClient controller,
+    {required Widget home, LanScan? lanScan}) {
   final store = InMemoryProfileStore()
     ..profiles = [
       ControllerProfile(
@@ -71,6 +73,7 @@ Widget appWith(MockClient controller, {required Widget home}) {
         (baseUrl, {token}) =>
             ApiClient(baseUrl: baseUrl, token: token, httpClient: controller),
       ),
+      if (lanScan != null) lanScanProvider.overrideWithValue(lanScan),
     ],
     child: MaterialApp(home: home),
   );
@@ -132,6 +135,35 @@ void main() {
 
     final patch = captured.where((r) => r.method == 'PATCH').single;
     expect(jsonDecode(patch.body), {'role': 'storage'});
+  });
+
+  testWidgets('LAN scan lists discovered agents and flags unregistered ones',
+      (tester) async {
+    final controller = fakeController(nodes: [nodeJson()]); // 'gpu-box'
+    await tester.pumpWidget(appWith(
+      controller,
+      home: const Scaffold(body: NodesScreen()),
+      lanScan: () async => const [
+        DiscoveredAgent(
+            name: 'gpu-box',
+            address: '192.168.1.20',
+            port: 8010,
+            version: '0.1.0'),
+        DiscoveredAgent(
+            name: 'new-laptop', address: '192.168.1.30', port: 8010),
+      ],
+    ));
+    await settle(tester);
+
+    expect(find.text('Discovered on LAN'), findsOneWidget);
+    await tester.tap(find.text('Scan'));
+    await settle(tester);
+
+    expect(find.text('new-laptop'), findsOneWidget);
+    expect(find.textContaining('192.168.1.30:8010'), findsOneWidget);
+    expect(find.textContaining('not registered'), findsOneWidget);
+    // the registered node is recognized as such
+    expect(find.text('registered'), findsOneWidget);
   });
 
   testWidgets('add-node dialog mints and reveals the one-time key',

@@ -519,3 +519,37 @@ everything publishable is built by CI, nothing on a laptop. The install
 story is the README's front door: controller one-liner, per-OS desktop
 download, dashboard-minted agent join command. Unsigned binaries will show
 OS warnings — documented, and the first thing to revisit if adoption grows.
+
+## ADR-018: LAN discovery — agents advertise over mDNS, the desktop dashboard scans
+
+**Context:** Operators expected LAN devices running `lycosa-agent` to show up
+in the dashboard automatically (Sprint 11 Ticket #103); v0.1.0 only had the
+manual minted-key join flow, and an agent that was running but unregistered
+was invisible. Discovery needs multicast, but the controller runs inside a
+bridge-network Docker container that LAN multicast (UDP 5353) never reaches,
+so controller-side scanning would silently find nothing in the default
+install.
+
+**Decision:** Discovery is split by where multicast actually works:
+
+- Each agent advertises a `_lycosa-agent._tcp.local.` DNS-SD service
+  (python `zeroconf`, TXT records: node name + agent version, port = exec
+  API). Advertising is best-effort — if multicast is unavailable the agent
+  logs a warning and continues; `LYCOSA_DISCOVERY_ENABLED=false` opts out.
+- The desktop dashboard — a native app on the operator's LAN — performs the
+  scan (`multicast_dns` package) behind a "Discovered on LAN" panel on the
+  Nodes screen, on explicit operator action (no unprompted multicast
+  traffic), and flags discovered agents whose name has no registered node.
+- Discovery is advisory only: registration still requires the minted-key
+  join flow (ADR-005/ADR-011 security model is unchanged; no auto-join).
+- The scan function sits behind a provider seam (`lanScanProvider`) so
+  widget tests inject fakes — tests stay hermetic per the maintenance
+  guardrails.
+
+**Consequences:** Zero-config visibility of agent-running machines wherever
+mDNS works, with no new controller surface area or auth changes. Networks
+that block UDP 5353 degrade to the documented manual flow (README's port
+table covers 8000/8010/5353). SSDP was rejected: DNS-SD is the standard for
+service discovery on modern LANs and both ecosystems (python zeroconf, Dart
+multicast_dns) are mature. Controller-side discovery can be revisited if the
+controller ever runs with host networking.

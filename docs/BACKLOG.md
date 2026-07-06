@@ -13,4 +13,3 @@
   POST /tasks is (see Ticket #102 fix); long runs cancelled by a dashboard
   timeout currently stay "running" forever.
 - mTLS / enrollment handshake for agent exec API hardening (ADR-011).
-- [Bug/Feature] Network Device Discovery: Devices/agents on the local network are not automatically discovered by the controller/dashboard. (Investigate missing mDNS/SSDP network scan capabilities, and local firewall/port binding issues for port 8000/8010).

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
 import 'add_node_dialog.dart';
+import 'discovery.dart';
 import 'node_detail_screen.dart';
 import 'providers.dart';
 
@@ -83,8 +84,118 @@ class NodesScreen extends ConsumerWidget {
                   : _NodesTable(nodes: list),
             ),
           ),
+          const SizedBox(height: 12),
+          DiscoveryPanel(
+            registeredNames: {
+              for (final node in nodes.value ?? const <NodeInfo>[]) node.name
+            },
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// "Discovered on LAN" — mDNS scan for machines running lycosa-agent that
+/// may not be registered yet (Ticket #103). Scans on demand so the dashboard
+/// never sends multicast traffic unprompted.
+class DiscoveryPanel extends ConsumerStatefulWidget {
+  const DiscoveryPanel({super.key, required this.registeredNames});
+
+  final Set<String> registeredNames;
+
+  @override
+  ConsumerState<DiscoveryPanel> createState() => _DiscoveryPanelState();
+}
+
+class _DiscoveryPanelState extends ConsumerState<DiscoveryPanel> {
+  bool _scanning = false;
+  String? _error;
+  List<DiscoveredAgent>? _found;
+
+  Future<void> _scan() async {
+    setState(() {
+      _scanning = true;
+      _error = null;
+    });
+    try {
+      final agents = await ref.read(lanScanProvider)();
+      if (mounted) setState(() => _found = agents);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error =
+            'LAN scan failed: $e — mDNS needs UDP 5353 allowed on this machine.');
+      }
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Discovered on LAN',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              icon: _scanning
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.radar),
+              label: const Text('Scan'),
+              onPressed: _scanning ? null : _scan,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_error != null)
+          Text(_error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error))
+        else if (_found == null)
+          const Text(
+              'Scan finds machines running lycosa-agent with discovery enabled '
+              '(mDNS, UDP 5353).')
+        else if (_found!.isEmpty)
+          const Text(
+              'No agents found. Check that lycosa-agent is running on the '
+              'device and the firewall allows UDP 5353 (mDNS) plus TCP 8010 '
+              '(agent exec API).')
+        else
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 160),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final agent in _found!)
+                  ListTile(
+                    dense: true,
+                    leading: Icon(
+                        widget.registeredNames.contains(agent.name)
+                            ? Icons.check_circle
+                            : Icons.help_outline,
+                        size: 18,
+                        color: widget.registeredNames.contains(agent.name)
+                            ? Colors.green
+                            : Colors.orange),
+                    title: Text(agent.name),
+                    subtitle: Text(
+                        '${agent.address}:${agent.port}'
+                        '${agent.version != null ? ' · v${agent.version}' : ''}'),
+                    trailing: Text(widget.registeredNames.contains(agent.name)
+                        ? 'registered'
+                        : 'not registered — add a node key and run '
+                            'lycosa-agent with it'),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
