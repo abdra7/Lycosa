@@ -623,6 +623,13 @@ class ApiClient {
     return CollectionInfo.fromJson(_decode(response));
   }
 
+  /// Deletes the collection, its documents and its vectors (Ticket #105).
+  Future<void> deleteCollection(String collectionId) async {
+    final response = await _send(() => _http.delete(
+        _uri('/api/v1/knowledge/collections/$collectionId'), headers: _headers));
+    if (response.statusCode >= 400) _decode(response);
+  }
+
   Future<List<DocumentInfo>> listDocuments(String collectionId) async {
     final response = await _send(() => _http.get(
         _uri('/api/v1/knowledge/collections/$collectionId/documents'),

@@ -18,6 +18,49 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
   String? _selectedId;
   String? _selectedName;
 
+  Future<void> _deleteCollection(String id, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete collection?'),
+        content: Text('"$name" and all its documents and vectors will be '
+            'permanently deleted. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final client = ref.read(activeApiClientProvider);
+    if (client == null) return;
+    try {
+      await client.deleteCollection(id);
+      if (_selectedId == id && mounted) {
+        setState(() {
+          _selectedId = null;
+          _selectedName = null;
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.friendly)));
+      }
+    } on ControllerUnreachableException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.friendly)));
+      }
+    } finally {
+      ref.invalidate(collectionsProvider);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final collections = ref.watch(collectionsProvider);
@@ -62,6 +105,12 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
                                       const Icon(Icons.folder_outlined),
                                   title: Text(c.name),
                                   subtitle: Text(c.embeddingBackend),
+                                  trailing: IconButton(
+                                    tooltip: 'Delete collection',
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: () =>
+                                        _deleteCollection(c.id, c.name),
+                                  ),
                                   onTap: () => setState(() {
                                     _selectedId = c.id;
                                     _selectedName = c.name;

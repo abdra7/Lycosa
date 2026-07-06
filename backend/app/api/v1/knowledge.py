@@ -4,11 +4,11 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 
 from app.api.deps import DbDep, Principal, PrincipalDep, require_roles
 from app.db.session import get_runtime_sessionmaker
-from app.models import Document, KnowledgeCollection
+from app.models import Document, EmbeddingJob, KnowledgeCollection, RetrievalRequest
 from app.models.user import ROLE_ADMIN, ROLE_OPERATOR
 from app.schemas.knowledge import (
     CollectionCreate,
@@ -21,6 +21,7 @@ from app.services.audit import audit
 from app.services.knowledge.embedder import get_embedder
 from app.services.knowledge.ingestion import ingest_document
 from app.services.knowledge.router import UnknownCollectionError, retrieve
+from app.services.knowledge.store import KnowledgeStoreError, drop_collection, qdrant_name
 
 logger = logging.getLogger("lycosa.knowledge")
 
@@ -84,6 +85,41 @@ async def list_collections(db: DbDep, _principal: PrincipalDep) -> list[Collecti
         .all()
     )
     return [CollectionOut.model_validate(c) for c in collections]
+
+
+@router.delete("/collections/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_collection(
+    collection_id: uuid.UUID, principal: OperatorDep, request: Request, db: DbDep
+) -> None:
+    """Delete a collection: its Qdrant vectors, then its documents and their
+    embedding jobs (Ticket #105). Vectors go first so a Qdrant outage aborts
+    the request before any metadata is lost; retrieval audit rows are kept
+    with their collection reference nulled out."""
+    collection = await _get_collection(db, collection_id)
+    try:
+        await drop_collection(qdrant_name(collection.id))
+    except KnowledgeStoreError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    document_ids = select(Document.id).where(Document.collection_id == collection_id)
+    await db.execute(delete(EmbeddingJob).where(EmbeddingJob.document_id.in_(document_ids)))
+    await db.execute(delete(Document).where(Document.collection_id == collection_id))
+    await db.execute(
+        update(RetrievalRequest)
+        .where(RetrievalRequest.collection_id == collection_id)
+        .values(collection_id=None)
+    )
+    await db.delete(collection)
+    await audit(
+        db,
+        action="knowledge.collection.delete",
+        actor_user_id=principal.id if principal.type == "user" else None,
+        resource_type="knowledge_collection",
+        resource_id=str(collection_id),
+        detail={"name": collection.name},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
 
 
 @router.post(
