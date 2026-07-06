@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 
@@ -30,9 +34,128 @@ typedef LanScan = Future<List<DiscoveredAgent>> Function();
 
 final lanScanProvider = Provider<LanScan>((ref) => scanForAgents);
 
+/// A [RawDatagramSocket] delegate whose multicast join/leave failures are
+/// swallowed instead of thrown (Ticket #106).
+///
+/// On Windows, virtual adapters (VPN tunnels, Docker/WSL switches) reject
+/// multicast group membership: the underlying setsockopt fails with
+/// WSAENOPROTOOPT (errno 10042) or WSAEPROTONOSUPPORT (errno 10045), which
+/// [MDnsClient.start] would otherwise surface as a crash of the whole scan.
+/// Skipping the adapter is correct — agents are still found via the ones
+/// that joined successfully.
+class SafeRawDatagramSocket extends StreamView<RawSocketEvent>
+    implements RawDatagramSocket {
+  SafeRawDatagramSocket(this._socket) : super(_socket);
+
+  final RawDatagramSocket _socket;
+
+  static bool _isIgnorableMulticastError(SocketException e) {
+    final code = e.osError?.errorCode;
+    return code == 10042 ||
+        code == 10045 ||
+        e.message.contains('10042') ||
+        e.message.contains('10045');
+  }
+
+  @override
+  void joinMulticast(InternetAddress group, [NetworkInterface? interface]) {
+    try {
+      _socket.joinMulticast(group, interface);
+    } on SocketException catch (e) {
+      if (!_isIgnorableMulticastError(e)) rethrow;
+    }
+  }
+
+  @override
+  void leaveMulticast(InternetAddress group, [NetworkInterface? interface]) {
+    try {
+      _socket.leaveMulticast(group, interface);
+    } on SocketException catch (e) {
+      if (!_isIgnorableMulticastError(e)) rethrow;
+    }
+  }
+
+  @override
+  InternetAddress get address => _socket.address;
+
+  @override
+  int get port => _socket.port;
+
+  @override
+  bool get broadcastEnabled => _socket.broadcastEnabled;
+
+  @override
+  set broadcastEnabled(bool value) => _socket.broadcastEnabled = value;
+
+  @override
+  bool get multicastLoopback => _socket.multicastLoopback;
+
+  @override
+  set multicastLoopback(bool value) => _socket.multicastLoopback = value;
+
+  @override
+  int get multicastHops => _socket.multicastHops;
+
+  @override
+  set multicastHops(int value) => _socket.multicastHops = value;
+
+  @override
+  // ignore: deprecated_member_use
+  NetworkInterface? get multicastInterface => _socket.multicastInterface;
+
+  @override
+  // ignore: deprecated_member_use
+  set multicastInterface(NetworkInterface? value) =>
+      // ignore: deprecated_member_use
+      _socket.multicastInterface = value;
+
+  @override
+  bool get readEventsEnabled => _socket.readEventsEnabled;
+
+  @override
+  set readEventsEnabled(bool value) => _socket.readEventsEnabled = value;
+
+  @override
+  bool get writeEventsEnabled => _socket.writeEventsEnabled;
+
+  @override
+  set writeEventsEnabled(bool value) => _socket.writeEventsEnabled = value;
+
+  @override
+  void close() => _socket.close();
+
+  @override
+  Datagram? receive() => _socket.receive();
+
+  @override
+  int send(List<int> buffer, InternetAddress address, int port) =>
+      _socket.send(buffer, address, port);
+
+  @override
+  Uint8List getRawOption(RawSocketOption option) =>
+      _socket.getRawOption(option);
+
+  @override
+  void setRawOption(RawSocketOption option) => _socket.setRawOption(option);
+}
+
+/// Socket factory for [MDnsClient]: binds normally, then wraps the socket so
+/// multicast joins on unsupported adapters degrade gracefully.
+Future<RawDatagramSocket> _bindSafeSocket(
+  dynamic host,
+  int port, {
+  bool reuseAddress = true,
+  bool reusePort = false,
+  int ttl = 1,
+}) async {
+  final socket = await RawDatagramSocket.bind(host, port,
+      reuseAddress: reuseAddress, reusePort: reusePort, ttl: ttl);
+  return SafeRawDatagramSocket(socket);
+}
+
 Future<List<DiscoveredAgent>> scanForAgents() async {
   const lookupTimeout = Duration(seconds: 3);
-  final client = MDnsClient();
+  final client = MDnsClient(rawDatagramSocketFactory: _bindSafeSocket);
   final found = <String, DiscoveredAgent>{};
   try {
     await client.start();
