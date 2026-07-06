@@ -60,7 +60,10 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.friendly);
     } on ControllerUnreachableException catch (e) {
-      setState(() => _error = e.friendly);
+      // the controller records the outcome even if we drop the connection,
+      // so the task will surface in Recent once it finishes
+      setState(() => _error =
+          '${e.friendly} — the task may still be running; watch Recent below.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

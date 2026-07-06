@@ -521,22 +521,28 @@ class ApiClient {
   }
 
   /// Submit a task; v1 runs synchronously, so the response is final.
+  /// The controller may spend up to task_dispatch_timeout (120 s) per attempt
+  /// across 3 failover attempts, so this call gets its own generous timeout —
+  /// with the default 15 s the dashboard dropped the connection and the
+  /// finished task appeared lost (Ticket #102).
   Future<TaskInfo> submitTask({
     required String prompt,
     String? type,
     String? model,
     String? knowledgeQuery,
   }) async {
-    final response = await _send(() => _http.post(
-          _uri('/api/v1/tasks'),
-          headers: _headers,
-          body: jsonEncode({
-            'prompt': prompt,
-            'type': ?type,
-            'model': ?model,
-            'knowledge_query': ?knowledgeQuery,
-          }),
-        ));
+    final response = await _send(
+        () => _http.post(
+              _uri('/api/v1/tasks'),
+              headers: _headers,
+              body: jsonEncode({
+                'prompt': prompt,
+                'type': ?type,
+                'model': ?model,
+                'knowledge_query': ?knowledgeQuery,
+              }),
+            ),
+        timeout: const Duration(minutes: 7));
     return TaskInfo.fromJson(_decode(response));
   }
 

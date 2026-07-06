@@ -4,11 +4,16 @@ respx patches httpx's real transports (which the orchestrator uses) but not
 the ASGI transport the test client uses, so app traffic flows normally.
 """
 
+import asyncio
+from contextlib import suppress
+
 import httpx
 import respx
 from httpx import AsyncClient, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import Task, TaskStatus
 from tests.conftest import ADMIN_EMAIL, bearer, login, make_node
 
 TOKEN_HEADER = "X-Agent-Token"
@@ -130,6 +135,48 @@ async def test_agent_reported_failure_triggers_failover(
 
     assert task["status"] == "succeeded"
     assert task["executions"][0]["error"] == "model OOM"
+
+
+@respx.mock(assert_all_mocked=False)
+async def test_client_disconnect_does_not_lose_completion(
+    respx_mock, client: AsyncClient, db_session: AsyncSession, users: dict
+) -> None:
+    """Ticket #102: when the dashboard's HTTP timeout drops the connection
+    mid-dispatch, the agent still finishes the work — the controller must
+    record the terminal state instead of leaving the task 'running' forever."""
+    await make_node(db_session, "slow-box", role="ai_compute")
+
+    async def slow_success(request: httpx.Request) -> Response:
+        await asyncio.sleep(0.3)
+        return Response(200, json={"status": "succeeded", "output": "late but done"})
+
+    respx_mock.post("http://slow-box:8010/execute").mock(side_effect=slow_success)
+
+    token = await login(client, ADMIN_EMAIL)
+    request_task = asyncio.create_task(
+        client.post(
+            "/api/v1/tasks",
+            json={"prompt": "Refactor this python function"},
+            headers=bearer(token),
+        )
+    )
+    await asyncio.sleep(0.15)  # the dispatch to the agent is now in flight
+    request_task.cancel()  # simulates the client timing out / disconnecting
+    with suppress(asyncio.CancelledError):
+        await request_task
+
+    # the dispatch must survive the disconnect and record the outcome
+    task_row = None
+    for _ in range(40):
+        await asyncio.sleep(0.1)
+        db_session.expire_all()
+        task_row = (await db_session.execute(select(Task))).scalar_one_or_none()
+        if task_row is not None and task_row.status in (TaskStatus.SUCCEEDED, TaskStatus.FAILED):
+            break
+    assert task_row is not None, "task row was never created"
+    assert task_row.status == TaskStatus.SUCCEEDED
+    assert task_row.finished_at is not None
+    assert task_row.result["output"] == "late but done"
 
 
 async def test_tasks_require_operator_auth(client: AsyncClient, roles: dict) -> None:
