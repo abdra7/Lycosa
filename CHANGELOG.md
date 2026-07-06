@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Task history (Ticket #102)** — completed tasks no longer vanish from the
+  dashboard: `POST /api/v1/tasks` dispatch is now shielded from client
+  disconnects and runs on its own DB session, so a task whose caller times
+  out mid-run still gets its terminal state (succeeded/failed) recorded
+  instead of hanging in `running` forever. The dashboard's task submission
+  timeout now covers the controller's worst-case synchronous dispatch
+  (7 minutes, was 15 s), and a dropped connection explains that the task may
+  still finish and appear in Recent.
+
 - **Knowledge ingestion (Ticket #101)** — document upload failures now surface
   actionable errors instead of raw tracebacks or silent timeouts: corrupt and
   password-protected PDFs are reported as such, a missing `fastembed` extra or
