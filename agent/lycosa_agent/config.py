@@ -22,5 +22,7 @@ class AgentSettings(BaseSettings):
     exec_port: int = 8010
     # URL the controller should use to reach this agent; autodetected if unset
     advertise_url: str | None = None
+    # announce this agent over mDNS so the dashboard's LAN scan can find it
+    discovery_enabled: bool = True
 
     ollama_url: str = "http://localhost:11434"

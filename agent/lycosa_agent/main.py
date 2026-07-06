@@ -12,6 +12,7 @@ import uvicorn
 
 from lycosa_agent.client import ControllerClient
 from lycosa_agent.config import AgentSettings
+from lycosa_agent.discovery import DiscoveryAdvertiser
 from lycosa_agent.executor import create_app
 from lycosa_agent.hwprofile import collect_profile
 from lycosa_agent.metrics import collect_metrics
@@ -85,6 +86,11 @@ async def run(settings: AgentSettings) -> None:
         )
     )
 
+    advertiser: DiscoveryAdvertiser | None = None
+    if settings.discovery_enabled:
+        advertiser = DiscoveryAdvertiser(settings.node_name, _local_ip(), settings.exec_port)
+        await advertiser.start()
+
     logger.info(
         "exec API on %s, heartbeating every %ss", agent_url, settings.heartbeat_interval_seconds
     )
@@ -94,6 +100,8 @@ async def run(settings: AgentSettings) -> None:
             _heartbeat_loop(client, settings.heartbeat_interval_seconds),
         )
     finally:
+        if advertiser is not None:
+            await advertiser.stop()
         await client.aclose()
 
 

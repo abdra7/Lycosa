@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **LAN discovery (Ticket #103, ADR-018)** — agents now advertise themselves
+  over mDNS (`_lycosa-agent._tcp`, opt out with
+  `LYCOSA_DISCOVERY_ENABLED=false`), and the dashboard's Nodes screen gained
+  a "Discovered on LAN" scan that lists machines running `lycosa-agent` and
+  flags the ones not yet registered. The README documents the ports involved
+  (8000/TCP controller, 8010/TCP agent exec, 5353/UDP mDNS) for firewall
+  troubleshooting.
+
 ### Fixed
 
 - **Task history (Ticket #102)** — completed tasks no longer vanish from the
