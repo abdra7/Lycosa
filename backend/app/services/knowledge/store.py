@@ -51,6 +51,17 @@ async def ensure_collection(name: str, dim: int) -> None:
         raise _store_error(f"collection setup for {name!r}", exc) from exc
 
 
+async def drop_collection(name: str) -> None:
+    """Delete a Qdrant collection and its vectors; a collection that never
+    ingested a document has no Qdrant collection, which is fine."""
+    client = get_qdrant()
+    try:
+        if await client.collection_exists(name):
+            await client.delete_collection(name)
+    except Exception as exc:
+        raise _store_error(f"delete of {name!r}", exc) from exc
+
+
 async def upsert_chunks(
     name: str, vectors: list[list[float]], payloads: list[dict[str, Any]]
 ) -> None:

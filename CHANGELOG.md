@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Delete collection (Ticket #105)** —
+  `DELETE /api/v1/knowledge/collections/{id}` removes a knowledge collection:
+  its Qdrant vectors, documents, and embedding jobs (retrieval audit rows are
+  kept with the collection reference cleared). The dashboard's Knowledge
+  screen gained a delete button with a confirmation dialog on each
+  collection.
+
 - **LAN discovery (Ticket #103, ADR-018)** — agents now advertise themselves
   over mDNS (`_lycosa-agent._tcp`, opt out with
   `LYCOSA_DISCOVERY_ENABLED=false`), and the dashboard's Nodes screen gained

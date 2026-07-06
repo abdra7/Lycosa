@@ -155,9 +155,7 @@ def _build_encrypted_pdf() -> bytes:
     return buffer.getvalue()
 
 
-async def test_corrupt_pdf_fails_with_clear_error(
-    client: AsyncClient, users: dict, qdrant
-) -> None:
+async def test_corrupt_pdf_fails_with_clear_error(client: AsyncClient, users: dict, qdrant) -> None:
     """Ticket #101: pypdf parse failures must surface as an actionable message,
     not a raw parser traceback string."""
     token = await login(client, OPERATOR_EMAIL)
@@ -176,17 +174,13 @@ async def test_encrypted_pdf_fails_with_clear_error(
     """Ticket #101: encrypted PDFs must be reported as password-protected."""
     token = await login(client, OPERATOR_EMAIL)
     collection = await create_collection(client, token, name="encrypted-docs")
-    document = await upload(
-        client, token, collection["id"], "secret.pdf", _build_encrypted_pdf()
-    )
+    document = await upload(client, token, collection["id"], "secret.pdf", _build_encrypted_pdf())
 
     assert document["status"] == "failed"
     assert "password-protected" in document["error"]
 
 
-async def test_qdrant_unreachable_fails_with_clear_error(
-    client: AsyncClient, users: dict
-) -> None:
+async def test_qdrant_unreachable_fails_with_clear_error(client: AsyncClient, users: dict) -> None:
     """Ticket #101: a down/unreachable Qdrant must name Qdrant and its URL so the
     operator knows which service to check."""
     from qdrant_client import AsyncQdrantClient
