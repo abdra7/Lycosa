@@ -430,9 +430,12 @@ class ApiClient {
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
-  Future<http.Response> _send(Future<http.Response> Function() call) async {
+  Future<http.Response> _send(
+    Future<http.Response> Function() call, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
     try {
-      return await call().timeout(const Duration(seconds: 15));
+      return await call().timeout(timeout);
     } on ApiException {
       rethrow;
     } on SocketException catch (e) {
@@ -624,7 +627,9 @@ class ApiClient {
   }
 
   /// Multipart upload; the document is ingested synchronously, so the
-  /// returned status is final (embedded or failed).
+  /// returned status is final (embedded or failed). Ingestion can far exceed
+  /// the default 15 s timeout (large PDFs; fastembed downloads its model on
+  /// first use), so uploads get their own generous timeout.
   Future<DocumentInfo> uploadDocument(
       String collectionId, String filename, List<int> bytes) async {
     final request = http.MultipartRequest(
@@ -632,7 +637,8 @@ class ApiClient {
       ..headers['Authorization'] = 'Bearer $token'
       ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
     final response = await _send(
-        () async => http.Response.fromStream(await _http.send(request)));
+        () async => http.Response.fromStream(await _http.send(request)),
+        timeout: const Duration(minutes: 5));
     return DocumentInfo.fromJson(_decode(response));
   }
 

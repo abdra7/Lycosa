@@ -3,13 +3,38 @@
 from io import BytesIO
 
 
+class ExtractionError(ValueError):
+    """The document's text could not be extracted; message is operator-facing."""
+
+
+def _extract_pdf(filename: str, data: bytes) -> str:
+    from pypdf import PdfReader
+
+    try:
+        reader = PdfReader(BytesIO(data))
+        if reader.is_encrypted:
+            # some PDFs carry an owner password only; an empty user password opens them
+            try:
+                decrypted = bool(reader.decrypt(""))
+            except Exception:
+                decrypted = False
+            if not decrypted:
+                raise ExtractionError(
+                    f"PDF {filename!r} is password-protected — upload a decrypted copy"
+                )
+        return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+    except ExtractionError:
+        raise
+    except Exception as exc:
+        raise ExtractionError(
+            f"could not parse PDF {filename!r} (corrupt or unsupported file): {exc}"
+        ) from exc
+
+
 def extract_text(filename: str, data: bytes) -> str:
     """PDF via pypdf; everything else treated as UTF-8 text (md/txt/code)."""
     if filename.lower().endswith(".pdf"):
-        from pypdf import PdfReader
-
-        reader = PdfReader(BytesIO(data))
-        return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        return _extract_pdf(filename, data)
     return data.decode("utf-8", errors="replace")
 
 
