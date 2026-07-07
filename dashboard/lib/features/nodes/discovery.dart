@@ -49,19 +49,25 @@ class SafeRawDatagramSocket extends StreamView<RawSocketEvent>
 
   final RawDatagramSocket _socket;
 
-  static bool _isIgnorableMulticastError(SocketException e) {
-    final code = e.osError?.errorCode;
-    return code == 10042 ||
-        code == 10045 ||
-        e.message.contains('10042') ||
-        e.message.contains('10045');
+  /// dart:io is inconsistent about the thrown type: bind failures surface as
+  /// [SocketException], but joinMulticast/setRawOption failures come out as a
+  /// bare [OSError] — so match on the error code wherever it lives.
+  static bool _isIgnorableMulticastError(Object e) {
+    final code = switch (e) {
+      SocketException(:final osError) => osError?.errorCode,
+      OSError(:final errorCode) => errorCode,
+      _ => null,
+    };
+    if (code == 10042 || code == 10045) return true;
+    final text = e.toString();
+    return text.contains('10042') || text.contains('10045');
   }
 
   @override
   void joinMulticast(InternetAddress group, [NetworkInterface? interface]) {
     try {
       _socket.joinMulticast(group, interface);
-    } on SocketException catch (e) {
+    } catch (e) {
       if (!_isIgnorableMulticastError(e)) rethrow;
     }
   }
@@ -70,7 +76,7 @@ class SafeRawDatagramSocket extends StreamView<RawSocketEvent>
   void leaveMulticast(InternetAddress group, [NetworkInterface? interface]) {
     try {
       _socket.leaveMulticast(group, interface);
-    } on SocketException catch (e) {
+    } catch (e) {
       if (!_isIgnorableMulticastError(e)) rethrow;
     }
   }
@@ -136,11 +142,25 @@ class SafeRawDatagramSocket extends StreamView<RawSocketEvent>
       _socket.getRawOption(option);
 
   @override
-  void setRawOption(RawSocketOption option) => _socket.setRawOption(option);
+  void setRawOption(RawSocketOption option) {
+    try {
+      _socket.setRawOption(option);
+    } catch (e) {
+      // MDnsClient.start sets IP_MULTICAST_IF per adapter; virtual adapters
+      // reject it the same way they reject group membership. Skip them.
+      if (!_isIgnorableMulticastError(e)) rethrow;
+    }
+  }
 }
 
 /// Socket factory for [MDnsClient]: binds normally, then wraps the socket so
 /// multicast joins on unsupported adapters degrade gracefully.
+///
+/// [MDnsClient.start] always requests `reusePort: true`, but SO_REUSEPORT
+/// does not exist on Windows: the bind itself fails with WSAENOPROTOOPT
+/// (errno 10042) before any of the [SafeRawDatagramSocket] protections apply,
+/// killing the whole scan. Windows allows port sharing via SO_REUSEADDR
+/// (which `reuseAddress` already sets), so dropping the flag there is safe.
 Future<RawDatagramSocket> _bindSafeSocket(
   dynamic host,
   int port, {
@@ -149,7 +169,9 @@ Future<RawDatagramSocket> _bindSafeSocket(
   int ttl = 1,
 }) async {
   final socket = await RawDatagramSocket.bind(host, port,
-      reuseAddress: reuseAddress, reusePort: reusePort, ttl: ttl);
+      reuseAddress: reuseAddress,
+      reusePort: reusePort && !Platform.isWindows,
+      ttl: ttl);
   return SafeRawDatagramSocket(socket);
 }
 

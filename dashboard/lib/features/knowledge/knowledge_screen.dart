@@ -231,7 +231,16 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
   Future<void> _upload() async {
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
-    final picked = await FilePicker.platform.pickFiles(withData: true);
+    final FilePickerResult? picked;
+    try {
+      picked = await FilePicker.pickFiles(withData: true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not open the file picker: $e')));
+      }
+      return;
+    }
     final file = picked?.files.singleOrNull;
     if (file == null || file.bytes == null) return;
 
@@ -254,6 +263,13 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.friendly)));
+      }
+    } catch (e) {
+      // e.g. file picker plugin failures — surface them instead of a
+      // silently dead Upload button
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     } finally {
       // refresh even on failure: the controller records failed documents with
