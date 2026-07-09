@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
 
     # node liveness (ADR-011): timeout should be ~3x the agent interval
-    agent_heartbeat_interval_seconds: int = 15
-    heartbeat_timeout_seconds: int = 45
-    offline_sweep_interval_seconds: int = 15
+    agent_heartbeat_interval_seconds: int = 5
+    heartbeat_timeout_seconds: int = 15
+    offline_sweep_interval_seconds: int = 5
 
     # task dispatch (ADR-012)
     task_dispatch_timeout_seconds: int = 120
