@@ -39,9 +39,33 @@ final nodesProvider = StreamProvider.autoDispose<List<NodeInfo>>((ref) {
   return controller.stream;
 });
 
+/// Single-node detail, polled on the same interval as the node list so
+/// "Latest metrics" on the detail screen actually stays latest instead of
+/// freezing at whatever the screen showed when it first opened.
 final nodeDetailProvider =
-    FutureProvider.autoDispose.family<NodeInfo, String>((ref, id) async {
+    StreamProvider.autoDispose.family<NodeInfo, String>((ref, id) {
   final client = ref.watch(activeApiClientProvider);
-  if (client == null) throw StateError('not authenticated');
-  return client.getNode(id);
+  final controller = StreamController<NodeInfo>();
+  if (client == null) {
+    controller.addError(StateError('not authenticated'));
+    ref.onDispose(controller.close);
+    return controller.stream;
+  }
+
+  Future<void> tick() async {
+    try {
+      final node = await client.getNode(id);
+      if (!controller.isClosed) controller.add(node);
+    } catch (error, stack) {
+      if (!controller.isClosed) controller.addError(error, stack);
+    }
+  }
+
+  tick();
+  final timer = Timer.periodic(ref.watch(nodePollIntervalProvider), (_) => tick());
+  ref.onDispose(() {
+    timer.cancel();
+    controller.close();
+  });
+  return controller.stream;
 });
