@@ -180,7 +180,15 @@ Future<List<DiscoveredAgent>> scanForAgents() async {
   final client = MDnsClient(rawDatagramSocketFactory: _bindSafeSocket);
   final found = <String, DiscoveredAgent>{};
   try {
-    await client.start();
+    // MDnsClient.start listens on the incoming socket with no error handler
+    // of its own: per its docs, an omitted `onError` means socket-level
+    // errors are "considered unhandled" and go straight to the Zone's
+    // uncaught-error handler instead of this function's try/catch — which is
+    // exactly what crashes the whole app on Windows, where a UDP socket can
+    // asynchronously surface an ICMP host-unreachable as a later read error
+    // well after start() has already returned. Swallow it here instead; the
+    // ongoing lookup below is unaffected and keeps returning what it found.
+    await client.start(onError: (Object _, StackTrace _) {});
     await for (final ptr in client.lookup<PtrResourceRecord>(
         ResourceRecordQuery.serverPointer(lycosaServiceType),
         timeout: lookupTimeout)) {
