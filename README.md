@@ -117,6 +117,10 @@ LYCOSA_API_KEY=lyc_... \
 lycosa-agent run
 ```
 
+On Windows, use `scripts/install-agent.ps1` instead — it also opens the
+firewall ports discovery needs (see below), so LAN scan works without any
+manual Windows Firewall or network-profile steps.
+
 The node registers itself, gets a recommended role, and starts heartbeating.
 See [agent/README.md](agent/README.md) for configuration and running the
 agent as a systemd service.
@@ -130,7 +134,9 @@ the controller. Discovery is advisory — joining the fabric still uses the
 minted-key flow above. Set `LYCOSA_DISCOVERY_ENABLED=false` on an agent to
 opt out.
 
-If devices don't appear or stay unreachable, check firewalls on both ends:
+The Windows installers (`install.ps1`, `install-agent.ps1`) open the ports
+below automatically. If you installed another way, or devices still don't
+appear, check firewalls on both ends:
 
 | Port | Protocol | Machine | Used for |
 |---|---|---|---|

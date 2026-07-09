@@ -109,6 +109,28 @@ if (-not $healthy) {
     Fail "API did not become healthy within 120s - check: docker compose -f infra/docker-compose.yml logs api"
 }
 
+# --- firewall ------------------------------------------------------------
+# Dashboards and agents on other LAN devices need to reach port 8000. Scoped
+# to "any" profile so a Public-classified network connection doesn't block it.
+Say "opening firewall port 8000 for LAN access"
+$FirewallCommand = @'
+if (-not (Get-NetFirewallRule -DisplayName "Lycosa Controller API" -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName "Lycosa Controller API" -Direction Inbound -Protocol TCP -LocalPort 8000 -Profile Any -Action Allow | Out-Null
+}
+'@
+$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+try {
+    if ($IsAdmin) {
+        Invoke-Expression $FirewallCommand
+    } else {
+        Start-Process powershell -Verb RunAs -Wait -ErrorAction Stop `
+            -ArgumentList "-NoProfile", "-Command", $FirewallCommand
+    }
+} catch {
+    Write-Host "warn: could not add firewall rule for port 8000 automatically (elevation declined or blocked by policy)" -ForegroundColor Yellow
+    Write-Host '  New-NetFirewallRule -DisplayName "Lycosa Controller API" -Direction Inbound -Protocol TCP -LocalPort 8000 -Profile Any -Action Allow' -ForegroundColor Yellow
+}
+
 # --- report ------------------------------------------------------------------
 $LanIp = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" -and $_.PrefixOrigin -ne "WellKnown" } |
