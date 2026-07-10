@@ -5,6 +5,7 @@ import '../../core/app_info.dart';
 import '../../core/brand.dart';
 import '../../core/events.dart';
 import '../../core/session.dart';
+import '../../core/theme_mode.dart';
 import '../../widgets/lycosa_brand.dart';
 import '../admin/admin_screen.dart';
 import '../knowledge/knowledge_screen.dart';
@@ -90,6 +91,17 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             label: Text('${principal.displayName} · ${principal.role}'),
           ),
           IconButton(
+            tooltip: ref.watch(themeModeProvider) == ThemeMode.dark
+                ? 'Switch to light mode'
+                : 'Switch to dark mode',
+            icon: Icon(
+              ref.watch(themeModeProvider) == ThemeMode.dark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined,
+            ),
+            onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
+          ),
+          IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout),
             onPressed: () => ref.read(sessionProvider.notifier).logout(),
@@ -142,9 +154,10 @@ class _EventStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: LycosaColors.backgroundSecondary,
-      shape: const Border(top: BorderSide(color: LycosaColors.border)),
+      color: scheme.surfaceContainerLow,
+      shape: Border(top: BorderSide(color: scheme.outline)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(

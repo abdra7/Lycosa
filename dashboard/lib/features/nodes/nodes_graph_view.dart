@@ -1,11 +1,14 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/brand.dart';
 import 'node_detail_screen.dart';
+import 'providers.dart';
 
 /// Fixed categorical hues (validated for CVD-safe adjacency), one per role —
 /// same light/dark step pairs as the rest of the palette, assigned in a
@@ -51,7 +54,7 @@ class _Body {
   _Body({required this.id, required this.position, this.node});
 
   final String id; // 'hub' or NodeInfo.id
-  final NodeInfo? node; // null for the hub
+  NodeInfo? node; // null for the hub; refreshed each poll for live metrics
   Offset position;
   Offset velocity = Offset.zero;
   bool pinned = false;
@@ -62,12 +65,38 @@ class _Body {
 /// of a Lycosa deployment (agents report only to the controller, never to
 /// each other), rendered the way it is architecturally, not just visually.
 class NodesGraphView extends StatefulWidget {
-  const NodesGraphView({super.key, required this.nodes});
+  const NodesGraphView({super.key, required this.nodes, this.fullscreen = false});
 
   final List<NodeInfo> nodes;
 
+  /// True when hosted by [NodesGraphFullscreen] — flips the expand button
+  /// into an exit button.
+  final bool fullscreen;
+
   @override
   State<NodesGraphView> createState() => _NodesGraphViewState();
+}
+
+/// Full-window graph page. Watches [nodesProvider] itself so the graph keeps
+/// receiving live status/metrics while expanded.
+class NodesGraphFullscreen extends ConsumerWidget {
+  const NodesGraphFullscreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nodes = ref.watch(nodesProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Fabric graph')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: nodes.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Failed to load nodes: $e')),
+          data: (list) => NodesGraphView(nodes: list, fullscreen: true),
+        ),
+      ),
+    );
+  }
 }
 
 class _NodesGraphViewState extends State<NodesGraphView>
@@ -78,9 +107,35 @@ class _NodesGraphViewState extends State<NodesGraphView>
   Size _canvasSize = Size.zero;
   String? _draggingId;
 
+  // View transform: screen = world * zoom + pan.
+  double _zoom = 1.0;
+  Offset _panOffset = Offset.zero;
+  bool _panningCanvas = false;
+
   static const _hubId = 'hub';
   static const _nodeRadius = 26.0;
   static const _hubRadius = 20.0;
+  static const _minZoom = 0.4;
+  static const _maxZoom = 3.0;
+
+  Offset _toWorld(Offset local) => (local - _panOffset) / _zoom;
+
+  void _zoomBy(double factor, {Offset? anchor}) {
+    final old = _zoom;
+    final next = (old * factor).clamp(_minZoom, _maxZoom).toDouble();
+    if (next == old) return;
+    final a = anchor ?? _canvasSize.center(Offset.zero);
+    setState(() {
+      // keep the anchor point (cursor or canvas center) fixed on screen
+      _panOffset = a - (a - _panOffset) * (next / old);
+      _zoom = next;
+    });
+  }
+
+  void _resetView() => setState(() {
+    _zoom = 1.0;
+    _panOffset = Offset.zero;
+  });
 
   @override
   void initState() {
@@ -92,7 +147,15 @@ class _NodesGraphViewState extends State<NodesGraphView>
   @override
   void didUpdateWidget(covariant NodesGraphView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_sameNodeIds(oldWidget.nodes, widget.nodes)) _seed();
+    if (!_sameNodeIds(oldWidget.nodes, widget.nodes)) {
+      _seed();
+    } else {
+      // same nodes, fresh poll: swap in the new data so status rings and
+      // usage labels stay live without disturbing positions
+      for (final n in widget.nodes) {
+        _bodies[n.id]?.node = n;
+      }
+    }
   }
 
   bool _sameNodeIds(List<NodeInfo> a, List<NodeInfo> b) {
@@ -218,56 +281,136 @@ class _NodesGraphViewState extends State<NodesGraphView>
           child: LayoutBuilder(
             builder: (context, constraints) {
               _canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
-              return GestureDetector(
-                onPanStart: (details) {
-                  final hit = _hitTest(details.localPosition);
-                  if (hit != null && hit.id != _hubId) {
-                    _draggingId = hit.id;
-                    hit.pinned = true;
-                  }
-                },
-                onPanUpdate: (details) {
-                  final id = _draggingId;
-                  if (id == null) return;
-                  setState(() => _bodies[id]!.position = details.localPosition);
-                },
-                onPanEnd: (_) {
-                  final id = _draggingId;
-                  if (id != null) _bodies[id]?.pinned = false;
-                  _draggingId = null;
-                },
-                onTapUp: (details) {
-                  final hit = _hitTest(details.localPosition);
-                  if (hit != null && hit.node != null) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => NodeDetailScreen(nodeId: hit.node!.id),
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: ClipRect(
+                      child: Listener(
+                        // mouse wheel / trackpad scroll = zoom at the cursor
+                        onPointerSignal: (event) {
+                          if (event is PointerScrollEvent) {
+                            _zoomBy(
+                              event.scrollDelta.dy < 0 ? 1.1 : 1 / 1.1,
+                              anchor: event.localPosition,
+                            );
+                          }
+                        },
+                        child: GestureDetector(
+                          onPanStart: (details) {
+                            final hit = _hitTest(
+                              _toWorld(details.localPosition),
+                            );
+                            if (hit != null && hit.id != _hubId) {
+                              _draggingId = hit.id;
+                              hit.pinned = true;
+                            } else {
+                              // empty space (or the hub): pan the whole canvas
+                              _panningCanvas = true;
+                            }
+                          },
+                          onPanUpdate: (details) {
+                            final id = _draggingId;
+                            if (id != null) {
+                              setState(
+                                () => _bodies[id]!.position = _toWorld(
+                                  details.localPosition,
+                                ),
+                              );
+                            } else if (_panningCanvas) {
+                              setState(() => _panOffset += details.delta);
+                            }
+                          },
+                          onPanEnd: (_) {
+                            final id = _draggingId;
+                            if (id != null) _bodies[id]?.pinned = false;
+                            _draggingId = null;
+                            _panningCanvas = false;
+                          },
+                          onTapUp: (details) {
+                            final hit = _hitTest(
+                              _toWorld(details.localPosition),
+                            );
+                            if (hit != null && hit.node != null) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      NodeDetailScreen(nodeId: hit.node!.id),
+                                ),
+                              );
+                            }
+                          },
+                          child: CustomPaint(
+                            size: Size.infinite,
+                            painter: _GraphPainter(
+                              bodies: _bodies,
+                              hubId: _hubId,
+                              nodeRadius: _nodeRadius,
+                              hubRadius: _hubRadius,
+                              zoom: _zoom,
+                              panOffset: _panOffset,
+                              edgeColor: Theme.of(context).dividerColor,
+                              hubColor: Theme.of(context).colorScheme.primary,
+                              onHubColor: Theme.of(
+                                context,
+                              ).colorScheme.onPrimary,
+                              textColor: Theme.of(context).colorScheme.onSurface,
+                              mutedTextColor: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              roleColor: (role) => _roleColor(context, role),
+                            ),
+                          ),
+                        ),
                       ),
-                    );
-                  }
-                },
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: _GraphPainter(
-                    bodies: _bodies,
-                    hubId: _hubId,
-                    nodeRadius: _nodeRadius,
-                    hubRadius: _hubRadius,
-                    edgeColor: Theme.of(context).dividerColor,
-                    hubColor: Theme.of(context).colorScheme.primary,
-                    onHubColor: Theme.of(context).colorScheme.onPrimary,
-                    textColor: Theme.of(context).colorScheme.onSurface,
-                    mutedTextColor: Theme.of(
-                      context,
-                    ).colorScheme.onSurfaceVariant,
-                    roleColor: (role) => _roleColor(context, role),
+                    ),
                   ),
-                ),
+                  Positioned(right: 8, bottom: 8, child: _viewControls(context)),
+                ],
               );
             },
           ),
         ),
       ],
+    );
+  }
+
+  Widget _viewControls(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Zoom in',
+            icon: const Icon(Icons.add),
+            onPressed: () => _zoomBy(1.2),
+          ),
+          IconButton(
+            tooltip: 'Zoom out',
+            icon: const Icon(Icons.remove),
+            onPressed: () => _zoomBy(1 / 1.2),
+          ),
+          IconButton(
+            tooltip: 'Reset view',
+            icon: const Icon(Icons.center_focus_strong),
+            onPressed: _resetView,
+          ),
+          if (widget.fullscreen)
+            IconButton(
+              tooltip: 'Exit full screen',
+              icon: const Icon(Icons.fullscreen_exit),
+              onPressed: () => Navigator.of(context).pop(),
+            )
+          else
+            IconButton(
+              tooltip: 'Expand',
+              icon: const Icon(Icons.fullscreen),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const NodesGraphFullscreen()),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -278,6 +421,8 @@ class _GraphPainter extends CustomPainter {
     required this.hubId,
     required this.nodeRadius,
     required this.hubRadius,
+    required this.zoom,
+    required this.panOffset,
     required this.edgeColor,
     required this.hubColor,
     required this.onHubColor,
@@ -290,6 +435,8 @@ class _GraphPainter extends CustomPainter {
   final String hubId;
   final double nodeRadius;
   final double hubRadius;
+  final double zoom;
+  final Offset panOffset;
   final Color edgeColor;
   final Color hubColor;
   final Color onHubColor;
@@ -301,6 +448,11 @@ class _GraphPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final hub = bodies[hubId];
     if (hub == null) return;
+
+    // View transform: everything below draws in world coordinates.
+    canvas.save();
+    canvas.translate(panOffset.dx, panOffset.dy);
+    canvas.scale(zoom);
 
     final edgePaint = Paint()
       ..color = edgeColor
@@ -353,7 +505,31 @@ class _GraphPainter extends CustomPainter {
         textColor,
         bold: true,
       );
+      // Live usage straight from the latest heartbeat — refreshed with every
+      // node poll, so the graph doubles as a fabric-wide health monitor.
+      final usage = _usageLine(node);
+      if (usage != null) {
+        _drawLabel(
+          canvas,
+          usage,
+          b.position + Offset(0, nodeRadius + 32),
+          mutedTextColor,
+          bold: false,
+          fontSize: 10.5,
+        );
+      }
     }
+
+    canvas.restore();
+  }
+
+  String? _usageLine(NodeInfo node) {
+    final metrics = node.metrics;
+    if (metrics == null || node.status != 'online') return null;
+    final cpu = (metrics['cpu_percent'] as num?)?.toStringAsFixed(0);
+    final ram = (metrics['ram_percent'] as num?)?.toStringAsFixed(0);
+    if (cpu == null && ram == null) return null;
+    return 'CPU ${cpu ?? '—'}% · RAM ${ram ?? '—'}%';
   }
 
   Color statusColorFor(String status) => LycosaColors.status(status);
@@ -382,18 +558,19 @@ class _GraphPainter extends CustomPainter {
     Offset anchor,
     Color color, {
     required bool bold,
+    double fontSize = 12,
   }) {
     final painter = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
           color: color,
-          fontSize: 12,
+          fontSize: fontSize,
           fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
         ),
       ),
       textDirection: TextDirection.ltr,
-    )..layout(maxWidth: 120);
+    )..layout(maxWidth: 140);
     painter.paint(canvas, anchor - Offset(painter.width / 2, 0));
   }
 
