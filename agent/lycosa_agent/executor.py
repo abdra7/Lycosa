@@ -27,6 +27,16 @@ class ExecuteResponse(BaseModel):
     error: str | None = None
 
 
+class PullRequest(BaseModel):
+    model: str = Field(min_length=1)
+
+
+class PullResponse(BaseModel):
+    status: str  # succeeded | failed
+    models: list[str] = []  # inventory after the pull, on success
+    error: str | None = None
+
+
 def create_app(adapter: RuntimeAdapter, token: str) -> FastAPI:
     app = FastAPI(title="Lycosa Local Agent", docs_url=None, redoc_url=None)
 
@@ -45,6 +55,15 @@ def create_app(adapter: RuntimeAdapter, token: str) -> FastAPI:
     @app.get("/models", dependencies=[Depends(check_token)])
     async def models() -> list[str]:
         return await adapter.list_models()
+
+    @app.post("/models/pull", response_model=PullResponse, dependencies=[Depends(check_token)])
+    async def pull_model(body: PullRequest) -> PullResponse:
+        """Download a model into the local runtime (controller-initiated)."""
+        try:
+            await adapter.pull_model(body.model)
+            return PullResponse(status="succeeded", models=await adapter.list_models())
+        except Exception as exc:  # noqa: BLE001 — report, don't crash the agent
+            return PullResponse(status="failed", error=str(exc))
 
     @app.post("/execute", response_model=ExecuteResponse, dependencies=[Depends(check_token)])
     async def execute(body: ExecuteRequest) -> ExecuteResponse:

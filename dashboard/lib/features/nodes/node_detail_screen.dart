@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
+import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'nodes_screen.dart';
 import 'providers.dart';
@@ -30,6 +31,7 @@ class NodeDetailScreen extends ConsumerWidget {
               _RoleCard(node: n),
               _MetricsCard(node: n),
               _ProfileCard(node: n),
+              _LlmCard(node: n),
             ],
           ),
         ),
@@ -291,6 +293,139 @@ class _MetricsCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Hardware-fit LLM recommendations with one-click agent configuration:
+/// pick a model the node can run and the agent pulls it via its runtime.
+class _LlmCard extends ConsumerStatefulWidget {
+  const _LlmCard({required this.node});
+
+  final NodeInfo node;
+
+  @override
+  ConsumerState<_LlmCard> createState() => _LlmCardState();
+}
+
+class _LlmCardState extends ConsumerState<_LlmCard> {
+  String? _installing; // model tag currently being pulled
+
+  Future<void> _install(String model) async {
+    final client = ref.read(activeApiClientProvider);
+    if (client == null) return;
+    setState(() => _installing = model);
+    try {
+      await client.installNodeModel(widget.node.id, model);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$model installed on ${widget.node.name}')),
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
+      }
+    } on ControllerUnreachableException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
+      }
+    } finally {
+      ref.invalidate(llmRecommendationsProvider(widget.node.id));
+      ref.invalidate(nodeDetailProvider(widget.node.id));
+      if (mounted) setState(() => _installing = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recommendations = ref.watch(
+      llmRecommendationsProvider(widget.node.id),
+    );
+    final online = widget.node.status == 'online';
+    return _CardShell(
+      title: 'Recommended models',
+      child: recommendations.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Text('Failed: $e'),
+        data: (list) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!online)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Node is offline — bring the agent online to install models.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            for (final rec in list)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      rec.installed
+                          ? Icons.check_circle
+                          : rec.recommended
+                          ? Icons.star
+                          : rec.runnable
+                          ? Icons.circle_outlined
+                          : Icons.block,
+                      size: 18,
+                      color: rec.installed
+                          ? LycosaColors.success
+                          : rec.recommended
+                          ? LycosaColors.warning
+                          : Theme.of(context).disabledColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${rec.model} · ${rec.useCase}'
+                            '${rec.runsOn != null ? ' · runs on ${rec.runsOn}' : ''}'
+                            '${rec.recommended ? ' · best fit' : ''}',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          Text(
+                            rec.reason,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (rec.installed)
+                      const Text('installed')
+                    else if (rec.runnable)
+                      OutlinedButton(
+                        onPressed: online && _installing == null
+                            ? () => _install(rec.model)
+                            : null,
+                        child: _installing == rec.model
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Install'),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

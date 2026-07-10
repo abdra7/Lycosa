@@ -52,6 +52,15 @@ final nodesProvider = StreamProvider.autoDispose<List<NodeInfo>>((ref) {
   return controller.stream;
 });
 
+/// Hardware-fit LLM recommendations for one node. Fetched once per screen
+/// visit; invalidated after an install so the "installed" badges refresh.
+final llmRecommendationsProvider = FutureProvider.autoDispose
+    .family<List<LlmRecommendationInfo>, String>((ref, id) async {
+      final client = ref.watch(activeApiClientProvider);
+      if (client == null) throw StateError('not authenticated');
+      return client.getLlmRecommendations(id);
+    });
+
 /// Single-node detail, polled fast (see [nodeDetailPollIntervalProvider]) so
 /// "Latest metrics" on the detail screen actually stays latest instead of
 /// freezing at whatever the screen showed when it first opened.

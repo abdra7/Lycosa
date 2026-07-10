@@ -74,6 +74,15 @@ class NodePatch(BaseModel):
     role: NodeRole | None = None
 
 
+class ModelInstallRequest(BaseModel):
+    model: str = Field(min_length=1, max_length=100)  # Ollama tag, e.g. "llama3.1:8b"
+
+
+class ModelInstallResponse(BaseModel):
+    status: str  # "succeeded"
+    models: list[str]  # models now installed on the node
+
+
 class NodeOut(BaseModel):
     model_config = {"from_attributes": True}
 

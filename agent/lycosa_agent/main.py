@@ -59,6 +59,68 @@ async def _register_with_retry(
     raise RuntimeError("could not register with controller; giving up")
 
 
+async def _auto_configure_model(
+    client: ControllerClient,
+    adapter,
+    node: dict,
+    settings: AgentSettings,
+    *,
+    agent_url: str | None = None,
+    agent_token: str | None = None,
+    profile_factory=None,
+) -> str | None:
+    """Zero-config model setup: a fresh node (empty Ollama) asks the controller
+    which model best fits its hardware, pulls it, and re-registers so the
+    inventory updates — no operator action, no inbound ports. Returns the
+    pulled model tag, or None when nothing was done."""
+    if not settings.auto_pull_model:
+        return None
+    try:
+        installed = await adapter.list_models()
+    except Exception as exc:  # noqa: BLE001 — Ollama missing is a normal state
+        logger.warning(
+            "cannot reach Ollama at %s (%s) — install it from https://ollama.com "
+            "and restart the agent to enable local models",
+            settings.ollama_url,
+            exc,
+        )
+        return None
+    if installed:
+        logger.info("models already installed (%s); skipping auto-setup", ", ".join(installed))
+        return None
+    try:
+        recommendations = await client.llm_recommendations(node["id"])
+    except httpx.HTTPError as exc:
+        logger.warning("could not fetch model recommendations: %s", exc)
+        return None
+    best = next(
+        (r for r in recommendations if r.get("recommended") and r.get("use_case") == "general"),
+        None,
+    ) or next((r for r in recommendations if r.get("runnable")), None)
+    if best is None:
+        logger.info("no catalog model fits this hardware; skipping auto-setup")
+        return None
+    logger.info(
+        "auto-setup: pulling %s (%s) — the download may take several minutes",
+        best["model"],
+        best["reason"],
+    )
+    try:
+        await adapter.pull_model(best["model"])
+    except Exception as exc:  # noqa: BLE001 — report, keep the agent alive
+        logger.warning("model pull failed: %s", exc)
+        return None
+    logger.info("auto-setup complete: %s is installed and ready", best["model"])
+    try:  # re-register so the controller's inventory/scheduler see the model now
+        profile = (profile_factory or (lambda: collect_profile(settings.ollama_url)))()
+        await client.register(
+            settings.node_name, profile, agent_url=agent_url, agent_token=agent_token
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("re-register after model install failed: %s", exc)
+    return best["model"]
+
+
 async def _heartbeat_loop(client: ControllerClient, interval: int) -> None:
     while True:
         try:
@@ -77,9 +139,10 @@ async def run(settings: AgentSettings) -> None:
     agent_url = settings.advertise_url or f"http://{_local_ip()}:{settings.exec_port}"
 
     client = ControllerClient(settings.controller_url, settings.api_key)
-    await _register_with_retry(client, settings, agent_url, agent_token)
+    node = await _register_with_retry(client, settings, agent_url, agent_token)
 
-    exec_app = create_app(OllamaAdapter(settings.ollama_url), token=agent_token)
+    adapter = OllamaAdapter(settings.ollama_url)
+    exec_app = create_app(adapter, token=agent_token)
     server = uvicorn.Server(
         uvicorn.Config(
             exec_app, host=settings.exec_host, port=settings.exec_port, log_level="warning"
@@ -98,6 +161,14 @@ async def run(settings: AgentSettings) -> None:
         await asyncio.gather(
             server.serve(),
             _heartbeat_loop(client, settings.heartbeat_interval_seconds),
+            _auto_configure_model(
+                client,
+                adapter,
+                node,
+                settings,
+                agent_url=agent_url,
+                agent_token=agent_token,
+            ),
         )
     finally:
         if advertiser is not None:

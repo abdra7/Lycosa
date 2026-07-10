@@ -1,8 +1,10 @@
 import uuid
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.deps import DbDep, Principal, PrincipalDep, require_roles
 from app.core.config import get_settings
@@ -12,11 +14,19 @@ from app.models.user import ROLE_ADMIN, ROLE_NODE, ROLE_OPERATOR
 from app.schemas.node import (
     HeartbeatRequest,
     HeartbeatResponse,
+    ModelInstallRequest,
+    ModelInstallResponse,
     NodeOut,
     NodePatch,
     NodeRegisterRequest,
 )
 from app.services import node as node_service
+from app.services.audit import audit
+from app.services.llm_recommendation import ModelRecommendation, recommend_models
+
+AGENT_TOKEN_HEADER = "X-Agent-Token"
+# Ollama pulls download multi-GB weights; give them room before giving up.
+MODEL_PULL_TIMEOUT_SECONDS = 900.0
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
 
@@ -96,6 +106,111 @@ async def get_node(node_id: uuid.UUID, db: DbDep, _principal: OperatorDep) -> No
     if node is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
     return NodeOut.model_validate(node)
+
+
+def _installed_models(node) -> set[str]:
+    profile = node.hardware_profile or {}
+    return {model for runtime in profile.get("runtimes", []) for model in runtime.get("models", [])}
+
+
+@router.get("/{node_id}/llm-recommendations", response_model=list[ModelRecommendation])
+async def llm_recommendations(
+    node_id: uuid.UUID, db: DbDep, principal: PrincipalDep
+) -> list[ModelRecommendation]:
+    """Which local LLMs this node's hardware can run, ranked: best runnable
+    pick per use case first, with a human-readable reason for every entry.
+
+    Operators/admins may inspect any node; a node-role key may read only its
+    own node's recommendations (the agent's zero-config model setup)."""
+    if principal.role == ROLE_NODE:
+        api_key = (await db.execute(select(ApiKey).where(ApiKey.id == principal.id))).scalar_one()
+        if api_key.node_id != node_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="A node key may only read its own node's recommendations",
+            )
+    elif principal.role not in (ROLE_ADMIN, ROLE_OPERATOR):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
+    node = await node_service.get_node(db, node_id)
+    if node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+    return recommend_models(
+        ram_gb=node.ram_gb,
+        gpu_vram_gb=node.gpu_vram_gb,
+        installed_models=_installed_models(node),
+    )
+
+
+@router.post("/{node_id}/models", response_model=ModelInstallResponse)
+async def install_model(
+    node_id: uuid.UUID,
+    body: ModelInstallRequest,
+    principal: OperatorDep,
+    request: Request,
+    db: DbDep,
+) -> ModelInstallResponse:
+    """Configure the node's agent with a model: the agent pulls it via its
+    runtime (Ollama), and the node's installed-model inventory is refreshed.
+    Audited."""
+    node = await node_service.get_node(db, node_id)
+    if node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+    if not node.agent_url or not node.agent_token:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Node has no agent exec API registered — run lycosa-agent on it first",
+        )
+    if node.status != NodeStatus.ONLINE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Node is {node.status.value}; the agent must be online to install a model",
+        )
+
+    base = node.agent_url.rstrip("/")
+    headers = {AGENT_TOKEN_HEADER: node.agent_token}
+    try:
+        async with httpx.AsyncClient(timeout=MODEL_PULL_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{base}/models/pull", json={"model": body.model}, headers=headers
+            )
+            response.raise_for_status()
+            result = response.json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Agent on {node.name!r} unreachable or failed: {exc}",
+        ) from exc
+    if result.get("status") != "succeeded":
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Agent could not pull {body.model!r}: {result.get('error', 'unknown error')}",
+        )
+
+    # refresh the node's installed-model inventory so recommendations and the
+    # scheduler see the new model immediately (not just at next registration)
+    models = list(result.get("models", []))
+    profile = dict(node.hardware_profile or {})
+    runtimes = [dict(r) for r in profile.get("runtimes", [])]
+    for runtime in runtimes:
+        if runtime.get("name", "").lower() == "ollama":
+            runtime["models"] = models
+            break
+    else:
+        runtimes.append({"name": "ollama", "models": models})
+    profile["runtimes"] = runtimes
+    node.hardware_profile = profile
+    flag_modified(node, "hardware_profile")
+    await audit(
+        db,
+        action="node.model.install",
+        actor_user_id=principal.id if principal.type == "user" else None,
+        resource_type="node",
+        resource_id=str(node.id),
+        detail={"model": body.model},
+        ip_address=_client_ip(request),
+    )
+    await db.commit()
+    return ModelInstallResponse(status="succeeded", models=models)
 
 
 @router.patch("/{node_id}", response_model=NodeOut)

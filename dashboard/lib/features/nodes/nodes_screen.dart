@@ -118,8 +118,9 @@ class _NodesScreenState extends ConsumerState<NodesScreen> {
           ),
           const SizedBox(height: 12),
           DiscoveryPanel(
-            registeredNames: {
-              for (final node in nodes.value ?? const <NodeInfo>[]) node.name,
+            registeredIdsByName: {
+              for (final node in nodes.value ?? const <NodeInfo>[])
+                node.name: node.id,
             },
           ),
         ],
@@ -132,9 +133,11 @@ class _NodesScreenState extends ConsumerState<NodesScreen> {
 /// may not be registered yet (Ticket #103). Scans on demand so the dashboard
 /// never sends multicast traffic unprompted.
 class DiscoveryPanel extends ConsumerStatefulWidget {
-  const DiscoveryPanel({super.key, required this.registeredNames});
+  const DiscoveryPanel({super.key, required this.registeredIdsByName});
 
-  final Set<String> registeredNames;
+  /// Registered node ids keyed by node name: a discovered agent whose name is
+  /// here opens its node detail (hardware + LLM recommendations) on tap.
+  final Map<String, String> registeredIdsByName;
 
   @override
   ConsumerState<DiscoveryPanel> createState() => _DiscoveryPanelState();
@@ -217,11 +220,11 @@ class _DiscoveryPanelState extends ConsumerState<DiscoveryPanel> {
                   ListTile(
                     dense: true,
                     leading: Icon(
-                      widget.registeredNames.contains(agent.name)
+                      widget.registeredIdsByName.containsKey(agent.name)
                           ? Icons.check_circle
                           : Icons.help_outline,
                       size: 18,
-                      color: widget.registeredNames.contains(agent.name)
+                      color: widget.registeredIdsByName.containsKey(agent.name)
                           ? LycosaColors.success
                           : LycosaColors.warning,
                     ),
@@ -231,11 +234,25 @@ class _DiscoveryPanelState extends ConsumerState<DiscoveryPanel> {
                       '${agent.version != null ? ' · v${agent.version}' : ''}',
                     ),
                     trailing: Text(
-                      widget.registeredNames.contains(agent.name)
-                          ? 'registered'
-                          : 'not registered — add a node key and run '
-                                'lycosa-agent with it',
+                      widget.registeredIdsByName.containsKey(agent.name)
+                          ? 'registered — click for details & model setup'
+                          : 'not registered — click to add a node key',
                     ),
+                    onTap: () {
+                      final nodeId = widget.registeredIdsByName[agent.name];
+                      if (nodeId != null) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => NodeDetailScreen(nodeId: nodeId),
+                          ),
+                        );
+                      } else {
+                        showDialog(
+                          context: context,
+                          builder: (_) => const AddNodeDialog(),
+                        );
+                      }
+                    },
                   ),
               ],
             ),
