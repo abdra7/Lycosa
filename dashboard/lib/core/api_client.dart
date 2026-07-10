@@ -558,6 +558,14 @@ class ApiClient {
     return NodeInfo.fromJson(_decode(response));
   }
 
+  /// Admin: remove a node from the fabric. 204 on success.
+  Future<void> deleteNode(String id) async {
+    final response = await _send(
+      () => _http.delete(_uri('/api/v1/nodes/$id'), headers: _headers),
+    );
+    if (response.statusCode >= 400) _decode(response);
+  }
+
   /// Which local LLMs this node's hardware can run, ranked best-fit first.
   Future<List<LlmRecommendationInfo>> getLlmRecommendations(String id) async {
     final response = await _send(

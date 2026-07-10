@@ -100,3 +100,49 @@ async def test_node_key_cannot_patch(client: AsyncClient, node_api_key: tuple) -
 async def test_list_unauthenticated_rejected(client: AsyncClient, roles: dict) -> None:
     response = await client.get("/api/v1/nodes")
     assert response.status_code == 401
+
+
+async def test_admin_deletes_node_and_audits(
+    client: AsyncClient, node_api_key: tuple, users: dict, db_session: AsyncSession
+) -> None:
+    created = await _register(client, node_api_key)
+    token = await login(client, ADMIN_EMAIL)
+
+    response = await client.delete(f"/api/v1/nodes/{created['id']}", headers=bearer(token))
+    assert response.status_code == 204
+
+    fetched = await client.get(f"/api/v1/nodes/{created['id']}", headers=bearer(token))
+    assert fetched.status_code == 404
+
+    entry = (
+        await db_session.execute(select(AuditLog).where(AuditLog.action == "node.delete"))
+    ).scalar_one()
+    assert entry.actor_user_id == users["admin"].id
+    assert entry.detail == {"name": "node-a"}
+
+
+async def test_delete_unbinds_api_key_so_it_can_reregister(
+    client: AsyncClient, node_api_key: tuple, users: dict
+) -> None:
+    created = await _register(client, node_api_key)
+    token = await login(client, ADMIN_EMAIL)
+    await client.delete(f"/api/v1/nodes/{created['id']}", headers=bearer(token))
+
+    # same key registers a brand-new node (201, new id)
+    recreated = await _register(client, node_api_key, name="node-b")
+    assert recreated["id"] != created["id"]
+
+
+async def test_operator_cannot_delete_node(
+    client: AsyncClient, node_api_key: tuple, users: dict
+) -> None:
+    created = await _register(client, node_api_key)
+    token = await login(client, OPERATOR_EMAIL)
+    response = await client.delete(f"/api/v1/nodes/{created['id']}", headers=bearer(token))
+    assert response.status_code == 403
+
+
+async def test_delete_unknown_node_is_404(client: AsyncClient, users: dict) -> None:
+    token = await login(client, ADMIN_EMAIL)
+    response = await client.delete(f"/api/v1/nodes/{uuid.uuid4()}", headers=bearer(token))
+    assert response.status_code == 404

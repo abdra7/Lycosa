@@ -3,14 +3,23 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func as sa_func
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.events import get_event_bus
 from app.core.metrics import NODE_CPU, NODE_RAM, NODE_TASKS, NODES
-from app.models import ApiKey, Node
+from app.models import (
+    Agent,
+    AgentCapability,
+    ApiKey,
+    KnowledgeCollection,
+    Node,
+    Task,
+    TaskExecution,
+)
 from app.models.node import NodeStatus
 from app.schemas.node import HardwareProfile, NodeMetrics, NodePatch, NodeRegisterRequest
 from app.services.audit import audit
@@ -116,6 +125,47 @@ async def patch_node(
     await db.commit()
     await db.refresh(node)
     return node
+
+
+async def delete_node(
+    db: AsyncSession,
+    node: Node,
+    actor_user_id: uuid.UUID | None,
+    ip_address: str | None,
+) -> None:
+    """Remove a node from the fabric. Its API keys are unbound (one key = one
+    node identity, so the same key can register a fresh node later); nullable
+    references (tasks, knowledge collections) are detached; rows that cannot
+    exist without the node (task executions, agents) are removed. Audited."""
+    node_id = node.id
+    name = node.name
+
+    await db.execute(update(ApiKey).where(ApiKey.node_id == node_id).values(node_id=None))
+    await db.execute(update(Task).where(Task.node_id == node_id).values(node_id=None))
+    await db.execute(
+        update(KnowledgeCollection)
+        .where(KnowledgeCollection.node_id == node_id)
+        .values(node_id=None)
+    )
+    await db.execute(sa_delete(TaskExecution).where(TaskExecution.node_id == node_id))
+    agent_ids = select(Agent.id).where(Agent.node_id == node_id).scalar_subquery()
+    await db.execute(sa_delete(AgentCapability).where(AgentCapability.agent_id.in_(agent_ids)))
+    await db.execute(sa_delete(Agent).where(Agent.node_id == node_id))
+    await db.delete(node)
+
+    await audit(
+        db,
+        action="node.delete",
+        actor_user_id=actor_user_id,
+        resource_type="node",
+        resource_id=str(node_id),
+        detail={"name": name},
+        ip_address=ip_address,
+    )
+    await db.commit()
+
+    get_event_bus().publish("node.disconnected", {"node_id": str(node_id), "name": name})
+    await _update_node_gauges(db)
 
 
 async def _update_node_gauges(db: AsyncSession) -> None:

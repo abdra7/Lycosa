@@ -31,6 +31,7 @@ MODEL_PULL_TIMEOUT_SECONDS = 900.0
 router = APIRouter(prefix="/nodes", tags=["nodes"])
 
 OperatorDep = Annotated[Principal, Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR))]
+AdminDep = Annotated[Principal, Depends(require_roles(ROLE_ADMIN))]
 
 
 def _client_ip(request: Request) -> str | None:
@@ -230,3 +231,21 @@ async def patch_node(
         db, node, patch, actor_user_id=actor_user_id, ip_address=_client_ip(request)
     )
     return NodeOut.model_validate(node)
+
+
+@router.delete("/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_node(
+    node_id: uuid.UUID,
+    principal: AdminDep,
+    request: Request,
+    db: DbDep,
+) -> None:
+    """Remove a node from the fabric (admin only). Destructive — the node's
+    task-execution history goes with it — hence the admin gate. Audited."""
+    node = await node_service.get_node(db, node_id)
+    if node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+    actor_user_id = principal.id if principal.type == "user" else None
+    await node_service.delete_node(
+        db, node, actor_user_id=actor_user_id, ip_address=_client_ip(request)
+    )

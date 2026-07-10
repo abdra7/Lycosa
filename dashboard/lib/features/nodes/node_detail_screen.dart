@@ -22,17 +22,57 @@ class NodeDetailScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('Failed to load node: $error')),
         data: (n) => SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              _IdentityCard(node: n),
-              _RoleCard(node: n),
-              _MetricsCard(node: n),
-              _ProfileCard(node: n),
-              _LlmCard(node: n),
-            ],
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              // Two balanced columns on wide windows, a single stack on
+              // narrow ones — cards always fill the available width.
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 900;
+                  final left = <Widget>[
+                    _MetricsCard(node: n),
+                    _ProfileCard(node: n),
+                  ];
+                  final right = <Widget>[
+                    _RoleCard(node: n),
+                    _LlmCard(node: n),
+                  ];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _IdentityCard(node: n),
+                      const SizedBox(height: 4),
+                      if (wide)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: left,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: right,
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [...left, ...right],
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ),
@@ -41,26 +81,37 @@ class NodeDetailScreen extends ConsumerWidget {
 }
 
 class _CardShell extends StatelessWidget {
-  const _CardShell({required this.title, required this.child});
+  const _CardShell({required this.title, required this.child, this.icon});
 
   final String title;
+  final IconData? icon;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 420,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              child,
-            ],
-          ),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 14),
+            child,
+          ],
         ),
       ),
     );
@@ -91,29 +142,148 @@ class _KeyValue extends StatelessWidget {
   }
 }
 
-class _IdentityCard extends StatelessWidget {
+/// Full-width identity header: who this node is, at a glance — plus the
+/// admin-only destructive action (delete) with a confirmation dialog.
+class _IdentityCard extends ConsumerStatefulWidget {
   const _IdentityCard({required this.node});
 
   final NodeInfo node;
 
   @override
-  Widget build(BuildContext context) {
-    return _CardShell(
-      title: 'Node',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              StatusChip(status: node.status),
-              const SizedBox(width: 8),
-              Text('heartbeat ${heartbeatAge(node.lastHeartbeatAt)}'),
-            ],
+  ConsumerState<_IdentityCard> createState() => _IdentityCardState();
+}
+
+class _IdentityCardState extends ConsumerState<_IdentityCard> {
+  bool _deleting = false;
+
+  Future<void> _confirmDelete() async {
+    final node = widget.node;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${node.name}?'),
+        content: const Text(
+          'This removes the node, its metrics, and its task history from the '
+          'controller. The agent keeps running on the device, and its API key '
+          'is unbound so it can register again later.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
           ),
-          const SizedBox(height: 8),
-          _KeyValue('ID', node.id),
-          _KeyValue('Agent URL', node.agentUrl ?? '—'),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: LycosaColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
         ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final client = ref.read(activeApiClientProvider);
+    if (client == null) return;
+    setState(() => _deleting = true);
+    try {
+      await client.deleteNode(node.id);
+      ref.invalidate(nodesProvider);
+      if (mounted) {
+        Navigator.of(context).pop(); // back to the nodes list
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${node.name} deleted')));
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
+      }
+    } on ControllerUnreachableException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final node = widget.node;
+    final isAdmin =
+        ref.watch(sessionProvider).value?.principal?.role == 'admin';
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.dns_outlined, color: scheme.primary, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    node.name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${node.id}'
+                    '${node.agentUrl != null ? '  ·  ${node.agentUrl}' : ''}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                StatusChip(status: node.status),
+                const SizedBox(height: 6),
+                Text(
+                  'heartbeat ${heartbeatAge(node.lastHeartbeatAt)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            if (isAdmin) ...[
+              const SizedBox(width: 12),
+              IconButton(
+                tooltip: 'Delete node',
+                icon: _deleting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline),
+                color: LycosaColors.error,
+                onPressed: _deleting ? null : _confirmDelete,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -167,6 +337,7 @@ class _RoleCardState extends ConsumerState<_RoleCard> {
     final confidence = ((node.recommendationConfidence ?? 0) * 100).round();
     return _CardShell(
       title: 'Role',
+      icon: Icons.badge_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -232,6 +403,7 @@ class _MetricsCard extends StatelessWidget {
     final metrics = node.metrics;
     return _CardShell(
       title: 'Latest metrics',
+      icon: Icons.monitor_heart_outlined,
       child: metrics == null
           ? const Text('No heartbeat received yet.')
           : Column(
@@ -350,6 +522,7 @@ class _LlmCardState extends ConsumerState<_LlmCard> {
     final online = widget.node.status == 'online';
     return _CardShell(
       title: 'Recommended models',
+      icon: Icons.auto_awesome_outlined,
       child: recommendations.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Text('Failed: $e'),
@@ -443,6 +616,7 @@ class _ProfileCard extends StatelessWidget {
     final gpus = (profile['gpus'] as List?) ?? const [];
     return _CardShell(
       title: 'Hardware profile',
+      icon: Icons.memory_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
