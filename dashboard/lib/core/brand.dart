@@ -366,6 +366,31 @@ abstract final class LycosaTheme {
         iconColor: LycosaColors.textSecondary,
         collapsedIconColor: LycosaColors.textSecondary,
       ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? LycosaColors.primaryLight
+                : LycosaColors.background,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? LycosaColors.onPrimary
+                : LycosaColors.textSecondary,
+          ),
+          side: const WidgetStatePropertyAll(
+            BorderSide(color: LycosaColors.border),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          textStyle: WidgetStatePropertyAll(
+            textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          visualDensity: VisualDensity.compact,
+          animationDuration: LycosaMotion.base,
+        ),
+      ),
       tabBarTheme: const TabBarThemeData(
         labelColor: LycosaColors.textPrimary,
         unselectedLabelColor: LycosaColors.textSecondary,

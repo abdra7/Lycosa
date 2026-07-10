@@ -7,6 +7,7 @@ import '../../core/session.dart';
 import 'add_node_dialog.dart';
 import 'discovery.dart';
 import 'node_detail_screen.dart';
+import 'nodes_graph_view.dart';
 import 'providers.dart';
 
 String heartbeatAge(DateTime? last) {
@@ -37,11 +38,20 @@ class StatusChip extends StatelessWidget {
   }
 }
 
-class NodesScreen extends ConsumerWidget {
+enum _NodesView { list, graph }
+
+class NodesScreen extends ConsumerStatefulWidget {
   const NodesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NodesScreen> createState() => _NodesScreenState();
+}
+
+class _NodesScreenState extends ConsumerState<NodesScreen> {
+  _NodesView _view = _NodesView.list;
+
+  @override
+  Widget build(BuildContext context) {
     final nodes = ref.watch(nodesProvider);
     final principal = ref.watch(sessionProvider).value?.principal;
 
@@ -53,6 +63,24 @@ class NodesScreen extends ConsumerWidget {
           Row(
             children: [
               Text('Nodes', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(width: 16),
+              SegmentedButton<_NodesView>(
+                segments: const [
+                  ButtonSegment(
+                    value: _NodesView.list,
+                    label: Text('List'),
+                    icon: Icon(Icons.table_rows),
+                  ),
+                  ButtonSegment(
+                    value: _NodesView.graph,
+                    label: Text('Graph'),
+                    icon: Icon(Icons.hub),
+                  ),
+                ],
+                selected: {_view},
+                onSelectionChanged: (selection) =>
+                    setState(() => _view = selection.first),
+              ),
               const Spacer(),
               IconButton(
                 tooltip: 'Refresh',
@@ -82,7 +110,10 @@ class NodesScreen extends ConsumerWidget {
                         'No nodes yet. Add one and run lycosa-agent on the machine.',
                       ),
                     )
-                  : _NodesTable(nodes: list),
+                  : switch (_view) {
+                      _NodesView.list => _NodesTable(nodes: list),
+                      _NodesView.graph => NodesGraphView(nodes: list),
+                    },
             ),
           ),
           const SizedBox(height: 12),
