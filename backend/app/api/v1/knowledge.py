@@ -19,7 +19,7 @@ from app.schemas.knowledge import (
 )
 from app.services.audit import audit
 from app.services.knowledge.embedder import get_embedder
-from app.services.knowledge.ingestion import ingest_document
+from app.services.knowledge.ingestion import CollectionDeletedError, ingest_document
 from app.services.knowledge.router import UnknownCollectionError, retrieve
 from app.services.knowledge.store import KnowledgeStoreError, drop_collection, qdrant_name
 
@@ -155,17 +155,22 @@ async def upload_document(
 
     dispatch = asyncio.create_task(_run())
     dispatch.add_done_callback(_log_orphaned_ingestion)
-    document = await asyncio.shield(dispatch)
+    try:
+        document = await asyncio.shield(dispatch)
+    except CollectionDeletedError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return DocumentOut.model_validate(document)
 
 
 def _log_orphaned_ingestion(dispatch: "asyncio.Task[Document]") -> None:
     """An ingestion that outlives its request has nobody awaiting it; surface
     unexpected crashes in the log instead of a silent 'never retrieved'."""
-    if not dispatch.cancelled() and dispatch.exception() is not None:
-        logger.error(
-            "document ingestion failed after client disconnect", exc_info=dispatch.exception()
-        )
+    if dispatch.cancelled():
+        return
+    exc = dispatch.exception()
+    # a collection deleted mid-ingest is a handled outcome (409), not a crash
+    if exc is not None and not isinstance(exc, CollectionDeletedError):
+        logger.error("document ingestion failed after client disconnect", exc_info=exc)
 
 
 @router.get("/collections/{collection_id}/documents", response_model=list[DocumentOut])
