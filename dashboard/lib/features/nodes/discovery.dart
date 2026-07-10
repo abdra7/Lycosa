@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 
@@ -161,7 +161,8 @@ class SafeRawDatagramSocket extends StreamView<RawSocketEvent>
 /// (errno 10042) before any of the [SafeRawDatagramSocket] protections apply,
 /// killing the whole scan. Windows allows port sharing via SO_REUSEADDR
 /// (which `reuseAddress` already sets), so dropping the flag there is safe.
-Future<RawDatagramSocket> _bindSafeSocket(
+@visibleForTesting
+Future<RawDatagramSocket> bindSafeSocket(
   dynamic host,
   int port, {
   bool reuseAddress = true,
@@ -180,7 +181,7 @@ Future<RawDatagramSocket> _bindSafeSocket(
 
 Future<List<DiscoveredAgent>> scanForAgents() async {
   const lookupTimeout = Duration(seconds: 3);
-  final client = MDnsClient(rawDatagramSocketFactory: _bindSafeSocket);
+  final client = MDnsClient(rawDatagramSocketFactory: bindSafeSocket);
   final found = <String, DiscoveredAgent>{};
   try {
     // MDnsClient.start listens on the incoming socket with no error handler
