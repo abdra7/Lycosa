@@ -14,7 +14,8 @@ from app.core.errors import register_error_handlers
 from app.core.logging import request_id_var, setup_logging
 from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS
 from app.core.ratelimit import RateLimitMiddleware
-from app.db.session import get_sessionmaker
+from app.db.session import get_runtime_sessionmaker, get_sessionmaker
+from app.services.knowledge.ingestion import recover_stuck_ingestions
 from app.services.node import sweep_offline_nodes
 from app.version import APP_VERSION
 
@@ -39,6 +40,15 @@ async def _offline_sweeper() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # a crash mid-ingest strands documents in 'uploaded' / jobs in 'running';
+    # recover them before serving traffic (E2E-02)
+    try:
+        async with get_runtime_sessionmaker()() as db:
+            recovered = await recover_stuck_ingestions(db)
+            if recovered:
+                logger.info("recovered %d document(s) stuck by a mid-ingest restart", recovered)
+    except Exception:
+        logger.exception("stuck-ingestion recovery failed; continuing startup")
     task = asyncio.create_task(_offline_sweeper())
     yield
     task.cancel()
