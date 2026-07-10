@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Add-node command no longer hands out an unreachable `localhost`** — when the
+  dashboard is connected to the controller over `localhost` (the common case
+  when it runs on the controller PC), the generated agent command now
+  substitutes the controller host's detected LAN IP so it works when pasted on
+  a different device. It skips virtual adapters (VirtualBox 192.168.56.x,
+  Docker/WSL 172.16–31.x, link-local 169.254.x) and prefers a real
+  192.168.x/10.x address, warning clearly if none can be detected.
+
 ### Added
 
 - **Zero-config agent setup** — installing the agent is now the whole job.
