@@ -183,10 +183,15 @@ void main() {
     expect(find.textContaining('hybrid (85% confidence)'), findsOneWidget);
     expect(find.textContaining('Capable GPU'), findsOneWidget);
 
+    // the Role card sits lower in the two-column layout; scroll it in first
+    await tester.ensureVisible(find.text('Set role'));
+    await tester.pump();
     await tester.tap(find.text('Set role'));
     await settle(tester);
     await tester.tap(find.text('storage').last);
     await settle(tester);
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pump();
     await tester.tap(find.text('Save'));
     await settle(tester);
 
