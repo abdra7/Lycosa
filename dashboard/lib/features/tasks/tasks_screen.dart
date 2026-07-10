@@ -3,16 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
+import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'providers.dart';
 
 const _taskTypes = ['auto', 'coding', 'retrieval', 'tool', 'vision', 'general'];
 
-Color taskStatusColor(BuildContext context, String status) => switch (status) {
-      'succeeded' => Colors.green,
-      'failed' => Theme.of(context).colorScheme.error,
-      _ => Colors.orange,
-    };
+Color taskStatusColor(BuildContext context, String status) =>
+    LycosaColors.status(status);
 
 class TasksScreen extends ConsumerStatefulWidget {
   const TasksScreen({super.key});
@@ -62,8 +60,10 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     } on ControllerUnreachableException catch (e) {
       // the controller records the outcome even if we drop the connection,
       // so the task will surface in Recent once it finishes
-      setState(() => _error =
-          '${e.friendly} — the task may still be running; watch Recent below.');
+      setState(
+        () => _error =
+            '${e.friendly} — the task may still be running; watch Recent below.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -90,7 +90,8 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
               data: (list) => list.isEmpty
                   ? const Center(child: Text('No tasks yet.'))
                   : ListView(
-                      children: [for (final t in list) _TaskTile(task: t)]),
+                      children: [for (final t in list) _TaskTile(task: t)],
+                    ),
             ),
           ),
         ],
@@ -130,7 +131,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                   child: TextField(
                     controller: _model,
                     decoration: const InputDecoration(
-                        labelText: 'Model (optional)', isDense: true),
+                      labelText: 'Model (optional)',
+                      isDense: true,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -138,7 +141,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                   child: TextField(
                     controller: _knowledgeQuery,
                     decoration: const InputDecoration(
-                        labelText: 'Knowledge query (optional)', isDense: true),
+                      labelText: 'Knowledge query (optional)',
+                      isDense: true,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -157,9 +162,10 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Text(_error!,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error)),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ),
             if (_lastResult != null)
               Padding(
@@ -186,16 +192,18 @@ class _ResultPanel extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         border: Border.all(color: color),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Icon(Icons.circle, size: 10, color: color),
-            const SizedBox(width: 6),
-            Text('${task.status} · ${task.type}'),
-          ]),
+          Row(
+            children: [
+              Icon(Icons.circle, size: 10, color: color),
+              const SizedBox(width: 6),
+              Text('${task.status} · ${task.type}'),
+            ],
+          ),
           const SizedBox(height: 8),
           SelectableText(task.output ?? task.error ?? '(no output)'),
         ],
@@ -215,10 +223,11 @@ class _TaskTile extends StatelessWidget {
     return Card(
       child: ExpansionTile(
         leading: Icon(Icons.circle, size: 12, color: color),
-        title: Text(task.prompt,
-            maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text('${task.status} · ${task.type}'
-            '${task.executions.isNotEmpty ? ' · ${task.executions.length} attempt(s)' : ''}'),
+        title: Text(task.prompt, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+          '${task.status} · ${task.type}'
+          '${task.executions.isNotEmpty ? ' · ${task.executions.length} attempt(s)' : ''}',
+        ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -229,12 +238,17 @@ class _TaskTile extends StatelessWidget {
           ],
           if (task.error != null) ...[
             Text('Error', style: Theme.of(context).textTheme.bodySmall),
-            SelectableText(task.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            SelectableText(
+              task.error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
             const SizedBox(height: 8),
           ],
           if (task.executions.isNotEmpty) ...[
-            Text('Execution trace', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              'Execution trace',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             for (final execution in task.executions)
               Padding(
                 padding: const EdgeInsets.only(top: 4),

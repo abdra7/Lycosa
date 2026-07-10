@@ -1,13 +1,49 @@
+<div align="center">
+
+<img src="docs/assets/lycosa-logo.png" alt="Lycosa" width="160" />
+
 # Lycosa
 
+**AI Operations Layer for Local and Cloud AI Agents**
+
+Turn the devices you already own into one cooperative AI execution fabric.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-A8C7FA.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/abdra7/Lycosa?color=A8C7FA)](https://github.com/abdra7/Lycosa/releases/latest)
+[![CI](https://github.com/abdra7/Lycosa/actions/workflows/ci.yml/badge.svg)](https://github.com/abdra7/Lycosa/actions/workflows/ci.yml)
+
+</div>
+
+---
+
 **Lycosa** is a LAN-first, distributed multi-agent AI orchestration platform.
-It turns the devices you already own — workstations, laptops, homelab boxes,
-mini-PCs — into one cooperative AI execution fabric. Each device runs a Local
-Agent that can host a local LLM (Ollama first), tools, and metrics; a central
-controller discovers devices, recommends each one a role based on its
-hardware, schedules tasks with failover, routes knowledge (RAG) requests, runs
-multi-step workflows with human approval gates, and streams everything live to
-a native desktop dashboard.
+It turns workstations, laptops, homelab boxes, and mini-PCs into one
+cooperative AI execution fabric. Each device runs a Local Agent that can host
+a local LLM (Ollama first), tools, and metrics; a central controller
+discovers devices, recommends each one a role based on its hardware,
+schedules tasks with failover, routes knowledge (RAG) requests, runs
+multi-step workflows with human approval gates, and streams everything live
+to a native desktop dashboard.
+
+## Features
+
+- **Device roles, automatically recommended** — every node is profiled at
+  registration and recommended one of **AI Compute · Hybrid · Knowledge ·
+  Tool · Vision · Storage**, with a human-readable rationale and per-role
+  confidence scores. Accept the recommendation or override it.
+- **Task scheduling with failover** — the scheduler places work by role and
+  capacity and retries on the next best candidate when a node drops.
+- **Knowledge routing (RAG)** — upload documents into collections, embed
+  them locally, and retrieve across the fabric with a built-in playground.
+- **Workflows with approval gates** — multi-step runs that pause for a
+  human decision before continuing.
+- **LAN discovery** — running agents announce themselves over mDNS; the
+  dashboard finds every machine running `lycosa-agent` on your network.
+- **Live operations view** — REST + WebSocket streaming into a native
+  desktop dashboard (macOS / Windows / Linux), with Prometheus and Grafana
+  for metrics.
+
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -38,14 +74,9 @@ flowchart LR
     API -- "dispatch tasks" --> A1 & A2 & A3
 ```
 
-**Node roles:** every node is profiled at registration and recommended one of
-**AI Compute · Hybrid · Knowledge · Tool · Vision · Storage**, with a
-human-readable rationale and per-role confidence scores. The operator can
-accept the recommendation or override it — a beefy GPU box becomes AI
-Compute, a NAS-ish machine becomes Storage, a box with a webcam and decent
-GPU can serve Vision.
+See [docs/DECISIONS.md](docs/DECISIONS.md) for the architecture decision log.
 
-## Install
+## Installation
 
 Lycosa has **two parts installed separately**:
 
@@ -148,6 +179,15 @@ The agent binds `0.0.0.0` by default and advertises its detected LAN IP; on
 multi-homed machines set `LYCOSA_ADVERTISE_URL` to the address the
 controller can actually reach.
 
+## Screenshots
+
+<!--
+Add screenshots of the dashboard here once captured, e.g.:
+<p align="center"><img src="docs/assets/screenshot-nodes.png" width="720" alt="Nodes view" /></p>
+-->
+
+*Screenshots of the redesigned dashboard are coming with the next release.*
+
 ## Deploy modes
 
 - **Single machine** — controller and one agent on the same box: a personal
@@ -157,8 +197,18 @@ controller can actually reach.
   capacity, with automatic failover between candidates.
 - **Compose-only / headless** — run just the controller stack and drive it
   entirely over the REST API (`/docs`) without the desktop app.
-- **Kubernetes** — not yet; the controller is a single-process design today
-  (see ADR-008/ADR-016). K8s manifests are future work under `infra/`.
+
+## Roadmap
+
+- Node decommissioning (remove stale nodes from the inventory)
+- Async task queue behind `POST /tasks` (202 + polling)
+- Re-embed job when a knowledge collection switches embedding backend
+- mTLS / enrollment handshake for agent exec API hardening
+- Redis-backed rate limiting for horizontal API scaling
+- Kubernetes manifests under `infra/` (the controller is a single-process
+  design today)
+
+See [docs/BACKLOG.md](docs/BACKLOG.md) for the full backlog.
 
 ## Repository layout
 
@@ -168,7 +218,7 @@ controller can actually reach.
 | `agent/` | Local Agent runtime installed on each node |
 | `dashboard/` | Flutter Desktop operator dashboard (native macOS/Windows/Linux) |
 | `infra/` | Docker Compose, Prometheus/Grafana config, future k8s manifests |
-| `docs/` | Architecture decision log, backlog |
+| `docs/` | Architecture decision log, backlog, brand assets |
 | `scripts/` | Install and release tooling |
 
 ## Development
@@ -187,14 +237,22 @@ uvicorn app.main:app --reload # run the API locally
 Agent: same commands from `agent/`. Dashboard: `flutter pub get`,
 `flutter test`, `flutter run -d macos|windows|linux` from `dashboard/`.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for branching, commit, and code
-conventions, [docs/DECISIONS.md](docs/DECISIONS.md) for the architecture
-decision log, and [CHANGELOG.md](CHANGELOG.md) for release history.
 Releases are cut by tagging `v*` — CI builds the backend image (GHCR) and
-the three desktop installers and attaches them to the GitHub Release.
+the three desktop installers and attaches them to the GitHub Release. See
+[CHANGELOG.md](CHANGELOG.md) for release history.
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for
+branching, commit, and code conventions, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community guidelines.
 
 ## Security
 
 LAN-first means the controller expects to live on a trusted network; see
 [SECURITY.md](SECURITY.md) for the threat model, hardening notes, and how to
 report vulnerabilities.
+
+## License
+
+Lycosa is released under the [MIT License](LICENSE).

@@ -11,108 +11,121 @@ import 'package:lycosa_dashboard/core/session.dart';
 import 'package:lycosa_dashboard/features/admin/admin_screen.dart';
 import 'package:lycosa_dashboard/features/knowledge/knowledge_screen.dart';
 
-MockClient fakeController({String role = 'admin', List<http.Request>? captured}) {
+MockClient fakeController({
+  String role = 'admin',
+  List<http.Request>? captured,
+}) {
   return MockClient((request) async {
     captured?.add(request);
     final path = request.url.path;
     if (path == '/api/v1/me') {
       return http.Response(
-          jsonEncode({
-            'type': 'user',
-            'id': 'u1',
-            'role': role,
-            'email': 'op@lycosa.local'
-          }),
-          200);
+        jsonEncode({
+          'type': 'user',
+          'id': 'u1',
+          'role': role,
+          'email': 'op@lycosa.local',
+        }),
+        200,
+      );
     }
     if (path == '/api/v1/knowledge/collections' && request.method == 'GET') {
       return http.Response(
-          jsonEncode([
-            {
-              'id': 'c1',
-              'name': 'spider-facts',
-              'description': 'arachnids',
-              'embedding_backend': 'hashing',
-              'embedding_dim': 384,
-              'created_at': '2026-07-05T10:00:00Z',
-            }
-          ]),
-          200);
+        jsonEncode([
+          {
+            'id': 'c1',
+            'name': 'spider-facts',
+            'description': 'arachnids',
+            'embedding_backend': 'hashing',
+            'embedding_dim': 384,
+            'created_at': '2026-07-05T10:00:00Z',
+          },
+        ]),
+        200,
+      );
     }
     if (path == '/api/v1/knowledge/collections/c1/documents' &&
         request.method == 'GET') {
       return http.Response(
-          jsonEncode([
-            {
-              'id': 'd1',
-              'collection_id': 'c1',
-              'filename': 'spiders.md',
-              'content_type': 'text/markdown',
-              'size_bytes': 2048,
-              'status': 'embedded',
-              'chunk_count': 3,
-              'error': null,
-              'created_at': '2026-07-05T10:00:00Z',
-            }
-          ]),
-          200);
+        jsonEncode([
+          {
+            'id': 'd1',
+            'collection_id': 'c1',
+            'filename': 'spiders.md',
+            'content_type': 'text/markdown',
+            'size_bytes': 2048,
+            'status': 'embedded',
+            'chunk_count': 3,
+            'error': null,
+            'created_at': '2026-07-05T10:00:00Z',
+          },
+        ]),
+        200,
+      );
     }
     if (path == '/api/v1/knowledge/retrieve') {
       return http.Response(
-          jsonEncode({
-            'chunks': [
-              {
-                'text': 'Wolf spiders hunt at night.',
-                'source': 'spiders.md',
-                'collection': 'spider-facts',
-                'score': 0.91,
-                'document_id': 'd1',
-              }
-            ],
-            'context_text': '...',
-            'latency_ms': 4.2,
-          }),
-          200);
+        jsonEncode({
+          'chunks': [
+            {
+              'text': 'Wolf spiders hunt at night.',
+              'source': 'spiders.md',
+              'collection': 'spider-facts',
+              'score': 0.91,
+              'document_id': 'd1',
+            },
+          ],
+          'context_text': '...',
+          'latency_ms': 4.2,
+        }),
+        200,
+      );
     }
     if (path == '/api/v1/admin/audit-logs') {
       return http.Response(
-          jsonEncode([
-            {
-              'id': 'a1',
-              'created_at': '2026-07-05T10:00:00Z',
-              'actor_user_id': 'u1',
-              'actor_api_key_id': null,
-              'action': 'auth.login.success',
-              'resource_type': 'session',
-              'resource_id': 's1',
-              'detail': null,
-              'ip_address': '192.168.1.9',
-            }
-          ]),
-          200);
+        jsonEncode([
+          {
+            'id': 'a1',
+            'created_at': '2026-07-05T10:00:00Z',
+            'actor_user_id': 'u1',
+            'actor_api_key_id': null,
+            'action': 'auth.login.success',
+            'resource_type': 'session',
+            'resource_id': 's1',
+            'detail': null,
+            'ip_address': '192.168.1.9',
+          },
+        ]),
+        200,
+      );
     }
     if (path == '/api/v1/admin/api-keys' && request.method == 'GET') {
       return http.Response(
-          jsonEncode([
-            {
-              'id': 'k1',
-              'name': 'garage-box',
-              'key_prefix': 'abcd1234',
-              'node_id': 'n1',
-              'expires_at': null,
-              'revoked_at': null,
-              'last_used_at': '2026-07-05T10:00:00Z',
-              'created_at': '2026-07-05T09:00:00Z',
-            }
-          ]),
-          200);
+        jsonEncode([
+          {
+            'id': 'k1',
+            'name': 'garage-box',
+            'key_prefix': 'abcd1234',
+            'node_id': 'n1',
+            'expires_at': null,
+            'revoked_at': null,
+            'last_used_at': '2026-07-05T10:00:00Z',
+            'created_at': '2026-07-05T09:00:00Z',
+          },
+        ]),
+        200,
+      );
     }
     if (path.startsWith('/api/v1/admin/api-keys/') &&
         request.method == 'DELETE') {
       return http.Response('', 204);
     }
     return http.Response(
-        jsonEncode({'error': {'code': 'not_found', 'message': 'nope'}}), 404);
+      jsonEncode({
+        'error': {'code': 'not_found', 'message': 'nope'},
+      }),
+      404,
+    );
   });
 }
 
@@ -120,7 +133,11 @@ Widget appWith(MockClient controller, {required Widget home}) {
   final store = InMemoryProfileStore()
     ..profiles = [
       ControllerProfile(
-          id: 'p1', name: 'lab', baseUrl: 'http://c:8000', token: 'tok')
+        id: 'p1',
+        name: 'lab',
+        baseUrl: 'http://c:8000',
+        token: 'tok',
+      ),
     ]
     ..activeId = 'p1';
   return ProviderScope(
@@ -142,11 +159,13 @@ Future<void> settle(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('collections and documents render; playground retrieves',
-      (tester) async {
+  testWidgets('collections and documents render; playground retrieves', (
+    tester,
+  ) async {
     final controller = fakeController();
     await tester.pumpWidget(
-        appWith(controller, home: const Scaffold(body: KnowledgeScreen())));
+      appWith(controller, home: const Scaffold(body: KnowledgeScreen())),
+    );
     await settle(tester);
 
     expect(find.text('spider-facts'), findsOneWidget);
@@ -157,7 +176,9 @@ void main() {
     expect(find.textContaining('3 chunks'), findsOneWidget);
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Query'), 'wolf spiders');
+      find.widgetWithText(TextField, 'Query'),
+      'wolf spiders',
+    );
     await tester.tap(find.text('Retrieve'));
     await settle(tester);
 
@@ -170,7 +191,8 @@ void main() {
     final captured = <http.Request>[];
     final controller = fakeController(captured: captured);
     await tester.pumpWidget(
-        appWith(controller, home: const Scaffold(body: AdminScreen())));
+      appWith(controller, home: const Scaffold(body: AdminScreen())),
+    );
     await settle(tester);
 
     expect(find.text('auth.login.success'), findsOneWidget);
@@ -181,17 +203,21 @@ void main() {
     await settle(tester);
 
     expect(
-        captured.any((r) =>
-            r.method == 'DELETE' &&
-            r.url.path == '/api/v1/admin/api-keys/k1'),
-        isTrue);
+      captured.any(
+        (r) =>
+            r.method == 'DELETE' && r.url.path == '/api/v1/admin/api-keys/k1',
+      ),
+      isTrue,
+    );
   });
 
-  testWidgets('operator sees a requires-admin note instead of admin data',
-      (tester) async {
+  testWidgets('operator sees a requires-admin note instead of admin data', (
+    tester,
+  ) async {
     final controller = fakeController(role: 'operator');
     await tester.pumpWidget(
-        appWith(controller, home: const Scaffold(body: AdminScreen())));
+      appWith(controller, home: const Scaffold(body: AdminScreen())),
+    );
     await settle(tester);
 
     expect(find.textContaining('requires the admin role'), findsOneWidget);

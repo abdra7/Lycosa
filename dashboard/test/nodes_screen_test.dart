@@ -25,13 +25,14 @@ MockClient fakeController({
     final path = request.url.path;
     if (path == '/api/v1/me') {
       return http.Response(
-          jsonEncode({
-            'type': 'user',
-            'id': 'u1',
-            'role': role,
-            'email': 'op@lycosa.local'
-          }),
-          200);
+        jsonEncode({
+          'type': 'user',
+          'id': 'u1',
+          'role': role,
+          'email': 'op@lycosa.local',
+        }),
+        200,
+      );
     }
     if (path == '/api/v1/nodes' && request.method == 'GET') {
       return http.Response(jsonEncode(nodes), 200);
@@ -42,28 +43,42 @@ MockClient fakeController({
     if (path.startsWith('/api/v1/nodes/') && request.method == 'PATCH') {
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       return http.Response(
-          jsonEncode({...nodes.first, 'role': body['role']}), 200);
+        jsonEncode({...nodes.first, 'role': body['role']}),
+        200,
+      );
     }
     if (path == '/api/v1/admin/api-keys' && request.method == 'POST') {
       return http.Response(
-          jsonEncode({
-            'id': 'k1',
-            'name': 'new-box',
-            'api_key': 'lyc_onetime_secret123',
-          }),
-          201);
+        jsonEncode({
+          'id': 'k1',
+          'name': 'new-box',
+          'api_key': 'lyc_onetime_secret123',
+        }),
+        201,
+      );
     }
     return http.Response(
-        jsonEncode({'error': {'code': 'not_found', 'message': 'nope'}}), 404);
+      jsonEncode({
+        'error': {'code': 'not_found', 'message': 'nope'},
+      }),
+      404,
+    );
   });
 }
 
-Widget appWith(MockClient controller,
-    {required Widget home, LanScan? lanScan}) {
+Widget appWith(
+  MockClient controller, {
+  required Widget home,
+  LanScan? lanScan,
+}) {
   final store = InMemoryProfileStore()
     ..profiles = [
       ControllerProfile(
-          id: 'p1', name: 'lab', baseUrl: 'http://c:8000', token: 'tok')
+        id: 'p1',
+        name: 'lab',
+        baseUrl: 'http://c:8000',
+        token: 'tok',
+      ),
     ]
     ..activeId = 'p1';
   return ProviderScope(
@@ -88,11 +103,13 @@ Future<void> settle(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('node list renders status, roles, and heartbeat age',
-      (tester) async {
+  testWidgets('node list renders status, roles, and heartbeat age', (
+    tester,
+  ) async {
     final controller = fakeController(nodes: [nodeJson(role: 'hybrid')]);
     await tester.pumpWidget(
-        appWith(controller, home: const Scaffold(body: NodesScreen())));
+      appWith(controller, home: const Scaffold(body: NodesScreen())),
+    );
     await settle(tester);
 
     expect(find.text('gpu-box'), findsOneWidget);
@@ -103,23 +120,24 @@ void main() {
   });
 
   testWidgets('operator does not see the Add node button', (tester) async {
-    final controller =
-        fakeController(nodes: [nodeJson()], role: 'operator');
+    final controller = fakeController(nodes: [nodeJson()], role: 'operator');
     await tester.pumpWidget(
-        appWith(controller, home: const Scaffold(body: NodesScreen())));
+      appWith(controller, home: const Scaffold(body: NodesScreen())),
+    );
     await settle(tester);
 
     expect(find.text('gpu-box'), findsOneWidget);
     expect(find.text('Add node'), findsNothing);
   });
 
-  testWidgets('role override sends a PATCH from the detail screen',
-      (tester) async {
+  testWidgets('role override sends a PATCH from the detail screen', (
+    tester,
+  ) async {
     final captured = <http.Request>[];
-    final controller =
-        fakeController(nodes: [nodeJson()], captured: captured);
-    await tester.pumpWidget(appWith(controller,
-        home: const NodeDetailScreen(nodeId: 'n1')));
+    final controller = fakeController(nodes: [nodeJson()], captured: captured);
+    await tester.pumpWidget(
+      appWith(controller, home: const NodeDetailScreen(nodeId: 'n1')),
+    );
     await settle(tester);
 
     expect(find.text('Role'), findsOneWidget);
@@ -137,22 +155,29 @@ void main() {
     expect(jsonDecode(patch.body), {'role': 'storage'});
   });
 
-  testWidgets('LAN scan lists discovered agents and flags unregistered ones',
-      (tester) async {
+  testWidgets('LAN scan lists discovered agents and flags unregistered ones', (
+    tester,
+  ) async {
     final controller = fakeController(nodes: [nodeJson()]); // 'gpu-box'
-    await tester.pumpWidget(appWith(
-      controller,
-      home: const Scaffold(body: NodesScreen()),
-      lanScan: () async => const [
-        DiscoveredAgent(
+    await tester.pumpWidget(
+      appWith(
+        controller,
+        home: const Scaffold(body: NodesScreen()),
+        lanScan: () async => const [
+          DiscoveredAgent(
             name: 'gpu-box',
             address: '192.168.1.20',
             port: 8010,
-            version: '0.1.0'),
-        DiscoveredAgent(
-            name: 'new-laptop', address: '192.168.1.30', port: 8010),
-      ],
-    ));
+            version: '0.1.0',
+          ),
+          DiscoveredAgent(
+            name: 'new-laptop',
+            address: '192.168.1.30',
+            port: 8010,
+          ),
+        ],
+      ),
+    );
     await settle(tester);
 
     expect(find.text('Discovered on LAN'), findsOneWidget);
@@ -166,17 +191,21 @@ void main() {
     expect(find.text('registered'), findsOneWidget);
   });
 
-  testWidgets('add-node dialog mints and reveals the one-time key',
-      (tester) async {
+  testWidgets('add-node dialog mints and reveals the one-time key', (
+    tester,
+  ) async {
     final controller = fakeController(nodes: [nodeJson()]);
     await tester.pumpWidget(
-        appWith(controller, home: const Scaffold(body: NodesScreen())));
+      appWith(controller, home: const Scaffold(body: NodesScreen())),
+    );
     await settle(tester);
 
     await tester.tap(find.text('Add node'));
     await settle(tester);
     await tester.enterText(
-        find.widgetWithText(TextField, 'Key name'), 'new-box');
+      find.widgetWithText(TextField, 'Key name'),
+      'new-box',
+    );
     await tester.tap(find.text('Create key'));
     await settle(tester);
 

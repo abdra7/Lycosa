@@ -5,15 +5,17 @@ import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
 import '../../core/session.dart';
 
-final auditLogsProvider =
-    FutureProvider.autoDispose<List<AuditLogEntry>>((ref) async {
+final auditLogsProvider = FutureProvider.autoDispose<List<AuditLogEntry>>((
+  ref,
+) async {
   final client = ref.watch(activeApiClientProvider);
   if (client == null) return const [];
   return client.listAuditLogs(limit: 100);
 });
 
-final apiKeysProvider =
-    FutureProvider.autoDispose<List<ApiKeyInfo>>((ref) async {
+final apiKeysProvider = FutureProvider.autoDispose<List<ApiKeyInfo>>((
+  ref,
+) async {
   final client = ref.watch(activeApiClientProvider);
   if (client == null) return const [];
   return client.listApiKeys();
@@ -26,8 +28,7 @@ class AdminScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final principal = ref.watch(sessionProvider).value?.principal;
     if (principal?.role != 'admin') {
-      return const Center(
-          child: Text('This section requires the admin role.'));
+      return const Center(child: Text('This section requires the admin role.'));
     }
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -84,20 +85,20 @@ class _ApiKeysCard extends ConsumerWidget {
                             ListTile(
                               dense: true,
                               leading: Icon(
-                                key.isRevoked
-                                    ? Icons.key_off
-                                    : Icons.key,
+                                key.isRevoked ? Icons.key_off : Icons.key,
                                 color: key.isRevoked
                                     ? Theme.of(context).colorScheme.error
                                     : null,
                               ),
                               title: Text('${key.name} (${key.keyPrefix}…)'),
-                              subtitle: Text([
-                                if (key.isRevoked) 'revoked',
-                                if (key.nodeId != null) 'bound to node',
-                                if (key.lastUsedAt != null)
-                                  'last used ${key.lastUsedAt!.toLocal()}'
-                              ].join(' · ')),
+                              subtitle: Text(
+                                [
+                                  if (key.isRevoked) 'revoked',
+                                  if (key.nodeId != null) 'bound to node',
+                                  if (key.lastUsedAt != null)
+                                    'last used ${key.lastUsedAt!.toLocal()}',
+                                ].join(' · '),
+                              ),
                               trailing: key.isRevoked
                                   ? null
                                   : TextButton(
@@ -117,7 +118,10 @@ class _ApiKeysCard extends ConsumerWidget {
   }
 
   Future<void> _revoke(
-      BuildContext context, WidgetRef ref, ApiKeyInfo key) async {
+    BuildContext context,
+    WidgetRef ref,
+    ApiKeyInfo key,
+  ) async {
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
     try {
@@ -125,13 +129,15 @@ class _ApiKeysCard extends ConsumerWidget {
       ref.invalidate(apiKeysProvider);
       ref.invalidate(auditLogsProvider);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Revoked ${key.name}')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Revoked ${key.name}')));
       }
     } on ApiException catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.friendly)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     }
   }
@@ -170,16 +176,22 @@ class _AuditCard extends ConsumerWidget {
                           ],
                           rows: [
                             for (final entry in list)
-                              DataRow(cells: [
-                                DataCell(Text(entry.createdAt
-                                    .toLocal()
-                                    .toString()
-                                    .substring(0, 19))),
-                                DataCell(Text(entry.action)),
-                                DataCell(Text(entry.actor)),
-                                DataCell(Text(entry.resourceType ?? '—')),
-                                DataCell(Text(entry.ipAddress ?? '—')),
-                              ]),
+                              DataRow(
+                                cells: [
+                                  DataCell(
+                                    Text(
+                                      entry.createdAt
+                                          .toLocal()
+                                          .toString()
+                                          .substring(0, 19),
+                                    ),
+                                  ),
+                                  DataCell(Text(entry.action)),
+                                  DataCell(Text(entry.actor)),
+                                  DataCell(Text(entry.resourceType ?? '—')),
+                                  DataCell(Text(entry.ipAddress ?? '—')),
+                                ],
+                              ),
                           ],
                         ),
                       ),

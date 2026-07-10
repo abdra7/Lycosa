@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/brand.dart';
 import 'core/session.dart';
 import 'features/auth/login_screen.dart';
 import 'features/setup/connection_screen.dart';
@@ -15,12 +16,12 @@ class LycosaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFF4A5D8A); // muted wolf-spider blue
     return MaterialApp(
       title: 'Lycosa',
-      theme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.light),
-      darkTheme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.dark),
-      themeMode: ThemeMode.system,
+      theme: LycosaTheme.light(),
+      darkTheme: LycosaTheme.dark(),
+      // Brand spec is light-first: white surfaces, #A8C7FA accent.
+      themeMode: ThemeMode.light,
       home: const RootGate(),
     );
   }

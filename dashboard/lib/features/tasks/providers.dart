@@ -26,7 +26,10 @@ final tasksProvider = StreamProvider.autoDispose<List<TaskInfo>>((ref) {
   }
 
   tick();
-  final timer = Timer.periodic(ref.watch(nodePollIntervalProvider), (_) => tick());
+  final timer = Timer.periodic(
+    ref.watch(nodePollIntervalProvider),
+    (_) => tick(),
+  );
   ref.onDispose(() {
     timer.cancel();
     controller.close();

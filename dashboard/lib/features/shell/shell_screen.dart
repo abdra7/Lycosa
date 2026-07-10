@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_info.dart';
+import '../../core/brand.dart';
 import '../../core/events.dart';
 import '../../core/session.dart';
+import '../../widgets/lycosa_brand.dart';
 import '../admin/admin_screen.dart';
 import '../knowledge/knowledge_screen.dart';
 import '../nodes/nodes_screen.dart';
@@ -47,11 +49,13 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.invalidate(nodesProvider);
     }
     if (event.isAlert && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(event.summary),
-        backgroundColor: Theme.of(context).colorScheme.error,
-        duration: const Duration(seconds: 6),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(event.summary),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 6),
+        ),
+      );
     }
   }
 
@@ -64,7 +68,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lycosa'),
+        title: const LycosaBrand(),
         actions: [
           if (session.profiles.length > 1)
             DropdownButton<String>(
@@ -99,21 +103,29 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             selectedIndex: _selected,
             onDestinationSelected: (i) => setState(() => _selected = i),
             labelType: NavigationRailLabelType.all,
+            leading: const SizedBox(height: 8),
             destinations: [
               for (final s in _sections)
                 NavigationRailDestination(
-                    icon: Icon(s.icon), label: Text(s.label)),
+                  icon: Icon(s.icon),
+                  label: Text(s.label),
+                ),
             ],
           ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: switch (_selected) {
-              0 => const NodesScreen(),
-              1 => const TasksScreen(),
-              2 => const WorkflowsScreen(),
-              3 => const KnowledgeScreen(),
-              _ => const AdminScreen(),
-            },
+            child: AnimatedSwitcher(
+              duration: LycosaMotion.base,
+              switchInCurve: LycosaMotion.curve,
+              switchOutCurve: LycosaMotion.curve,
+              child: switch (_selected) {
+                0 => const NodesScreen(),
+                1 => const TasksScreen(),
+                2 => const WorkflowsScreen(),
+                3 => const KnowledgeScreen(),
+                _ => const AdminScreen(),
+              },
+            ),
           ),
         ],
       ),
@@ -131,16 +143,28 @@ class _EventStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: LycosaColors.backgroundSecondary,
+      shape: const Border(top: BorderSide(color: LycosaColors.border)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           children: [
-            Icon(Icons.circle,
-                size: 10, color: connected ? Colors.green : Colors.grey),
+            AnimatedContainer(
+              duration: LycosaMotion.slow,
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: connected
+                    ? LycosaColors.success
+                    : LycosaColors.textSecondary,
+              ),
+            ),
             const SizedBox(width: 6),
-            Text(connected ? 'live' : 'connecting…',
-                style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              connected ? 'live' : 'connecting…',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
