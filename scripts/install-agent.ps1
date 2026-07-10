@@ -61,9 +61,14 @@ try {
 }
 
 Write-Host ""
-Say "Done. Next steps:"
+Say "Done. Next steps (run each line separately in PowerShell):"
 Write-Host "  1. Get a node API key from your Lycosa admin (dashboard: Nodes -> Add node)."
-Write-Host "  2. Run:"
-Write-Host '       $env:LYCOSA_CONTROLLER_URL = "http://<controller-host>:8000"'
+Write-Host "  2. Set the controller URL. Use the controller PC's LAN IP (run 'ipconfig'"
+Write-Host "     there), NOT localhost -- localhost means THIS device, not the controller:"
+Write-Host '       $env:LYCOSA_CONTROLLER_URL = "http://192.168.1.10:8000"'
+Write-Host "  3. Set your key and start the agent:"
 Write-Host '       $env:LYCOSA_API_KEY = "lyc_..."'
 Write-Host "       lycosa-agent run"
+Write-Host ""
+Write-Host "  Tip: paste one line at a time. Do not add backslashes (\) at line ends --"
+Write-Host "  that is bash syntax and PowerShell will error."
