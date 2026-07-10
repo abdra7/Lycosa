@@ -106,7 +106,7 @@ On Windows hosts, use PowerShell: `.\scripts\install.ps1`
 
 The installer checks Docker, generates secrets into `.env`, asks for your
 admin email/password, starts the stack, and prints the **controller URL**
-(e.g. `http://192.168.1.10:8000`) to enter in the desktop app. Every setting
+(e.g. `http://192.168.9.800:8000`) to enter in the desktop app. Every setting
 lives in the root `.env` — see `.env.example` for what exists.
 
 Prefer plain compose? `cp .env.example .env`, edit it, then:
