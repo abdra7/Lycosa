@@ -17,7 +17,10 @@ class OllamaAdapter:
         return [m["name"] for m in response.json().get("models", [])]
 
     async def pull_model(self, model: str) -> None:
-        response = await self._client.post("/api/pull", json={"name": model, "stream": False})
+        # weights are multi-GB downloads; don't inherit the short default timeout
+        response = await self._client.post(
+            "/api/pull", json={"name": model, "stream": False}, timeout=3600
+        )
         response.raise_for_status()
 
     async def generate(self, model: str, prompt: str, options: dict[str, Any] | None = None) -> str:

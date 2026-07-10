@@ -1,0 +1,71 @@
+# LLM catalog for per-node model recommendations.
+# Tunable without code changes, like recommendation_rules.yml (ADR-010).
+#
+# Requirements assume 4-bit quantized GGUF weights (Ollama's default tags):
+#   min_vram_gb — smallest single-GPU VRAM that fits the weights + KV cache
+#   min_ram_gb  — system RAM needed to run CPU-only (slower, but works)
+# A model is "runnable" on a node when either bar is met; GPU wins when both.
+
+models:
+  - name: llama3.2:1b
+    params_b: 1
+    use_case: general
+    min_vram_gb: 2
+    min_ram_gb: 4
+    note: "Tiny and fast; fine for classification, routing, and short answers"
+
+  - name: llama3.2:3b
+    params_b: 3
+    use_case: general
+    min_vram_gb: 4
+    min_ram_gb: 6
+    note: "Good quality/speed balance for small machines"
+
+  - name: phi3:mini
+    params_b: 3.8
+    use_case: general
+    min_vram_gb: 4
+    min_ram_gb: 6
+    note: "Strong reasoning for its size; runs well on CPU"
+
+  - name: mistral:7b
+    params_b: 7
+    use_case: general
+    min_vram_gb: 5
+    min_ram_gb: 10
+    note: "Solid all-rounder"
+
+  - name: llama3.1:8b
+    params_b: 8
+    use_case: general
+    min_vram_gb: 6
+    min_ram_gb: 12
+    note: "Best general model most single-GPU machines can host"
+
+  - name: qwen2.5-coder:7b
+    params_b: 7
+    use_case: coding
+    min_vram_gb: 5
+    min_ram_gb: 10
+    note: "Code generation and review"
+
+  - name: llava:7b
+    params_b: 7
+    use_case: vision
+    min_vram_gb: 6
+    min_ram_gb: 10
+    note: "Image understanding for Vision nodes"
+
+  - name: gemma2:27b
+    params_b: 27
+    use_case: general
+    min_vram_gb: 18
+    min_ram_gb: 32
+    note: "Big step up in quality; needs a high-VRAM GPU or lots of RAM"
+
+  - name: llama3.1:70b
+    params_b: 70
+    use_case: general
+    min_vram_gb: 40
+    min_ram_gb: 64
+    note: "Frontier-class local model for AI Compute nodes"

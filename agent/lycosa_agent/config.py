@@ -26,3 +26,6 @@ class AgentSettings(BaseSettings):
     discovery_enabled: bool = True
 
     ollama_url: str = "http://localhost:11434"
+    # zero-config model setup: on first run with an empty Ollama, pull the
+    # best-fit model for this hardware automatically (LYCOSA_AUTO_PULL_MODEL=false to opt out)
+    auto_pull_model: bool = True

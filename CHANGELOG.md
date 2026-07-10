@@ -8,6 +8,27 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Zero-config agent setup** — installing the agent is now the whole job.
+  `scripts/install-agent.ps1` already opens the needed firewall ports
+  (UDP 5353 mDNS, TCP 8010 exec API) with elevation; on first run the agent
+  now also configures its own model: if Ollama is empty, it asks the
+  controller which model best fits its hardware (node keys may read their own
+  node's recommendations), pulls it, and re-registers with the updated
+  inventory — all over the agent's outbound connection, so no inbound ports
+  or operator action are required. Opt out with `LYCOSA_AUTO_PULL_MODEL=false`.
+
+- **Per-device LLM recommendations & one-click model install** — clicking a
+  device (a node row, or a discovered LAN device that is registered) opens its
+  detail page with a new "Recommended models" card: the controller ranks a
+  tunable catalog (`backend/config/llm_catalog.yml`) against the device's
+  hardware (GPU VRAM first, CPU-RAM fallback) and explains why each model
+  does or doesn't fit. Pressing **Install** configures the agent with that
+  model: the controller calls the agent's new `POST /models/pull` endpoint,
+  Ollama downloads the weights, and the node's installed-model inventory
+  refreshes immediately (`GET /api/v1/nodes/{id}/llm-recommendations`,
+  `POST /api/v1/nodes/{id}/models`, audited). Discovered-but-unregistered
+  devices open the add-node key flow on click instead.
+
 - **Delete collection (Ticket #105)** —
   `DELETE /api/v1/knowledge/collections/{id}` removes a knowledge collection:
   its Qdrant vectors, documents, and embedding jobs (retrieval audit rows are
@@ -24,6 +45,23 @@ adheres to [Semantic Versioning](https://semver.org/).
   troubleshooting.
 
 ### Fixed
+
+- **Stuck ingestions recovered on restart** — a controller crash mid-ingest
+  (power loss, OOM-kill, `docker restart`) used to strand the document in
+  `uploaded` with its embedding job `running` forever, since the in-request
+  safety timeout dies with the process. Startup now recovers those orphans:
+  they are marked `failed` with a "re-upload the document" error so the
+  operator sees an actionable state instead of a forever-pending upload.
+  Found by the E2E-02 recovery tests.
+
+- **Upload/delete race on knowledge collections** — deleting a collection
+  while one of its documents was still embedding let the in-flight ingestion
+  re-create the collection's Qdrant store and write orphaned vectors, then
+  crash with an unhandled 500. The losing upload now receives a clean
+  `409 Conflict` and any vectors written after the delete are removed, so a
+  deleted collection can never leave zombie embeddings behind. Found by the
+  IT-API-02 concurrency tests, which now cover parallel uploads, client
+  disconnect mid-ingestion, and this race.
 
 - **LAN scan on Windows (Ticket #106)** — the dashboard's mDNS scan no longer
   crashes with errno 10042 (`WSAENOPROTOOPT`) when a virtual adapter (VPN

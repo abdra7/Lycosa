@@ -106,6 +106,41 @@ const nodeRoles = [
   'storage',
 ];
 
+/// One catalog model ranked against a node's hardware.
+class LlmRecommendationInfo {
+  LlmRecommendationInfo({
+    required this.model,
+    required this.paramsB,
+    required this.useCase,
+    required this.runnable,
+    this.runsOn,
+    required this.recommended,
+    required this.installed,
+    required this.reason,
+  });
+
+  final String model; // Ollama tag, e.g. "llama3.1:8b"
+  final double paramsB;
+  final String useCase; // general | coding | vision
+  final bool runnable;
+  final String? runsOn; // "gpu" | "cpu" | null when not runnable
+  final bool recommended;
+  final bool installed;
+  final String reason;
+
+  factory LlmRecommendationInfo.fromJson(Map<String, dynamic> json) =>
+      LlmRecommendationInfo(
+        model: json['model'] as String,
+        paramsB: (json['params_b'] as num).toDouble(),
+        useCase: json['use_case'] as String,
+        runnable: json['runnable'] as bool,
+        runsOn: json['runs_on'] as String?,
+        recommended: json['recommended'] as bool,
+        installed: json['installed'] as bool,
+        reason: json['reason'] as String,
+      );
+}
+
 /// One-time response from minting an API key: the full key appears only here.
 class MintedApiKey {
   MintedApiKey({required this.id, required this.name, required this.apiKey});
@@ -521,6 +556,34 @@ class ApiClient {
       ),
     );
     return NodeInfo.fromJson(_decode(response));
+  }
+
+  /// Which local LLMs this node's hardware can run, ranked best-fit first.
+  Future<List<LlmRecommendationInfo>> getLlmRecommendations(String id) async {
+    final response = await _send(
+      () => _http.get(
+        _uri('/api/v1/nodes/$id/llm-recommendations'),
+        headers: _headers,
+      ),
+    );
+    return _decodeList(response)
+        .map((e) => LlmRecommendationInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Configure the node's agent with a model: its runtime pulls the weights.
+  /// Pulls download multi-GB files, so this gets a very generous timeout.
+  Future<List<String>> installNodeModel(String id, String model) async {
+    final response = await _send(
+      () => _http.post(
+        _uri('/api/v1/nodes/$id/models'),
+        headers: _headers,
+        body: jsonEncode({'model': model}),
+      ),
+      timeout: const Duration(minutes: 16),
+    );
+    final body = _decode(response);
+    return [for (final m in (body['models'] as List? ?? const [])) m as String];
   }
 
   /// Admin: mint a node-role API key. The full key is returned exactly once.

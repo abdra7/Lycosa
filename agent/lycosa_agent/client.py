@@ -31,6 +31,12 @@ class ControllerClient:
         response.raise_for_status()
         return response.json()
 
+    async def llm_recommendations(self, node_id: str) -> list[dict[str, Any]]:
+        """Hardware-fit model recommendations for this agent's own node."""
+        response = await self._client.get(f"/api/v1/nodes/{node_id}/llm-recommendations")
+        response.raise_for_status()
+        return response.json()
+
     async def heartbeat(self, metrics: dict[str, Any]) -> dict[str, Any]:
         response = await self._client.post("/api/v1/nodes/heartbeat", json={"metrics": metrics})
         response.raise_for_status()
