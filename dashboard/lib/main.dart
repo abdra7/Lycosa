@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/brand.dart';
 import 'core/session.dart';
+import 'core/theme_mode.dart';
 import 'features/auth/login_screen.dart';
 import 'features/setup/connection_screen.dart';
 import 'features/shell/shell_screen.dart';
@@ -11,17 +12,18 @@ void main() {
   runApp(const ProviderScope(child: LycosaApp()));
 }
 
-class LycosaApp extends StatelessWidget {
+class LycosaApp extends ConsumerWidget {
   const LycosaApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'Lycosa',
       theme: LycosaTheme.light(),
       darkTheme: LycosaTheme.dark(),
-      // Brand spec is light-first: white surfaces, #A8C7FA accent.
-      themeMode: ThemeMode.light,
+      // Light-first per the brand spec; the user can flip to dark from the
+      // app bar and the choice is restored on next launch.
+      themeMode: ref.watch(themeModeProvider),
       home: const RootGate(),
     );
   }

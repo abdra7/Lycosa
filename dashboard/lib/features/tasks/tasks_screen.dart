@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
@@ -72,30 +73,40 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   @override
   Widget build(BuildContext context) {
     final tasks = ref.watch(tasksProvider);
-    return Padding(
+    // One scrollable page: the submit card can grow (long prompts, result
+    // panel) without ever overflowing the window.
+    return ListView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Tasks', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 12),
-          _submitCard(context),
-          const SizedBox(height: 16),
-          Text('Recent', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Expanded(
-            child: tasks.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Failed to load tasks: $e')),
-              data: (list) => list.isEmpty
-                  ? const Center(child: Text('No tasks yet.'))
-                  : ListView(
-                      children: [for (final t in list) _TaskTile(task: t)],
-                    ),
+      children: [
+        Text('Tasks', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        _submitCard(context),
+        const SizedBox(height: 16),
+        Text('Recent', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        ...tasks.when(
+          loading: () => const [
+            Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
             ),
-          ),
-        ],
-      ),
+          ],
+          error: (e, _) => [
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(child: Text('Failed to load tasks: $e')),
+            ),
+          ],
+          data: (list) => list.isEmpty
+              ? const [
+                  Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('No tasks yet.')),
+                  ),
+                ]
+              : [for (final t in list) _TaskTile(task: t)],
+        ),
+      ],
     );
   }
 
@@ -179,6 +190,82 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   }
 }
 
+/// Long model output in a bounded, independently scrollable block so a big
+/// result can never blow up the page layout. Copy button included because
+/// scroll-to-select is painful for multi-page output.
+class _OutputBlock extends StatefulWidget {
+  const _OutputBlock({required this.text, this.isError = false});
+
+  final String text;
+  final bool isError;
+
+  @override
+  State<_OutputBlock> createState() => _OutputBlockState();
+}
+
+class _OutputBlockState extends State<_OutputBlock> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = widget.text;
+    return Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(maxHeight: 280),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            border: Border.all(color: scheme.outline),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Scrollbar(
+            controller: _scroll,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _scroll,
+              padding: const EdgeInsets.fromLTRB(12, 12, 40, 12),
+              child: SelectableText(
+                text,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: widget.isError ? scheme.error : scheme.onSurface,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 4,
+          right: 4,
+          child: IconButton(
+            tooltip: 'Copy',
+            icon: const Icon(Icons.copy, size: 16),
+            visualDensity: VisualDensity.compact,
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: text));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Copied to clipboard'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ResultPanel extends StatelessWidget {
   const _ResultPanel({required this.task});
 
@@ -205,7 +292,10 @@ class _ResultPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          SelectableText(task.output ?? task.error ?? '(no output)'),
+          _OutputBlock(
+            text: task.output ?? task.error ?? '(no output)',
+            isError: task.output == null && task.error != null,
+          ),
         ],
       ),
     );
@@ -233,15 +323,14 @@ class _TaskTile extends StatelessWidget {
         children: [
           if (task.output != null) ...[
             Text('Output', style: Theme.of(context).textTheme.bodySmall),
-            SelectableText(task.output!),
+            const SizedBox(height: 4),
+            _OutputBlock(text: task.output!),
             const SizedBox(height: 8),
           ],
           if (task.error != null) ...[
             Text('Error', style: Theme.of(context).textTheme.bodySmall),
-            SelectableText(
-              task.error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+            const SizedBox(height: 4),
+            _OutputBlock(text: task.error!, isError: true),
             const SizedBox(height: 8),
           ],
           if (task.executions.isNotEmpty) ...[

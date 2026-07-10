@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_exception.dart';
-import '../../core/brand.dart';
 import '../../core/session.dart';
 import '../../widgets/lycosa_brand.dart';
 
@@ -58,7 +57,7 @@ class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: LycosaColors.backgroundSecondary,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),

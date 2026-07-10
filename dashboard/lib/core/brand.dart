@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 /// Lycosa brand identity: the single source of truth for colors, status
 /// semantics, and the application theme.
 ///
-/// Primary accent is #A8C7FA everywhere; neutrals stay white/gray for
-/// readability. Status colors are fixed tokens (not theme-derived) so a
+/// Primary accent is #A8C7FA everywhere; neutrals adapt per brightness via
+/// [LycosaPalette]. Status colors are fixed tokens (not theme-derived) so a
 /// "running" green or "error" red reads the same on every screen.
 abstract final class LycosaColors {
   // Brand
@@ -15,7 +15,8 @@ abstract final class LycosaColors {
   /// Ink used on top of the light primary — deep navy for AA contrast.
   static const onPrimary = Color(0xFF13294B);
 
-  // Surfaces
+  // Surfaces (light defaults — prefer Theme.of(context).colorScheme in
+  // widgets so dark mode picks up the right values).
   static const background = Color(0xFFFFFFFF);
   static const backgroundSecondary = Color(0xFFF8FAFC);
   static const border = Color(0xFFE5E7EB);
@@ -39,6 +40,56 @@ abstract final class LycosaColors {
   };
 }
 
+/// Brightness-dependent neutrals. The brand accent (#A8C7FA) is shared;
+/// surfaces, borders, and ink flip between the light and dark palettes.
+class LycosaPalette {
+  const LycosaPalette({
+    required this.primary,
+    required this.primaryHover,
+    required this.primaryLight,
+    required this.onPrimary,
+    required this.background,
+    required this.backgroundSecondary,
+    required this.border,
+    required this.textPrimary,
+    required this.textSecondary,
+  });
+
+  final Color primary;
+  final Color primaryHover;
+  final Color primaryLight; // subtle accent container
+  final Color onPrimary;
+  final Color background;
+  final Color backgroundSecondary;
+  final Color border;
+  final Color textPrimary;
+  final Color textSecondary;
+
+  static const light = LycosaPalette(
+    primary: LycosaColors.primary,
+    primaryHover: LycosaColors.primaryHover,
+    primaryLight: LycosaColors.primaryLight,
+    onPrimary: LycosaColors.onPrimary,
+    background: LycosaColors.background,
+    backgroundSecondary: LycosaColors.backgroundSecondary,
+    border: LycosaColors.border,
+    textPrimary: LycosaColors.textPrimary,
+    textSecondary: LycosaColors.textSecondary,
+  );
+
+  static const dark = LycosaPalette(
+    primary: LycosaColors.primary,
+    primaryHover: Color(0xFFBBD3FB), // hover lightens on dark surfaces
+    primaryLight: Color(0xFF22304A), // navy accent container
+    onPrimary: LycosaColors.onPrimary,
+    background: Color(0xFF0F1522),
+    backgroundSecondary: Color(0xFF161E30),
+    border: Color(0xFF283349),
+    textPrimary: Color(0xFFE6EAF2),
+    textSecondary: Color(0xFF97A1B3),
+  );
+}
+
 /// Motion tokens — smooth, quick transitions (150–250ms) across the app.
 abstract final class LycosaMotion {
   static const fast = Duration(milliseconds: 150);
@@ -48,40 +99,48 @@ abstract final class LycosaMotion {
 }
 
 abstract final class LycosaTheme {
-  static ThemeData light() {
+  static ThemeData light() => _theme(LycosaPalette.light, Brightness.light);
+
+  static ThemeData dark() => _theme(LycosaPalette.dark, Brightness.dark);
+
+  static ThemeData _theme(LycosaPalette p, Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    // Ink used on inverse surfaces (snackbars, tooltips).
+    final onInverse = isDark ? const Color(0xFF0F1522) : Colors.white;
+
     final scheme =
         ColorScheme.fromSeed(
-          seedColor: LycosaColors.primary,
-          brightness: Brightness.light,
+          seedColor: p.primary,
+          brightness: brightness,
         ).copyWith(
-          primary: LycosaColors.primary,
-          onPrimary: LycosaColors.onPrimary,
-          primaryContainer: LycosaColors.primaryLight,
-          onPrimaryContainer: LycosaColors.onPrimary,
-          secondary: LycosaColors.primaryHover,
-          onSecondary: LycosaColors.onPrimary,
-          secondaryContainer: LycosaColors.primaryLight,
-          onSecondaryContainer: LycosaColors.onPrimary,
-          surface: LycosaColors.background,
-          onSurface: LycosaColors.textPrimary,
-          onSurfaceVariant: LycosaColors.textSecondary,
-          surfaceContainerLowest: LycosaColors.background,
-          surfaceContainerLow: LycosaColors.backgroundSecondary,
-          surfaceContainer: LycosaColors.backgroundSecondary,
-          surfaceContainerHigh: LycosaColors.backgroundSecondary,
-          surfaceContainerHighest: LycosaColors.backgroundSecondary,
-          outline: LycosaColors.border,
-          outlineVariant: LycosaColors.border,
+          primary: p.primary,
+          onPrimary: p.onPrimary,
+          primaryContainer: p.primaryLight,
+          onPrimaryContainer: isDark ? p.textPrimary : p.onPrimary,
+          secondary: p.primaryHover,
+          onSecondary: p.onPrimary,
+          secondaryContainer: p.primaryLight,
+          onSecondaryContainer: isDark ? p.textPrimary : p.onPrimary,
+          surface: p.background,
+          onSurface: p.textPrimary,
+          onSurfaceVariant: p.textSecondary,
+          surfaceContainerLowest: p.background,
+          surfaceContainerLow: p.backgroundSecondary,
+          surfaceContainer: p.backgroundSecondary,
+          surfaceContainerHigh: p.backgroundSecondary,
+          surfaceContainerHighest: p.backgroundSecondary,
+          outline: p.border,
+          outlineVariant: p.border,
           error: LycosaColors.error,
           onError: Colors.white,
           surfaceTint: Colors.transparent,
         );
 
-    final base = ThemeData(colorScheme: scheme, brightness: Brightness.light);
+    final base = ThemeData(colorScheme: scheme, brightness: brightness);
 
     final textTheme = base.textTheme.apply(
-      bodyColor: LycosaColors.textPrimary,
-      displayColor: LycosaColors.textPrimary,
+      bodyColor: p.textPrimary,
+      displayColor: p.textPrimary,
     );
 
     OutlineInputBorder inputBorder(Color color, [double width = 1]) =>
@@ -91,13 +150,13 @@ abstract final class LycosaTheme {
         );
 
     return base.copyWith(
-      scaffoldBackgroundColor: LycosaColors.background,
-      canvasColor: LycosaColors.background,
-      dividerColor: LycosaColors.border,
-      hoverColor: LycosaColors.backgroundSecondary,
-      focusColor: LycosaColors.primaryLight,
-      splashColor: LycosaColors.primaryLight.withValues(alpha: 0.4),
-      highlightColor: LycosaColors.primaryLight.withValues(alpha: 0.4),
+      scaffoldBackgroundColor: p.background,
+      canvasColor: p.background,
+      dividerColor: p.border,
+      hoverColor: p.backgroundSecondary,
+      focusColor: p.primaryLight,
+      splashColor: p.primaryLight.withValues(alpha: 0.4),
+      highlightColor: p.primaryLight.withValues(alpha: 0.4),
       textTheme: textTheme.copyWith(
         headlineSmall: textTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.w700,
@@ -106,37 +165,31 @@ abstract final class LycosaTheme {
         titleMedium: textTheme.titleMedium?.copyWith(
           fontWeight: FontWeight.w600,
         ),
-        bodySmall: textTheme.bodySmall?.copyWith(
-          color: LycosaColors.textSecondary,
-        ),
-        labelSmall: textTheme.labelSmall?.copyWith(
-          color: LycosaColors.textSecondary,
-        ),
+        bodySmall: textTheme.bodySmall?.copyWith(color: p.textSecondary),
+        labelSmall: textTheme.labelSmall?.copyWith(color: p.textSecondary),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: LycosaColors.background,
-        foregroundColor: LycosaColors.textPrimary,
+        backgroundColor: p.background,
+        foregroundColor: p.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
         titleSpacing: 20,
-        shape: const Border(
-          bottom: BorderSide(color: LycosaColors.border, width: 1),
-        ),
+        shape: Border(bottom: BorderSide(color: p.border, width: 1)),
         titleTextStyle: textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w700,
-          color: LycosaColors.textPrimary,
+          color: p.textPrimary,
         ),
       ),
       cardTheme: CardThemeData(
-        color: LycosaColors.background,
+        color: p.background,
         elevation: 1,
-        shadowColor: Colors.black.withValues(alpha: 0.06),
+        shadowColor: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: LycosaColors.border),
+          side: BorderSide(color: p.border),
         ),
         margin: const EdgeInsets.symmetric(vertical: 6),
       ),
@@ -144,18 +197,18 @@ abstract final class LycosaTheme {
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.disabled)) {
-              return LycosaColors.border;
+              return p.border;
             }
             if (states.contains(WidgetState.hovered) ||
                 states.contains(WidgetState.pressed)) {
-              return LycosaColors.primaryHover;
+              return p.primaryHover;
             }
-            return LycosaColors.primary;
+            return p.primary;
           }),
           foregroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.disabled)
-                ? LycosaColors.textSecondary
-                : LycosaColors.onPrimary,
+                ? p.textSecondary
+                : p.onPrimary,
           ),
           overlayColor: const WidgetStatePropertyAll(Colors.transparent),
           elevation: const WidgetStatePropertyAll(0),
@@ -175,15 +228,11 @@ abstract final class LycosaTheme {
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.hovered)
-                ? LycosaColors.backgroundSecondary
-                : LycosaColors.background,
+                ? p.backgroundSecondary
+                : p.background,
           ),
-          foregroundColor: const WidgetStatePropertyAll(
-            LycosaColors.textPrimary,
-          ),
-          side: const WidgetStatePropertyAll(
-            BorderSide(color: LycosaColors.border),
-          ),
+          foregroundColor: WidgetStatePropertyAll(p.textPrimary),
+          side: WidgetStatePropertyAll(BorderSide(color: p.border)),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -198,11 +247,9 @@ abstract final class LycosaTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: ButtonStyle(
-          foregroundColor: const WidgetStatePropertyAll(
-            LycosaColors.textPrimary,
-          ),
+          foregroundColor: WidgetStatePropertyAll(p.textPrimary),
           overlayColor: WidgetStatePropertyAll(
-            LycosaColors.primaryLight.withValues(alpha: 0.5),
+            p.primaryLight.withValues(alpha: 0.5),
           ),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -223,64 +270,56 @@ abstract final class LycosaTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: LycosaColors.backgroundSecondary,
-        hoverColor: LycosaColors.backgroundSecondary,
-        border: inputBorder(LycosaColors.border),
-        enabledBorder: inputBorder(LycosaColors.border),
-        focusedBorder: inputBorder(LycosaColors.primary, 2),
+        fillColor: p.backgroundSecondary,
+        hoverColor: p.backgroundSecondary,
+        border: inputBorder(p.border),
+        enabledBorder: inputBorder(p.border),
+        focusedBorder: inputBorder(p.primary, 2),
         errorBorder: inputBorder(LycosaColors.error),
         focusedErrorBorder: inputBorder(LycosaColors.error, 2),
-        labelStyle: const TextStyle(color: LycosaColors.textSecondary),
-        hintStyle: const TextStyle(color: LycosaColors.textSecondary),
+        labelStyle: TextStyle(color: p.textSecondary),
+        hintStyle: TextStyle(color: p.textSecondary),
         isDense: true,
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: LycosaColors.background,
-        indicatorColor: LycosaColors.primary,
+        backgroundColor: p.background,
+        indicatorColor: p.primary,
         indicatorShape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        selectedIconTheme: const IconThemeData(
-          color: LycosaColors.onPrimary,
-          size: 22,
-        ),
-        unselectedIconTheme: const IconThemeData(
-          color: LycosaColors.textSecondary,
-          size: 22,
-        ),
+        selectedIconTheme: IconThemeData(color: p.onPrimary, size: 22),
+        unselectedIconTheme: IconThemeData(color: p.textSecondary, size: 22),
         selectedLabelTextStyle: textTheme.labelMedium!.copyWith(
-          color: LycosaColors.textPrimary,
+          color: p.textPrimary,
           fontWeight: FontWeight.w600,
         ),
         unselectedLabelTextStyle: textTheme.labelMedium!.copyWith(
-          color: LycosaColors.textSecondary,
+          color: p.textSecondary,
         ),
         useIndicator: true,
         minWidth: 76,
       ),
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        selectedTileColor: LycosaColors.primaryLight,
-        selectedColor: LycosaColors.textPrimary,
-        iconColor: LycosaColors.textSecondary,
+        selectedTileColor: p.primaryLight,
+        selectedColor: p.textPrimary,
+        iconColor: p.textSecondary,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: LycosaColors.background,
-        side: const BorderSide(color: LycosaColors.border),
+        backgroundColor: p.background,
+        side: BorderSide(color: p.border),
         shape: const StadiumBorder(),
-        labelStyle: textTheme.labelMedium?.copyWith(
-          color: LycosaColors.textPrimary,
-        ),
+        labelStyle: textTheme.labelMedium?.copyWith(color: p.textPrimary),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: LycosaColors.background,
+        backgroundColor: p.background,
         surfaceTintColor: Colors.transparent,
         elevation: 12,
-        shadowColor: Colors.black.withValues(alpha: 0.15),
+        shadowColor: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: LycosaColors.border),
+          side: BorderSide(color: p.border),
         ),
         titleTextStyle: textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w700,
@@ -288,99 +327,89 @@ abstract final class LycosaTheme {
         ),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: LycosaColors.textPrimary,
-        contentTextStyle: const TextStyle(color: Colors.white),
+        backgroundColor: p.textPrimary,
+        contentTextStyle: TextStyle(color: onInverse),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 4,
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: LycosaColors.textPrimary,
+          color: p.textPrimary,
           borderRadius: BorderRadius.circular(8),
         ),
-        textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+        textStyle: TextStyle(color: onInverse, fontSize: 12),
         waitDuration: const Duration(milliseconds: 400),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
+      progressIndicatorTheme: ProgressIndicatorThemeData(
         color: LycosaColors.loading,
-        linearTrackColor: LycosaColors.primaryLight,
-        circularTrackColor: LycosaColors.primaryLight,
+        linearTrackColor: p.primaryLight,
+        circularTrackColor: p.primaryLight,
       ),
-      dividerTheme: const DividerThemeData(
-        color: LycosaColors.border,
-        thickness: 1,
-        space: 1,
-      ),
+      dividerTheme: DividerThemeData(color: p.border, thickness: 1, space: 1),
       dataTableTheme: DataTableThemeData(
         headingTextStyle: textTheme.labelMedium?.copyWith(
-          color: LycosaColors.textSecondary,
+          color: p.textSecondary,
           fontWeight: FontWeight.w600,
         ),
-        headingRowColor: const WidgetStatePropertyAll(
-          LycosaColors.backgroundSecondary,
-        ),
+        headingRowColor: WidgetStatePropertyAll(p.backgroundSecondary),
         dataRowColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.hovered)
-              ? LycosaColors.backgroundSecondary
+              ? p.backgroundSecondary
               : Colors.transparent,
         ),
         dividerThickness: 1,
       ),
       dropdownMenuTheme: DropdownMenuThemeData(
         menuStyle: MenuStyle(
-          backgroundColor: const WidgetStatePropertyAll(
-            LycosaColors.background,
-          ),
+          backgroundColor: WidgetStatePropertyAll(p.background),
           surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: LycosaColors.border),
+              side: BorderSide(color: p.border),
             ),
           ),
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: LycosaColors.background,
+        color: p.background,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: LycosaColors.border),
+          side: BorderSide(color: p.border),
         ),
         elevation: 6,
       ),
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
-              ? LycosaColors.primary
+              ? p.primary
               : Colors.transparent,
         ),
-        checkColor: const WidgetStatePropertyAll(LycosaColors.onPrimary),
-        side: const BorderSide(color: LycosaColors.border, width: 1.5),
+        checkColor: WidgetStatePropertyAll(p.onPrimary),
+        side: BorderSide(color: p.border, width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
       ),
-      expansionTileTheme: const ExpansionTileThemeData(
-        shape: RoundedRectangleBorder(side: BorderSide.none),
-        collapsedShape: RoundedRectangleBorder(side: BorderSide.none),
-        iconColor: LycosaColors.textSecondary,
-        collapsedIconColor: LycosaColors.textSecondary,
+      expansionTileTheme: ExpansionTileThemeData(
+        shape: const RoundedRectangleBorder(side: BorderSide.none),
+        collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
+        iconColor: p.textSecondary,
+        collapsedIconColor: p.textSecondary,
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
-                ? LycosaColors.primaryLight
-                : LycosaColors.background,
+                ? p.primaryLight
+                : p.background,
           ),
           foregroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.selected)
-                ? LycosaColors.onPrimary
-                : LycosaColors.textSecondary,
+                ? (isDark ? p.textPrimary : p.onPrimary)
+                : p.textSecondary,
           ),
-          side: const WidgetStatePropertyAll(
-            BorderSide(color: LycosaColors.border),
-          ),
+          side: WidgetStatePropertyAll(BorderSide(color: p.border)),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -391,34 +420,18 @@ abstract final class LycosaTheme {
           animationDuration: LycosaMotion.base,
         ),
       ),
-      tabBarTheme: const TabBarThemeData(
-        labelColor: LycosaColors.textPrimary,
-        unselectedLabelColor: LycosaColors.textSecondary,
-        indicatorColor: LycosaColors.primary,
-        dividerColor: LycosaColors.border,
+      tabBarTheme: TabBarThemeData(
+        labelColor: p.textPrimary,
+        unselectedLabelColor: p.textSecondary,
+        indicatorColor: p.primary,
+        dividerColor: p.border,
       ),
       scrollbarTheme: ScrollbarThemeData(
         thumbColor: WidgetStatePropertyAll(
-          LycosaColors.textSecondary.withValues(alpha: 0.35),
+          p.textSecondary.withValues(alpha: 0.35),
         ),
         radius: const Radius.circular(8),
       ),
     );
-  }
-
-  /// Branded dark variant (kept in sync with the light palette); the app
-  /// currently ships light-first per the brand spec.
-  static ThemeData dark() {
-    final scheme =
-        ColorScheme.fromSeed(
-          seedColor: LycosaColors.primary,
-          brightness: Brightness.dark,
-        ).copyWith(
-          primary: LycosaColors.primary,
-          onPrimary: LycosaColors.onPrimary,
-          error: LycosaColors.error,
-          surfaceTint: Colors.transparent,
-        );
-    return ThemeData(colorScheme: scheme, brightness: Brightness.dark);
   }
 }

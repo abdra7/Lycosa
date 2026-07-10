@@ -297,8 +297,8 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
           width: double.infinity,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: LycosaColors.backgroundSecondary,
-            border: Border.all(color: LycosaColors.border),
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            border: Border.all(color: Theme.of(context).colorScheme.outline),
             borderRadius: BorderRadius.circular(10),
           ),
           child: SelectableText(
