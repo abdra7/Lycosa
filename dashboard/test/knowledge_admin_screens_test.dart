@@ -129,6 +129,67 @@ MockClient fakeController({
   });
 }
 
+Map<String, dynamic> collectionJson(String id, String name) => {
+  'id': id,
+  'name': name,
+  'description': null,
+  'embedding_backend': 'hashing',
+  'embedding_dim': 384,
+  'created_at': '2026-07-05T10:00:00Z',
+};
+
+/// A controller whose collection list actually shrinks when a DELETE lands,
+/// so refresh assertions exercise the real refetch instead of a static fake.
+MockClient deletableController(
+  List<Map<String, dynamic>> collections, {
+  List<http.Request>? captured,
+  int deleteStatus = 204,
+  String deleteError = 'Qdrant delete failed — is the qdrant service running?',
+}) {
+  final deletePath = RegExp(r'^/api/v1/knowledge/collections/([^/]+)$');
+  return MockClient((request) async {
+    captured?.add(request);
+    final path = request.url.path;
+    if (path == '/api/v1/me') {
+      return http.Response(
+        jsonEncode({
+          'type': 'user',
+          'id': 'u1',
+          'role': 'admin',
+          'email': 'op@lycosa.local',
+        }),
+        200,
+      );
+    }
+    if (path == '/api/v1/knowledge/collections' && request.method == 'GET') {
+      return http.Response(jsonEncode(collections), 200);
+    }
+    final match = deletePath.firstMatch(path);
+    if (match != null && request.method == 'DELETE') {
+      if (deleteStatus != 204) {
+        return http.Response(
+          jsonEncode({
+            'error': {'code': 'bad_gateway', 'message': deleteError},
+          }),
+          deleteStatus,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
+      collections.removeWhere((c) => c['id'] == match.group(1));
+      return http.Response('', 204);
+    }
+    if (path.endsWith('/documents') && request.method == 'GET') {
+      return http.Response(jsonEncode([]), 200);
+    }
+    return http.Response(
+      jsonEncode({
+        'error': {'code': 'not_found', 'message': 'nope'},
+      }),
+      404,
+    );
+  });
+}
+
 Widget appWith(MockClient controller, {required Widget home}) {
   final store = InMemoryProfileStore()
     ..profiles = [
@@ -185,6 +246,113 @@ void main() {
     expect(find.text('Wolf spiders hunt at night.'), findsOneWidget);
     expect(find.text('0.91'), findsOneWidget);
     expect(find.text('spider-facts/spiders.md'), findsOneWidget);
+  });
+
+  // UT-FE-02: the collection list renders one delete button per collection.
+  testWidgets('each collection renders a delete button', (tester) async {
+    final controller = deletableController([
+      collectionJson('c1', 'spider-facts'),
+      collectionJson('c2', 'flutter-docs'),
+    ]);
+    await tester.pumpWidget(
+      appWith(controller, home: const Scaffold(body: KnowledgeScreen())),
+    );
+    await settle(tester);
+
+    expect(find.text('spider-facts'), findsOneWidget);
+    expect(find.text('flutter-docs'), findsOneWidget);
+    expect(find.byTooltip('Delete collection'), findsNWidgets(2));
+    expect(find.byIcon(Icons.delete_outline), findsNWidgets(2));
+  });
+
+  // UT-FE-02: deletion is guarded by a confirmation dialog naming the target.
+  testWidgets('cancelling the confirmation makes no request', (tester) async {
+    final captured = <http.Request>[];
+    final controller = deletableController([
+      collectionJson('c1', 'spider-facts'),
+    ], captured: captured);
+    await tester.pumpWidget(
+      appWith(controller, home: const Scaffold(body: KnowledgeScreen())),
+    );
+    await settle(tester);
+
+    await tester.tap(find.byTooltip('Delete collection'));
+    await settle(tester);
+    expect(find.text('Delete collection?'), findsOneWidget);
+    expect(find.textContaining('"spider-facts"'), findsOneWidget);
+    expect(find.textContaining('cannot be undone'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await settle(tester);
+
+    expect(captured.any((r) => r.method == 'DELETE'), isFalse);
+    expect(find.text('spider-facts'), findsOneWidget);
+  });
+
+  // IT-UI-01: a confirmed delete hits the API and the sidebar refreshes
+  // immediately — the row disappears and the stale detail pane resets.
+  testWidgets('confirmed delete refreshes the sidebar immediately', (
+    tester,
+  ) async {
+    final captured = <http.Request>[];
+    final controller = deletableController([
+      collectionJson('c1', 'spider-facts'),
+      collectionJson('c2', 'flutter-docs'),
+    ], captured: captured);
+    await tester.pumpWidget(
+      appWith(controller, home: const Scaffold(body: KnowledgeScreen())),
+    );
+    await settle(tester);
+
+    // open the doomed collection so the detail pane is showing it
+    await tester.tap(find.text('spider-facts'));
+    await settle(tester);
+    expect(find.text('No documents in this collection.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete collection').first);
+    await settle(tester);
+    await tester.tap(find.text('Delete'));
+    await settle(tester);
+
+    expect(
+      captured.any(
+        (r) =>
+            r.method == 'DELETE' &&
+            r.url.path == '/api/v1/knowledge/collections/c1',
+      ),
+      isTrue,
+    );
+    expect(find.text('spider-facts'), findsNothing);
+    expect(find.text('flutter-docs'), findsOneWidget);
+    expect(
+      find.text('Select a collection to see its documents.'),
+      findsOneWidget,
+    );
+  });
+
+  // IT-UI-01: a failed delete surfaces the controller's error and the
+  // collection stays in the (still fresh) list.
+  testWidgets('failed delete shows the error and keeps the collection', (
+    tester,
+  ) async {
+    final controller = deletableController([
+      collectionJson('c1', 'spider-facts'),
+    ], deleteStatus: 502);
+    await tester.pumpWidget(
+      appWith(controller, home: const Scaffold(body: KnowledgeScreen())),
+    );
+    await settle(tester);
+
+    await tester.tap(find.byTooltip('Delete collection'));
+    await settle(tester);
+    await tester.tap(find.text('Delete'));
+    await settle(tester);
+
+    expect(
+      find.text('Qdrant delete failed — is the qdrant service running?'),
+      findsOneWidget,
+    );
+    expect(find.text('spider-facts'), findsOneWidget);
   });
 
   testWidgets('admin screen shows audit log and revokes keys', (tester) async {
