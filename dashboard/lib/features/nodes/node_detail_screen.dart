@@ -79,8 +79,9 @@ class _KeyValue extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-              width: 130,
-              child: Text(label, style: Theme.of(context).textTheme.bodySmall)),
+            width: 130,
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ),
           Expanded(child: Text(value)),
         ],
       ),
@@ -100,11 +101,13 @@ class _IdentityCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            StatusChip(status: node.status),
-            const SizedBox(width: 8),
-            Text('heartbeat ${heartbeatAge(node.lastHeartbeatAt)}'),
-          ]),
+          Row(
+            children: [
+              StatusChip(status: node.status),
+              const SizedBox(width: 8),
+              Text('heartbeat ${heartbeatAge(node.lastHeartbeatAt)}'),
+            ],
+          ),
           const SizedBox(height: 8),
           _KeyValue('ID', node.id),
           _KeyValue('Agent URL', node.agentUrl ?? '—'),
@@ -141,13 +144,15 @@ class _RoleCardState extends ConsumerState<_RoleCard> {
       await client.patchNode(widget.node.id, role: _selected);
       ref.invalidate(nodeDetailProvider(widget.node.id));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Role set to $_selected')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Role set to $_selected')));
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.friendly)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -165,10 +170,11 @@ class _RoleCardState extends ConsumerState<_RoleCard> {
         children: [
           _KeyValue('Assigned', node.role ?? 'not assigned'),
           _KeyValue(
-              'Recommended',
-              node.recommendedRole != null
-                  ? '${node.recommendedRole} ($confidence% confidence)'
-                  : '—'),
+            'Recommended',
+            node.recommendedRole != null
+                ? '${node.recommendedRole} ($confidence% confidence)'
+                : '—',
+          ),
           if (node.recommendationRationale.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Why:', style: Theme.of(context).textTheme.bodySmall),
@@ -185,7 +191,9 @@ class _RoleCardState extends ConsumerState<_RoleCard> {
                 child: DropdownButtonFormField<String>(
                   initialValue: _selected,
                   decoration: const InputDecoration(
-                      labelText: 'Set role', isDense: true),
+                    labelText: 'Set role',
+                    isDense: true,
+                  ),
                   items: [
                     for (final role in nodeRoles)
                       DropdownMenuItem(value: role, child: Text(role)),
@@ -200,7 +208,8 @@ class _RoleCardState extends ConsumerState<_RoleCard> {
                     ? const SizedBox(
                         width: 16,
                         height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Text('Save'),
               ),
             ],
@@ -226,16 +235,28 @@ class _MetricsCard extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _bar(context, 'CPU', (metrics['cpu_percent'] as num?)?.toDouble()),
-                _bar(context, 'RAM', (metrics['ram_percent'] as num?)?.toDouble()),
-                _bar(context, 'Disk', (metrics['disk_percent'] as num?)?.toDouble()),
+                _bar(
+                  context,
+                  'CPU',
+                  (metrics['cpu_percent'] as num?)?.toDouble(),
+                ),
+                _bar(
+                  context,
+                  'RAM',
+                  (metrics['ram_percent'] as num?)?.toDouble(),
+                ),
+                _bar(
+                  context,
+                  'Disk',
+                  (metrics['disk_percent'] as num?)?.toDouble(),
+                ),
                 _KeyValue('Running tasks', '${metrics['running_tasks'] ?? 0}'),
                 for (final (index, gpu)
                     in ((metrics['gpus'] as List?) ?? const []).indexed)
                   _KeyValue(
                     'GPU $index',
                     '${(gpu['util_percent'] as num?)?.toStringAsFixed(0) ?? '—'}% util'
-                    ' · ${(gpu['temp_c'] as num?)?.toStringAsFixed(0) ?? '—'}°C',
+                        ' · ${(gpu['temp_c'] as num?)?.toStringAsFixed(0) ?? '—'}°C',
                   ),
               ],
             ),
@@ -248,18 +269,22 @@ class _MetricsCard extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-              width: 130,
-              child: Text(label, style: Theme.of(context).textTheme.bodySmall)),
+            width: 130,
+            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ),
           Expanded(
             child: LinearProgressIndicator(
-                value: (percent ?? 0) / 100, minHeight: 8),
+              value: (percent ?? 0) / 100,
+              minHeight: 8,
+            ),
           ),
           const SizedBox(width: 8),
           SizedBox(
-              width: 44,
-              child: Text(percent != null
-                  ? '${percent.toStringAsFixed(0)}%'
-                  : '—')),
+            width: 44,
+            child: Text(
+              percent != null ? '${percent.toStringAsFixed(0)}%' : '—',
+            ),
+          ),
         ],
       ),
     );
@@ -281,27 +306,36 @@ class _ProfileCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _KeyValue('CPU', '${profile['cpu_model'] ?? '—'} '
-              '(${node.cpuCores ?? '—'} cores)'),
+          _KeyValue(
+            'CPU',
+            '${profile['cpu_model'] ?? '—'} '
+                '(${node.cpuCores ?? '—'} cores)',
+          ),
           _KeyValue('RAM', node.ramGb != null ? '${node.ramGb} GB' : '—'),
           _KeyValue(
-              'GPU',
-              gpus.isEmpty
-                  ? 'none'
-                  : gpus
+            'GPU',
+            gpus.isEmpty
+                ? 'none'
+                : gpus
                       .map((g) => '${g['model']} (${g['vram_gb']} GB)')
-                      .join(', ')),
-          _KeyValue('Storage',
-              node.storageGb != null ? '${node.storageGb} GB' : '—'),
+                      .join(', '),
+          ),
+          _KeyValue(
+            'Storage',
+            node.storageGb != null ? '${node.storageGb} GB' : '—',
+          ),
           _KeyValue('OS', node.osName ?? '—'),
           _KeyValue(
-              'Runtimes',
-              runtimes.isEmpty
-                  ? 'none detected'
-                  : runtimes
-                      .map((r) =>
-                          '${r['name']}${(r['models'] as List?)?.isNotEmpty == true ? ' (${(r['models'] as List).length} models)' : ''}')
-                      .join(', ')),
+            'Runtimes',
+            runtimes.isEmpty
+                ? 'none detected'
+                : runtimes
+                      .map(
+                        (r) =>
+                            '${r['name']}${(r['models'] as List?)?.isNotEmpty == true ? ' (${(r['models'] as List).length} models)' : ''}',
+                      )
+                      .join(', '),
+          ),
         ],
       ),
     );

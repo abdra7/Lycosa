@@ -19,7 +19,8 @@ class ApiException implements Exception {
       statusCode: statusCode,
       code: error['code'] as String? ?? 'error',
       message: error['message'] as String? ?? 'Request failed',
-      details: (error['details'] as List?)?.cast<Map<String, dynamic>>() ?? const [],
+      details:
+          (error['details'] as List?)?.cast<Map<String, dynamic>>() ?? const [],
     );
   }
 

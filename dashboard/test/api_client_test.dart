@@ -17,8 +17,13 @@ void main() {
     final mock = MockClient((request) async {
       captured = request;
       return http.Response(
-          jsonEncode({'access_token': 'tok123', 'token_type': 'bearer', 'expires_in': 60}),
-          200);
+        jsonEncode({
+          'access_token': 'tok123',
+          'token_type': 'bearer',
+          'expires_in': 60,
+        }),
+        200,
+      );
     });
 
     final token = await clientWith(mock).login('a@b.c', 'pw');
@@ -29,33 +34,41 @@ void main() {
   });
 
   test('envelope errors become ApiException with code and message', () async {
-    final mock = MockClient((_) async => http.Response(
+    final mock = MockClient(
+      (_) async => http.Response(
         jsonEncode({
-          'error': {'code': 'unauthorized', 'message': 'Invalid credentials'}
+          'error': {'code': 'unauthorized', 'message': 'Invalid credentials'},
         }),
-        401));
+        401,
+      ),
+    );
 
     expect(
       () => clientWith(mock).login('a@b.c', 'wrong'),
-      throwsA(isA<ApiException>()
-          .having((e) => e.code, 'code', 'unauthorized')
-          .having((e) => e.isUnauthorized, 'isUnauthorized', true)
-          .having((e) => e.friendly, 'friendly', 'Invalid credentials')),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.code, 'code', 'unauthorized')
+            .having((e) => e.isUnauthorized, 'isUnauthorized', true)
+            .having((e) => e.friendly, 'friendly', 'Invalid credentials'),
+      ),
     );
   });
 
   test('validation details are folded into the friendly message', () async {
-    final mock = MockClient((_) async => http.Response(
+    final mock = MockClient(
+      (_) async => http.Response(
         jsonEncode({
           'error': {
             'code': 'validation_error',
             'message': 'Request validation failed',
             'details': [
-              {'field': 'body.password', 'message': 'Field required'}
-            ]
-          }
+              {'field': 'body.password', 'message': 'Field required'},
+            ],
+          },
         }),
-        422));
+        422,
+      ),
+    );
 
     try {
       await clientWith(mock).login('a@b.c', '');
@@ -70,14 +83,15 @@ void main() {
     final mock = MockClient((request) async {
       captured = request;
       return http.Response(
-          jsonEncode({
-            'type': 'user',
-            'id': '11111111-1111-1111-1111-111111111111',
-            'role': 'admin',
-            'email': 'admin@lycosa.local',
-            'name': null,
-          }),
-          200);
+        jsonEncode({
+          'type': 'user',
+          'id': '11111111-1111-1111-1111-111111111111',
+          'role': 'admin',
+          'email': 'admin@lycosa.local',
+          'name': null,
+        }),
+        200,
+      );
     });
 
     final principal = await clientWith(mock, token: 'tok123').me();
@@ -87,12 +101,17 @@ void main() {
     expect(principal.displayName, 'admin@lycosa.local');
   });
 
-  test('unreachable controller raises ControllerUnreachableException', () async {
-    final mock = MockClient((_) async => throw http.ClientException('refused'));
+  test(
+    'unreachable controller raises ControllerUnreachableException',
+    () async {
+      final mock = MockClient(
+        (_) async => throw http.ClientException('refused'),
+      );
 
-    expect(
-      () => clientWith(mock).healthz(),
-      throwsA(isA<ControllerUnreachableException>()),
-    );
-  });
+      expect(
+        () => clientWith(mock).healthz(),
+        throwsA(isA<ControllerUnreachableException>()),
+      );
+    },
+  );
 }

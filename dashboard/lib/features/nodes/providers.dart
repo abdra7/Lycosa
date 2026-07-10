@@ -7,8 +7,9 @@ import '../../core/session.dart';
 
 /// Poll interval — overridable so the Sprint 9 WebSocket (or tests) can
 /// replace the timer without touching consumers.
-final nodePollIntervalProvider =
-    Provider<Duration>((ref) => const Duration(seconds: 10));
+final nodePollIntervalProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 10),
+);
 
 /// Node inventory, refreshed on an interval while watched. The timer is
 /// cancelled on dispose (no leaked timers in tests or on tab switch).
@@ -31,7 +32,10 @@ final nodesProvider = StreamProvider.autoDispose<List<NodeInfo>>((ref) {
   }
 
   tick();
-  final timer = Timer.periodic(ref.watch(nodePollIntervalProvider), (_) => tick());
+  final timer = Timer.periodic(
+    ref.watch(nodePollIntervalProvider),
+    (_) => tick(),
+  );
   ref.onDispose(() {
     timer.cancel();
     controller.close();
@@ -39,8 +43,10 @@ final nodesProvider = StreamProvider.autoDispose<List<NodeInfo>>((ref) {
   return controller.stream;
 });
 
-final nodeDetailProvider =
-    FutureProvider.autoDispose.family<NodeInfo, String>((ref, id) async {
+final nodeDetailProvider = FutureProvider.autoDispose.family<NodeInfo, String>((
+  ref,
+  id,
+) async {
   final client = ref.watch(activeApiClientProvider);
   if (client == null) throw StateError('not authenticated');
   return client.getNode(id);

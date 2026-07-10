@@ -18,36 +18,38 @@ class LycosaEvent {
   bool get isNodeEvent => type.startsWith('node.');
 
   factory LycosaEvent.fromJson(Map<String, dynamic> json) => LycosaEvent(
-        type: json['type'] as String,
-        ts: DateTime.parse(json['ts'] as String),
-        data: json['data'] as Map<String, dynamic>? ?? const {},
-      );
+    type: json['type'] as String,
+    ts: DateTime.parse(json['ts'] as String),
+    data: json['data'] as Map<String, dynamic>? ?? const {},
+  );
 
   String get summary => switch (type) {
-        'node.connected' => 'Node ${data['name']} connected',
-        'node.disconnected' => 'Node ${data['name']} disconnected',
-        'node.metrics.updated' => 'Metrics from ${data['name']}',
-        'task.started' => 'Task started (${data['type']})',
-        'task.finished' => 'Task ${data['status']}',
-        'workflow.started' => 'Workflow ${data['name']} started',
-        'workflow.step.completed' => 'Step ${data['step']} completed',
-        'workflow.paused' => 'Workflow paused at ${data['step']}',
-        'workflow.finished' => 'Workflow ${data['status']}',
-        'alert.created' => data['message'] as String? ?? 'Alert',
-        _ => type,
-      };
+    'node.connected' => 'Node ${data['name']} connected',
+    'node.disconnected' => 'Node ${data['name']} disconnected',
+    'node.metrics.updated' => 'Metrics from ${data['name']}',
+    'task.started' => 'Task started (${data['type']})',
+    'task.finished' => 'Task ${data['status']}',
+    'workflow.started' => 'Workflow ${data['name']} started',
+    'workflow.step.completed' => 'Step ${data['step']} completed',
+    'workflow.paused' => 'Workflow paused at ${data['step']}',
+    'workflow.finished' => 'Workflow ${data['status']}',
+    'alert.created' => data['message'] as String? ?? 'Alert',
+    _ => type,
+  };
 }
 
 /// Seam so tests can inject a fake message stream instead of a socket.
 typedef WsConnector = Stream<dynamic> Function(Uri uri);
 
 final wsConnectorProvider = Provider<WsConnector>(
-  (ref) => (uri) => WebSocketChannel.connect(uri).stream,
+  (ref) =>
+      (uri) => WebSocketChannel.connect(uri).stream,
 );
 
 /// Reconnect delay; tests override to null to disable reconnecting.
-final wsReconnectDelayProvider =
-    Provider<Duration?>((ref) => const Duration(seconds: 5));
+final wsReconnectDelayProvider = Provider<Duration?>(
+  (ref) => const Duration(seconds: 5),
+);
 
 /// Live event stream for the active profile, with auto-reconnect.
 final eventsProvider = StreamProvider<LycosaEvent>((ref) async* {
@@ -66,7 +68,8 @@ final eventsProvider = StreamProvider<LycosaEvent>((ref) async* {
     try {
       await for (final message in connect(wsUri)) {
         yield LycosaEvent.fromJson(
-            jsonDecode(message as String) as Map<String, dynamic>);
+          jsonDecode(message as String) as Map<String, dynamic>,
+        );
       }
     } catch (_) {
       // fall through to reconnect

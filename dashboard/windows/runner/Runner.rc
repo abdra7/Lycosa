@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "local.lycosa" "\0"
-            VALUE "FileDescription", "lycosa_dashboard" "\0"
+            VALUE "FileDescription", "Lycosa" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "lycosa_dashboard" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 local.lycosa. All rights reserved." "\0"
             VALUE "OriginalFilename", "lycosa_dashboard.exe" "\0"
-            VALUE "ProductName", "lycosa_dashboard" "\0"
+            VALUE "ProductName", "Lycosa" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

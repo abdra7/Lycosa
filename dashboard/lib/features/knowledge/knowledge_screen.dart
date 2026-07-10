@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
+import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'providers.dart';
 
@@ -23,15 +24,19 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete collection?'),
-        content: Text('"$name" and all its documents and vectors will be '
-            'permanently deleted. This cannot be undone.'),
+        content: Text(
+          '"$name" and all its documents and vectors will be '
+          'permanently deleted. This cannot be undone.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete')),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -48,13 +53,15 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.friendly)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } on ControllerUnreachableException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.friendly)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } finally {
       ref.invalidate(collectionsProvider);
@@ -76,8 +83,10 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
               children: [
                 Row(
                   children: [
-                    Text('Collections',
-                        style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      'Collections',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                     const Spacer(),
                     IconButton(
                       tooltip: 'New collection',
@@ -101,8 +110,7 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
                               for (final c in list)
                                 ListTile(
                                   selected: c.id == _selectedId,
-                                  leading:
-                                      const Icon(Icons.folder_outlined),
+                                  leading: const Icon(Icons.folder_outlined),
                                   title: Text(c.name),
                                   subtitle: Text(c.embeddingBackend),
                                   trailing: IconButton(
@@ -127,9 +135,12 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
           Expanded(
             child: _selectedId == null
                 ? const Center(
-                    child: Text('Select a collection to see its documents.'))
+                    child: Text('Select a collection to see its documents.'),
+                  )
                 : _CollectionDetail(
-                    collectionId: _selectedId!, collectionName: _selectedName!),
+                    collectionId: _selectedId!,
+                    collectionName: _selectedName!,
+                  ),
           ),
         ],
       ),
@@ -164,8 +175,9 @@ class _CreateCollectionDialogState
     try {
       await client.createCollection(
         _name.text.trim(),
-        description:
-            _description.text.trim().isEmpty ? null : _description.text.trim(),
+        description: _description.text.trim().isEmpty
+            ? null
+            : _description.text.trim(),
       );
       ref.invalidate(collectionsProvider);
       if (mounted) Navigator.of(context).pop();
@@ -187,27 +199,33 @@ class _CreateCollectionDialogState
               controller: _name,
               autofocus: true,
               decoration: const InputDecoration(
-                  labelText: 'Name', hintText: 'flutter-docs'),
+                labelText: 'Name',
+                hintText: 'flutter-docs',
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _description,
-              decoration:
-                  const InputDecoration(labelText: 'Description (optional)'),
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+              ),
             ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Text(_error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ),
           ],
         ),
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
         FilledButton(onPressed: _create, child: const Text('Create')),
       ],
     );
@@ -215,8 +233,10 @@ class _CreateCollectionDialogState
 }
 
 class _CollectionDetail extends ConsumerStatefulWidget {
-  const _CollectionDetail(
-      {required this.collectionId, required this.collectionName});
+  const _CollectionDetail({
+    required this.collectionId,
+    required this.collectionName,
+  });
 
   final String collectionId;
   final String collectionName;
@@ -237,7 +257,8 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not open the file picker: $e')));
+          SnackBar(content: Text('Could not open the file picker: $e')),
+        );
       }
       return;
     }
@@ -247,29 +268,40 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
     setState(() => _uploading = true);
     try {
       final document = await client.uploadDocument(
-          widget.collectionId, file.name, file.bytes!);
+        widget.collectionId,
+        file.name,
+        file.bytes!,
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(document.status == 'embedded'
-                ? '${document.filename}: embedded as ${document.chunkCount} chunks'
-                : '${document.filename}: ${document.status} — ${document.error}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              document.status == 'embedded'
+                  ? '${document.filename}: embedded as ${document.chunkCount} chunks'
+                  : '${document.filename}: ${document.status} — ${document.error}',
+            ),
+          ),
+        );
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.friendly)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } on ControllerUnreachableException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.friendly)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } catch (e) {
       // e.g. file picker plugin failures — surface them instead of a
       // silently dead Upload button
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     } finally {
       // refresh even on failure: the controller records failed documents with
@@ -288,16 +320,19 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
         Row(
           children: [
             Expanded(
-              child: Text(widget.collectionName,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall),
+              child: Text(
+                widget.collectionName,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
             ),
             FilledButton.icon(
               icon: _uploading
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.upload_file),
               label: const Text('Upload document'),
               onPressed: _uploading ? null : _upload,
@@ -321,25 +356,26 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
                             d.status == 'embedded'
                                 ? Icons.check_circle_outline
                                 : d.status == 'failed'
-                                    ? Icons.error_outline
-                                    : Icons.hourglass_top,
-                            color: d.status == 'embedded'
-                                ? Colors.green
-                                : d.status == 'failed'
-                                    ? Theme.of(context).colorScheme.error
-                                    : Colors.orange,
+                                ? Icons.error_outline
+                                : Icons.hourglass_top,
+                            color: LycosaColors.status(d.status),
                           ),
                           title: Text(d.filename),
-                          subtitle: Text(d.status == 'embedded'
-                              ? '${d.chunkCount} chunks · ${(d.sizeBytes / 1024).toStringAsFixed(1)} KB'
-                              : d.error ?? d.status),
+                          subtitle: Text(
+                            d.status == 'embedded'
+                                ? '${d.chunkCount} chunks · ${(d.sizeBytes / 1024).toStringAsFixed(1)} KB'
+                                : d.error ?? d.status,
+                          ),
                         ),
                     ],
                   ),
           ),
         ),
         const Divider(),
-        Expanded(flex: 3, child: _Playground(collectionName: widget.collectionName)),
+        Expanded(
+          flex: 3,
+          child: _Playground(collectionName: widget.collectionName),
+        ),
       ],
     );
   }
@@ -392,8 +428,10 @@ class _PlaygroundState extends ConsumerState<_Playground> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Retrieval playground',
-            style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          'Retrieval playground',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -401,12 +439,15 @@ class _PlaygroundState extends ConsumerState<_Playground> {
               child: TextField(
                 controller: _query,
                 decoration: const InputDecoration(
-                    labelText: 'Query', isDense: true),
+                  labelText: 'Query',
+                  isDense: true,
+                ),
                 onSubmitted: (_) => _search(),
               ),
             ),
             Tooltip(
-              message: 'Search only this collection (otherwise the router '
+              message:
+                  'Search only this collection (otherwise the router '
                   'searches all collections)',
               child: Checkbox(
                 value: _scopeToCollection,
@@ -425,31 +466,34 @@ class _PlaygroundState extends ConsumerState<_Playground> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(_error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ),
         const SizedBox(height: 8),
         Expanded(
           child: _chunks == null
               ? const SizedBox.shrink()
               : _chunks!.isEmpty
-                  ? const Text('No results.')
-                  : ListView(
-                      children: [
-                        for (final chunk in _chunks!)
-                          Card(
-                            child: ListTile(
-                              dense: true,
-                              leading: Text(chunk.score.toStringAsFixed(2)),
-                              title: Text(chunk.text,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis),
-                              subtitle: Text(
-                                  '${chunk.collection}/${chunk.source}'),
-                            ),
+              ? const Text('No results.')
+              : ListView(
+                  children: [
+                    for (final chunk in _chunks!)
+                      Card(
+                        child: ListTile(
+                          dense: true,
+                          leading: Text(chunk.score.toStringAsFixed(2)),
+                          title: Text(
+                            chunk.text,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                      ],
-                    ),
+                          subtitle: Text('${chunk.collection}/${chunk.source}'),
+                        ),
+                      ),
+                  ],
+                ),
         ),
       ],
     );

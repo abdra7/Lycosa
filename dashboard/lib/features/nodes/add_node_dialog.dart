@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
+import '../../core/brand.dart';
 import '../../core/session.dart';
 
 /// Admin flow: mint a node API key and hand the operator the exact
@@ -49,7 +50,8 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
 
   String get _command {
     final baseUrl =
-        ref.read(sessionProvider).value?.activeProfile?.baseUrl ?? 'http://<controller>:8000';
+        ref.read(sessionProvider).value?.activeProfile?.baseUrl ??
+        'http://<controller>:8000';
     return 'LYCOSA_CONTROLLER_URL=$baseUrl \\\n'
         'LYCOSA_API_KEY=${_minted?.apiKey} \\\n'
         'lycosa-agent run';
@@ -75,7 +77,8 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Text('Create key'),
           ),
       ],
@@ -87,8 +90,10 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Mint a node API key. Install the agent on the machine, '
-            'then run it with this key — the node registers itself.'),
+        const Text(
+          'Mint a node API key. Install the agent on the machine, '
+          'then run it with this key — the node registers itself.',
+        ),
         const SizedBox(height: 12),
         TextField(
           controller: _name,
@@ -101,8 +106,10 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(_error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            child: Text(
+              _error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
           ),
       ],
     );
@@ -115,7 +122,7 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
       children: [
         Row(
           children: [
-            Icon(Icons.warning_amber, color: Theme.of(context).colorScheme.error),
+            const Icon(Icons.warning_amber, color: LycosaColors.warning),
             const SizedBox(width: 8),
             const Expanded(
               child: Text('Copy this key now — it will not be shown again.'),
@@ -132,8 +139,12 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
         const SizedBox(height: 4),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(8),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: LycosaColors.backgroundSecondary,
+            border: Border.all(color: LycosaColors.border),
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: const SelectableText(
             _installCommand,
             style: TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -144,8 +155,12 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
         const SizedBox(height: 4),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(8),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: LycosaColors.backgroundSecondary,
+            border: Border.all(color: LycosaColors.border),
+            borderRadius: BorderRadius.circular(10),
+          ),
           child: SelectableText(
             _command,
             style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -161,7 +176,8 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
               await Clipboard.setData(ClipboardData(text: _command));
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Copied to clipboard')));
+                  const SnackBar(content: Text('Copied to clipboard')),
+                );
               }
             },
           ),

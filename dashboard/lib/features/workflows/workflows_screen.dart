@@ -22,7 +22,10 @@ class WorkflowsScreen extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Text('Workflows', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                'Workflows',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const Spacer(),
               IconButton(
                 tooltip: 'Refresh',
@@ -53,12 +56,15 @@ class WorkflowsScreen extends ConsumerWidget {
                             child: ListTile(
                               leading: const Icon(Icons.account_tree_outlined),
                               title: Text(workflow.name),
-                              subtitle: Text(workflow.description ??
-                                  '${(workflow.definition['steps'] as List?)?.length ?? 0} steps'),
+                              subtitle: Text(
+                                workflow.description ??
+                                    '${(workflow.definition['steps'] as List?)?.length ?? 0} steps',
+                              ),
                               trailing: FilledButton.tonalIcon(
                                 icon: const Icon(Icons.play_arrow),
                                 label: const Text('Run'),
-                                onPressed: () => _promptAndRun(context, workflow),
+                                onPressed: () =>
+                                    _promptAndRun(context, workflow),
                               ),
                             ),
                           ),
@@ -107,15 +113,21 @@ class _RunInputDialogState extends ConsumerState<_RunInputDialog> {
       _error = null;
     });
     try {
-      final run = await client.runWorkflow(widget.workflow.id, _input.text.trim());
+      final run = await client.runWorkflow(
+        widget.workflow.id,
+        _input.text.trim(),
+      );
       if (mounted) {
         Navigator.of(context).pop();
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => RunScreen(
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => RunScreen(
               workflowName: widget.workflow.name,
               workflowId: run.workflowId,
-              runId: run.id),
-        ));
+              runId: run.id,
+            ),
+          ),
+        );
       }
     } on ApiException catch (e) {
       setState(() => _error = e.friendly);
@@ -150,20 +162,20 @@ class _RunInputDialogState extends ConsumerState<_RunInputDialog> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Text(_error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ),
           ],
         ),
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel')),
-        FilledButton(
-          onPressed: _busy ? null : _run,
-          child: const Text('Run'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
         ),
+        FilledButton(onPressed: _busy ? null : _run, child: const Text('Run')),
       ],
     );
   }
@@ -209,12 +221,12 @@ class _CreateWorkflowDialogState extends ConsumerState<CreateWorkflowDialog> {
       _error = null;
     });
     try {
-      final definition =
-          jsonDecode(_definition.text) as Map<String, dynamic>;
+      final definition = jsonDecode(_definition.text) as Map<String, dynamic>;
       await client.createWorkflow(
         name: _name.text.trim(),
-        description:
-            _description.text.trim().isEmpty ? null : _description.text.trim(),
+        description: _description.text.trim().isEmpty
+            ? null
+            : _description.text.trim(),
         definition: definition,
       );
       ref.invalidate(workflowsProvider);
@@ -246,8 +258,9 @@ class _CreateWorkflowDialogState extends ConsumerState<CreateWorkflowDialog> {
             const SizedBox(height: 8),
             TextField(
               controller: _description,
-              decoration:
-                  const InputDecoration(labelText: 'Description (optional)'),
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -263,23 +276,27 @@ class _CreateWorkflowDialogState extends ConsumerState<CreateWorkflowDialog> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Text(_error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
               ),
           ],
         ),
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: _busy ? null : _create,
           child: _busy
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : const Text('Create'),
         ),
       ],

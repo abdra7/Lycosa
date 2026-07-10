@@ -21,44 +21,52 @@ MockClient fakeController({String password = 'change-me'}) {
         final body = jsonDecode(request.body) as Map<String, dynamic>;
         if (body['password'] != password) {
           return http.Response(
-              jsonEncode({
-                'error': {'code': 'unauthorized', 'message': 'Invalid credentials'}
-              }),
-              401);
+            jsonEncode({
+              'error': {
+                'code': 'unauthorized',
+                'message': 'Invalid credentials',
+              },
+            }),
+            401,
+          );
         }
         revoked = false;
         return http.Response(
-            jsonEncode({
-              'access_token': 'tok-abc',
-              'token_type': 'bearer',
-              'expires_in': 3600
-            }),
-            200);
+          jsonEncode({
+            'access_token': 'tok-abc',
+            'token_type': 'bearer',
+            'expires_in': 3600,
+          }),
+          200,
+        );
       case '/api/v1/auth/logout':
         revoked = true;
         return http.Response('', 204);
       case '/api/v1/me':
         if (revoked || request.headers['Authorization'] != 'Bearer tok-abc') {
           return http.Response(
-              jsonEncode({
-                'error': {'code': 'unauthorized', 'message': 'Session revoked'}
-              }),
-              401);
+            jsonEncode({
+              'error': {'code': 'unauthorized', 'message': 'Session revoked'},
+            }),
+            401,
+          );
         }
         return http.Response(
-            jsonEncode({
-              'type': 'user',
-              'id': '11111111-1111-1111-1111-111111111111',
-              'role': 'admin',
-              'email': 'admin@lycosa.local',
-            }),
-            200);
+          jsonEncode({
+            'type': 'user',
+            'id': '11111111-1111-1111-1111-111111111111',
+            'role': 'admin',
+            'email': 'admin@lycosa.local',
+          }),
+          200,
+        );
       default:
         return http.Response(
-            jsonEncode({
-              'error': {'code': 'not_found', 'message': 'Not found'}
-            }),
-            404);
+          jsonEncode({
+            'error': {'code': 'not_found', 'message': 'Not found'},
+          }),
+          404,
+        );
     }
   });
 }
@@ -77,18 +85,23 @@ Widget appWith(InMemoryProfileStore store, MockClient controller) {
 }
 
 void main() {
-  testWidgets('first run: setup -> connect -> shell shows identity',
-      (tester) async {
+  testWidgets('first run: setup -> connect -> shell shows identity', (
+    tester,
+  ) async {
     final store = InMemoryProfileStore();
     await tester.pumpWidget(appWith(store, fakeController()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Connect to a Lycosa controller'), findsOneWidget);
+    expect(find.text('Connect to a controller'), findsOneWidget);
 
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Email'), 'admin@lycosa.local');
+      find.widgetWithText(TextFormField, 'Email'),
+      'admin@lycosa.local',
+    );
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Password'), 'change-me');
+      find.widgetWithText(TextFormField, 'Password'),
+      'change-me',
+    );
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
 
@@ -102,16 +115,21 @@ void main() {
     expect(store.activeId, store.profiles.single.id);
   });
 
-  testWidgets('bad credentials show the envelope error and stay on setup',
-      (tester) async {
+  testWidgets('bad credentials show the envelope error and stay on setup', (
+    tester,
+  ) async {
     final store = InMemoryProfileStore();
     await tester.pumpWidget(appWith(store, fakeController()));
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Email'), 'admin@lycosa.local');
+      find.widgetWithText(TextFormField, 'Email'),
+      'admin@lycosa.local',
+    );
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Password'), 'wrong');
+      find.widgetWithText(TextFormField, 'Password'),
+      'wrong',
+    );
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
 
@@ -119,11 +137,17 @@ void main() {
     expect(store.profiles, isEmpty);
   });
 
-  testWidgets('restored valid token goes straight to the shell', (tester) async {
+  testWidgets('restored valid token goes straight to the shell', (
+    tester,
+  ) async {
     final store = InMemoryProfileStore()
       ..profiles = [
         ControllerProfile(
-            id: 'p1', name: 'lab', baseUrl: 'http://c:8000', token: 'tok-abc')
+          id: 'p1',
+          name: 'lab',
+          baseUrl: 'http://c:8000',
+          token: 'tok-abc',
+        ),
       ]
       ..activeId = 'p1';
 
@@ -138,7 +162,11 @@ void main() {
     final store = InMemoryProfileStore()
       ..profiles = [
         ControllerProfile(
-            id: 'p1', name: 'lab', baseUrl: 'http://c:8000', token: 'tok-stale')
+          id: 'p1',
+          name: 'lab',
+          baseUrl: 'http://c:8000',
+          token: 'tok-stale',
+        ),
       ]
       ..activeId = 'p1';
 
@@ -153,7 +181,11 @@ void main() {
     final store = InMemoryProfileStore()
       ..profiles = [
         ControllerProfile(
-            id: 'p1', name: 'lab', baseUrl: 'http://c:8000', token: 'tok-abc')
+          id: 'p1',
+          name: 'lab',
+          baseUrl: 'http://c:8000',
+          token: 'tok-abc',
+        ),
       ]
       ..activeId = 'p1';
 

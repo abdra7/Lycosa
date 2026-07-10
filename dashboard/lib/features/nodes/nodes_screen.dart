@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
+import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'add_node_dialog.dart';
 import 'discovery.dart';
@@ -17,11 +18,8 @@ String heartbeatAge(DateTime? last) {
   return '${delta.inDays}d ago';
 }
 
-Color statusColor(BuildContext context, String status) => switch (status) {
-      'online' => Colors.green,
-      'offline' => Theme.of(context).colorScheme.error,
-      _ => Colors.orange, // registered
-    };
+Color statusColor(BuildContext context, String status) =>
+    LycosaColors.status(status);
 
 class StatusChip extends StatelessWidget {
   const StatusChip({super.key, required this.status});
@@ -76,18 +74,21 @@ class NodesScreen extends ConsumerWidget {
           Expanded(
             child: nodes.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(child: Text('Failed to load nodes: $error')),
+              error: (error, _) =>
+                  Center(child: Text('Failed to load nodes: $error')),
               data: (list) => list.isEmpty
                   ? const Center(
                       child: Text(
-                          'No nodes yet. Add one and run lycosa-agent on the machine.'))
+                        'No nodes yet. Add one and run lycosa-agent on the machine.',
+                      ),
+                    )
                   : _NodesTable(nodes: list),
             ),
           ),
           const SizedBox(height: 12),
           DiscoveryPanel(
             registeredNames: {
-              for (final node in nodes.value ?? const <NodeInfo>[]) node.name
+              for (final node in nodes.value ?? const <NodeInfo>[]) node.name,
             },
           ),
         ],
@@ -123,8 +124,10 @@ class _DiscoveryPanelState extends ConsumerState<DiscoveryPanel> {
       if (mounted) setState(() => _found = agents);
     } catch (e) {
       if (mounted) {
-        setState(() => _error =
-            'LAN scan failed: $e — mDNS needs UDP 5353 allowed on this machine.');
+        setState(
+          () => _error =
+              'LAN scan failed: $e — mDNS needs UDP 5353 allowed on this machine.',
+        );
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
@@ -138,15 +141,18 @@ class _DiscoveryPanelState extends ConsumerState<DiscoveryPanel> {
       children: [
         Row(
           children: [
-            Text('Discovered on LAN',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Discovered on LAN',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(width: 12),
             OutlinedButton.icon(
               icon: _scanning
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.radar),
               label: const Text('Scan'),
               onPressed: _scanning ? null : _scan,
@@ -155,17 +161,21 @@ class _DiscoveryPanelState extends ConsumerState<DiscoveryPanel> {
         ),
         const SizedBox(height: 8),
         if (_error != null)
-          Text(_error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error))
+          Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          )
         else if (_found == null)
           const Text(
-              'Scan finds machines running lycosa-agent with discovery enabled '
-              '(mDNS, UDP 5353).')
+            'Scan finds machines running lycosa-agent with discovery enabled '
+            '(mDNS, UDP 5353).',
+          )
         else if (_found!.isEmpty)
           const Text(
-              'No agents found. Check that lycosa-agent is running on the '
-              'device and the firewall allows UDP 5353 (mDNS) plus TCP 8010 '
-              '(agent exec API).')
+            'No agents found. Check that lycosa-agent is running on the '
+            'device and the firewall allows UDP 5353 (mDNS) plus TCP 8010 '
+            '(agent exec API).',
+          )
         else
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 160),
@@ -176,21 +186,25 @@ class _DiscoveryPanelState extends ConsumerState<DiscoveryPanel> {
                   ListTile(
                     dense: true,
                     leading: Icon(
-                        widget.registeredNames.contains(agent.name)
-                            ? Icons.check_circle
-                            : Icons.help_outline,
-                        size: 18,
-                        color: widget.registeredNames.contains(agent.name)
-                            ? Colors.green
-                            : Colors.orange),
+                      widget.registeredNames.contains(agent.name)
+                          ? Icons.check_circle
+                          : Icons.help_outline,
+                      size: 18,
+                      color: widget.registeredNames.contains(agent.name)
+                          ? LycosaColors.success
+                          : LycosaColors.warning,
+                    ),
                     title: Text(agent.name),
                     subtitle: Text(
-                        '${agent.address}:${agent.port}'
-                        '${agent.version != null ? ' · v${agent.version}' : ''}'),
-                    trailing: Text(widget.registeredNames.contains(agent.name)
-                        ? 'registered'
-                        : 'not registered — add a node key and run '
-                            'lycosa-agent with it'),
+                      '${agent.address}:${agent.port}'
+                      '${agent.version != null ? ' · v${agent.version}' : ''}',
+                    ),
+                    trailing: Text(
+                      widget.registeredNames.contains(agent.name)
+                          ? 'registered'
+                          : 'not registered — add a node key and run '
+                                'lycosa-agent with it',
+                    ),
                   ),
               ],
             ),
@@ -226,16 +240,21 @@ class _NodesTable extends StatelessWidget {
               DataRow(
                 onSelectChanged: (_) => Navigator.of(context).push(
                   MaterialPageRoute(
-                      builder: (_) => NodeDetailScreen(nodeId: node.id)),
+                    builder: (_) => NodeDetailScreen(nodeId: node.id),
+                  ),
                 ),
                 cells: [
                   DataCell(Text(node.name)),
                   DataCell(StatusChip(status: node.status)),
                   DataCell(Text(node.role ?? '—')),
-                  DataCell(Text(node.recommendedRole != null
-                      ? '${node.recommendedRole} '
-                          '(${((node.recommendationConfidence ?? 0) * 100).round()}%)'
-                      : '—')),
+                  DataCell(
+                    Text(
+                      node.recommendedRole != null
+                          ? '${node.recommendedRole} '
+                                '(${((node.recommendationConfidence ?? 0) * 100).round()}%)'
+                          : '—',
+                    ),
+                  ),
                   DataCell(Text(heartbeatAge(node.lastHeartbeatAt))),
                   DataCell(Text(_metric(node, 'cpu_percent', suffix: '%'))),
                   DataCell(Text(_metric(node, 'ram_percent', suffix: '%'))),

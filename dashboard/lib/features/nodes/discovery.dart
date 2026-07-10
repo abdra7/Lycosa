@@ -168,10 +168,13 @@ Future<RawDatagramSocket> _bindSafeSocket(
   bool reusePort = false,
   int ttl = 1,
 }) async {
-  final socket = await RawDatagramSocket.bind(host, port,
-      reuseAddress: reuseAddress,
-      reusePort: reusePort && !Platform.isWindows,
-      ttl: ttl);
+  final socket = await RawDatagramSocket.bind(
+    host,
+    port,
+    reuseAddress: reuseAddress,
+    reusePort: reusePort && !Platform.isWindows,
+    ttl: ttl,
+  );
   return SafeRawDatagramSocket(socket);
 }
 
@@ -190,16 +193,18 @@ Future<List<DiscoveredAgent>> scanForAgents() async {
     // ongoing lookup below is unaffected and keeps returning what it found.
     await client.start(onError: (Object _, StackTrace _) {});
     await for (final ptr in client.lookup<PtrResourceRecord>(
-        ResourceRecordQuery.serverPointer(lycosaServiceType),
-        timeout: lookupTimeout)) {
+      ResourceRecordQuery.serverPointer(lycosaServiceType),
+      timeout: lookupTimeout,
+    )) {
       final instance = ptr.domainName; // e.g. gpu-box._lycosa-agent._tcp.local
       final label = instance.split('.').first;
 
       String name = label;
       String? version;
       await for (final txt in client.lookup<TxtResourceRecord>(
-          ResourceRecordQuery.text(instance),
-          timeout: lookupTimeout)) {
+        ResourceRecordQuery.text(instance),
+        timeout: lookupTimeout,
+      )) {
         for (final line in txt.text.split('\n')) {
           final separator = line.indexOf('=');
           if (separator <= 0) continue;
@@ -211,11 +216,13 @@ Future<List<DiscoveredAgent>> scanForAgents() async {
       }
 
       await for (final srv in client.lookup<SrvResourceRecord>(
-          ResourceRecordQuery.service(instance),
-          timeout: lookupTimeout)) {
+        ResourceRecordQuery.service(instance),
+        timeout: lookupTimeout,
+      )) {
         await for (final a in client.lookup<IPAddressResourceRecord>(
-            ResourceRecordQuery.addressIPv4(srv.target),
-            timeout: lookupTimeout)) {
+          ResourceRecordQuery.addressIPv4(srv.target),
+          timeout: lookupTimeout,
+        )) {
           found[instance] = DiscoveredAgent(
             name: name,
             address: a.address.address,
@@ -228,6 +235,5 @@ Future<List<DiscoveredAgent>> scanForAgents() async {
   } finally {
     client.stop();
   }
-  return found.values.toList()
-    ..sort((a, b) => a.name.compareTo(b.name));
+  return found.values.toList()..sort((a, b) => a.name.compareTo(b.name));
 }

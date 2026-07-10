@@ -160,9 +160,7 @@ jobs:
           APPDIR=$(mktemp -d)/Lycosa.AppDir
           mkdir -p "$APPDIR/usr"
           cp -r build/linux/x64/release/bundle/* "$APPDIR/usr/"
-          # placeholder icon until the project ships branded artwork
-          convert -size 256x256 xc:'#4527A0' -fill white -gravity center \
-            -pointsize 160 -annotate 0 'L' "$APPDIR/lycosa.png"
+          cp installers/linux/lycosa.png "$APPDIR/lycosa.png"
           printf '%s\n' '[Desktop Entry]' 'Name=Lycosa' 'Exec=lycosa_dashboard' \
             'Icon=lycosa' 'Type=Application' 'Categories=Utility;' \
             > "$APPDIR/lycosa.desktop"

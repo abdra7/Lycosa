@@ -16,18 +16,26 @@ class ControllerProfile {
   final String baseUrl;
   final String? token; // null = not logged in
 
-  ControllerProfile copyWith({String? name, String? baseUrl, String? Function()? token}) =>
+  ControllerProfile copyWith({
+    String? name,
+    String? baseUrl,
+    String? Function()? token,
+  }) => ControllerProfile(
+    id: id,
+    name: name ?? this.name,
+    baseUrl: baseUrl ?? this.baseUrl,
+    token: token != null ? token() : this.token,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'baseUrl': baseUrl,
+    'token': token,
+  };
+
+  factory ControllerProfile.fromJson(Map<String, dynamic> json) =>
       ControllerProfile(
-        id: id,
-        name: name ?? this.name,
-        baseUrl: baseUrl ?? this.baseUrl,
-        token: token != null ? token() : this.token,
-      );
-
-  Map<String, dynamic> toJson() =>
-      {'id': id, 'name': name, 'baseUrl': baseUrl, 'token': token};
-
-  factory ControllerProfile.fromJson(Map<String, dynamic> json) => ControllerProfile(
         id: json['id'] as String,
         name: json['name'] as String,
         baseUrl: json['baseUrl'] as String,
@@ -47,7 +55,7 @@ abstract class ProfileStore {
 /// (Windows Credential Manager / macOS Keychain / libsecret).
 class SecureProfileStore implements ProfileStore {
   SecureProfileStore([FlutterSecureStorage? storage])
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   static const _profilesKey = 'lycosa_profiles';
   static const _activeKey = 'lycosa_active_profile';
@@ -66,9 +74,9 @@ class SecureProfileStore implements ProfileStore {
 
   @override
   Future<void> saveProfiles(List<ControllerProfile> profiles) => _storage.write(
-        key: _profilesKey,
-        value: jsonEncode(profiles.map((p) => p.toJson()).toList()),
-      );
+    key: _profilesKey,
+    value: jsonEncode(profiles.map((p) => p.toJson()).toList()),
+  );
 
   @override
   Future<String?> loadActiveId() => _storage.read(key: _activeKey);

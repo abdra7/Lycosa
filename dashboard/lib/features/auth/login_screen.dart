@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_exception.dart';
+import '../../core/brand.dart';
 import '../../core/session.dart';
+import '../../widgets/lycosa_brand.dart';
 
 /// Login for an existing profile (token missing, expired, or revoked).
 class LoginScreen extends ConsumerStatefulWidget {
@@ -45,62 +47,79 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final profile =
-        ref.watch(sessionProvider).value?.activeProfile;
+    final profile = ref.watch(sessionProvider).value?.activeProfile;
     return Scaffold(
+      backgroundColor: LycosaColors.backgroundSecondary,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 380),
-          child: Card(
-            margin: const EdgeInsets.all(24),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Sign in',
-                      style: Theme.of(context).textTheme.titleLarge),
-                  if (profile != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text('${profile.name} — ${profile.baseUrl}',
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _email,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _password,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Password'),
-                    onSubmitted: (_) => _login(),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        _error!,
-                        style:
-                            TextStyle(color: Theme.of(context).colorScheme.error),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const LycosaBrandHero(),
+              const SizedBox(height: 20),
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 24),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Sign in',
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                    ),
-                  FilledButton(
-                    onPressed: _busy ? null : _login,
-                    child: _busy
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Sign in'),
+                      if (profile != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            '${profile.name} — ${profile.baseUrl}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _email,
+                        decoration: const InputDecoration(labelText: 'Email'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _password,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                        ),
+                        onSubmitted: (_) => _login(),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            _error!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      FilledButton(
+                        onPressed: _busy ? null : _login,
+                        child: _busy
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Sign in'),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

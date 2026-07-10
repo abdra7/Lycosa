@@ -24,6 +24,7 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName=Lycosa
+SetupIconFile=..\..\windows\runner\resources\app_icon.ico
 
 [Tasks]
 Name: desktopicon; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"

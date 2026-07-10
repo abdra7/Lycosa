@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
+import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'providers.dart';
 
@@ -57,10 +58,10 @@ class _StatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, icon) = switch (run.status) {
-      'succeeded' => (Colors.green, Icons.check_circle),
-      'failed' => (Theme.of(context).colorScheme.error, Icons.error),
-      'paused' => (Colors.orange, Icons.pause_circle),
-      _ => (Colors.blue, Icons.sync),
+      'succeeded' => (LycosaColors.success, Icons.check_circle),
+      'failed' => (LycosaColors.error, Icons.error),
+      'paused' => (LycosaColors.warning, Icons.pause_circle),
+      _ => (LycosaColors.loading, Icons.sync),
     };
     return Card(
       child: Padding(
@@ -73,14 +74,21 @@ class _StatusBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Status: ${run.status}'
-                      '${run.currentStep != null && !run.isFinished ? ' (at ${run.currentStep})' : ''}'),
-                  Text('Input: ${run.input}',
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    'Status: ${run.status}'
+                    '${run.currentStep != null && !run.isFinished ? ' (at ${run.currentStep})' : ''}',
+                  ),
+                  Text(
+                    'Input: ${run.input}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   if (run.error != null)
-                    Text(run.error!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error)),
+                    Text(
+                      run.error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -99,11 +107,11 @@ class _StepTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, icon) = switch (step.status) {
-      'succeeded' => (Colors.green, Icons.check_circle_outline),
-      'failed' => (Theme.of(context).colorScheme.error, Icons.highlight_off),
-      'skipped' => (Colors.grey, Icons.redo),
-      'pending_approval' => (Colors.orange, Icons.hourglass_top),
-      _ => (Colors.blue, Icons.sync),
+      'succeeded' => (LycosaColors.success, Icons.check_circle_outline),
+      'failed' => (LycosaColors.error, Icons.highlight_off),
+      'skipped' => (LycosaColors.textSecondary, Icons.redo),
+      'pending_approval' => (LycosaColors.warning, Icons.hourglass_top),
+      _ => (LycosaColors.loading, Icons.sync),
     };
     final hasBody = step.output != null || step.error != null;
     return Card(
@@ -111,16 +119,21 @@ class _StepTile extends StatelessWidget {
           ? ExpansionTile(
               leading: Icon(icon, color: color),
               title: Text(step.stepId),
-              subtitle: Text('${step.kind} · ${step.status}'
-                  '${step.attempt > 1 ? ' · attempt ${step.attempt}' : ''}'),
+              subtitle: Text(
+                '${step.kind} · ${step.status}'
+                '${step.attempt > 1 ? ' · attempt ${step.attempt}' : ''}',
+              ),
               childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               expandedCrossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (step.output != null) SelectableText(step.output!),
                 if (step.error != null)
-                  SelectableText(step.error!,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error)),
+                  SelectableText(
+                    step.error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
               ],
             )
           : ListTile(
@@ -150,12 +163,16 @@ class _ApprovalBarState extends ConsumerState<_ApprovalBar> {
     setState(() => _busy = true);
     try {
       await client.approveRun(
-          widget.runKey.workflowId, widget.runKey.runId, approved);
+        widget.runKey.workflowId,
+        widget.runKey.runId,
+        approved,
+      );
       ref.invalidate(runProvider(widget.runKey));
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.friendly)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -170,10 +187,11 @@ class _ApprovalBarState extends ConsumerState<_ApprovalBar> {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            const Icon(Icons.pause_circle, color: Colors.orange),
+            const Icon(Icons.pause_circle, color: LycosaColors.warning),
             const SizedBox(width: 8),
             const Expanded(
-                child: Text('This run is paused waiting for your approval.')),
+              child: Text('This run is paused waiting for your approval.'),
+            ),
             OutlinedButton(
               onPressed: _busy ? null : () => _resolve(false),
               child: const Text('Reject'),

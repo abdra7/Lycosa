@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../docs/assets/lycosa-logo.png" alt="Lycosa" width="96" />
+</p>
+
 # Lycosa Dashboard
 
 Native Flutter Desktop operator dashboard (macOS/Windows/Linux) for the
@@ -39,3 +43,12 @@ default admin from your `.env`).
 - **Secrets:** controller profiles (URL + bearer token) live in the OS
   keychain via `flutter_secure_storage`.
 - **Live data:** REST polling until the Sprint 9 WebSocket event stream.
+
+## Brand & theme
+
+The visual identity lives in `lib/core/brand.dart`: `LycosaColors` (primary
+`#A8C7FA`, neutrals, and fixed status tokens), `LycosaMotion` (150–250 ms
+transitions), and `LycosaTheme` (the full Material theme). The logo lockup
+widgets are in `lib/widgets/lycosa_brand.dart`, and the logo asset ships from
+`assets/brand/`. Use these tokens instead of hardcoding colors or durations;
+platform app icons are generated from `docs/assets/lycosa-logo-source.png`.

@@ -6,21 +6,20 @@ import 'api_exception.dart';
 import 'profiles.dart';
 
 /// Seams tests override.
-final profileStoreProvider = Provider<ProfileStore>((ref) => SecureProfileStore());
+final profileStoreProvider = Provider<ProfileStore>(
+  (ref) => SecureProfileStore(),
+);
 
 typedef ApiClientFactory = ApiClient Function(String baseUrl, {String? token});
 
 final apiClientFactoryProvider = Provider<ApiClientFactory>(
-  (ref) => (baseUrl, {token}) =>
-      ApiClient(baseUrl: baseUrl, token: token, httpClient: http.Client()),
+  (ref) =>
+      (baseUrl, {token}) =>
+          ApiClient(baseUrl: baseUrl, token: token, httpClient: http.Client()),
 );
 
 class SessionState {
-  const SessionState({
-    this.profiles = const [],
-    this.activeId,
-    this.principal,
-  });
+  const SessionState({this.profiles = const [], this.activeId, this.principal});
 
   final List<ControllerProfile> profiles;
   final String? activeId;
@@ -40,12 +39,11 @@ class SessionState {
     List<ControllerProfile>? profiles,
     String? Function()? activeId,
     Principal? Function()? principal,
-  }) =>
-      SessionState(
-        profiles: profiles ?? this.profiles,
-        activeId: activeId != null ? activeId() : this.activeId,
-        principal: principal != null ? principal() : this.principal,
-      );
+  }) => SessionState(
+    profiles: profiles ?? this.profiles,
+    activeId: activeId != null ? activeId() : this.activeId,
+    principal: principal != null ? principal() : this.principal,
+  );
 }
 
 class SessionController extends AsyncNotifier<SessionState> {
@@ -63,11 +61,17 @@ class SessionController extends AsyncNotifier<SessionState> {
     final active = state.activeProfile;
     if (active?.token != null) {
       try {
-        final principal = await _client(active!.baseUrl, token: active.token).me();
+        final principal = await _client(
+          active!.baseUrl,
+          token: active.token,
+        ).me();
         state = state.copyWith(principal: () => principal);
       } on ApiException catch (e) {
         if (e.isUnauthorized) {
-          state = await _updateProfile(state, active!.copyWith(token: () => null));
+          state = await _updateProfile(
+            state,
+            active!.copyWith(token: () => null),
+          );
         } else {
           rethrow;
         }
@@ -79,9 +83,12 @@ class SessionController extends AsyncNotifier<SessionState> {
   }
 
   Future<SessionState> _updateProfile(
-      SessionState state, ControllerProfile updated) async {
-    final profiles =
-        state.profiles.map((p) => p.id == updated.id ? updated : p).toList();
+    SessionState state,
+    ControllerProfile updated,
+  ) async {
+    final profiles = state.profiles
+        .map((p) => p.id == updated.id ? updated : p)
+        .toList();
     await _store.saveProfiles(profiles);
     return state.copyWith(profiles: profiles);
   }
@@ -108,11 +115,13 @@ class SessionController extends AsyncNotifier<SessionState> {
     final profiles = [...current.profiles, profile];
     await _store.saveProfiles(profiles);
     await _store.saveActiveId(profile.id);
-    state = AsyncData(SessionState(
-      profiles: profiles,
-      activeId: profile.id,
-      principal: principal,
-    ));
+    state = AsyncData(
+      SessionState(
+        profiles: profiles,
+        activeId: profile.id,
+        principal: principal,
+      ),
+    );
   }
 
   /// Login on the already-active profile.
@@ -121,8 +130,10 @@ class SessionController extends AsyncNotifier<SessionState> {
     final profile = current.activeProfile!;
     final token = await _client(profile.baseUrl).login(email, password);
     final principal = await _client(profile.baseUrl, token: token).me();
-    final updated =
-        await _updateProfile(current, profile.copyWith(token: () => token));
+    final updated = await _updateProfile(
+      current,
+      profile.copyWith(token: () => token),
+    );
     state = AsyncData(updated.copyWith(principal: () => principal));
   }
 
@@ -135,8 +146,10 @@ class SessionController extends AsyncNotifier<SessionState> {
       } on Exception {
         // token wiped locally regardless; server session expires on its own
       }
-      final updated =
-          await _updateProfile(current, profile!.copyWith(token: () => null));
+      final updated = await _updateProfile(
+        current,
+        profile!.copyWith(token: () => null),
+      );
       state = AsyncData(updated.copyWith(principal: () => null));
     }
   }
@@ -147,13 +160,17 @@ class SessionController extends AsyncNotifier<SessionState> {
   }
 }
 
-final sessionProvider =
-    AsyncNotifierProvider<SessionController, SessionState>(SessionController.new);
+final sessionProvider = AsyncNotifierProvider<SessionController, SessionState>(
+  SessionController.new,
+);
 
 /// Client bound to the active authenticated profile — screens in 8b+ use this.
 final activeApiClientProvider = Provider<ApiClient?>((ref) {
   final session = ref.watch(sessionProvider).value;
   final profile = session?.activeProfile;
   if (profile?.token == null) return null;
-  return ref.read(apiClientFactoryProvider)(profile!.baseUrl, token: profile.token);
+  return ref.read(apiClientFactoryProvider)(
+    profile!.baseUrl,
+    token: profile.token,
+  );
 });
