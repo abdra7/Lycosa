@@ -273,9 +273,14 @@ class _MetricsCard extends StatelessWidget {
             child: Text(label, style: Theme.of(context).textTheme.bodySmall),
           ),
           Expanded(
-            child: LinearProgressIndicator(
-              value: (percent ?? 0) / 100,
-              minHeight: 8,
+            // LinearProgressIndicator snaps to a new value instantly; tweening
+            // it between polls is what reads as "live" rather than a slideshow.
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(end: (percent ?? 0) / 100),
+              duration: const Duration(milliseconds: 700),
+              curve: Curves.easeOut,
+              builder: (context, value, _) =>
+                  LinearProgressIndicator(value: value, minHeight: 8),
             ),
           ),
           const SizedBox(width: 8),
