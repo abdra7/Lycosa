@@ -6,6 +6,57 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-12
+
+Production-readiness release: zero-configuration startup, hardened deployment
+scaffolding, and a brute-force defense on login. Full detail in
+`docs/QA_v0.3.0.md` (release audit + readiness scorecard).
+
+### Added
+
+- **Zero-configuration startup (ADR-022)** — a fresh clone now runs with no
+  `.env`: `docker compose -f infra/docker-compose.yml up --build -d` boots
+  directly against committed safe defaults (`infra/compose-defaults.env`). The
+  API generates a strong `JWT_SECRET` and a random admin password on first run,
+  persists them in the `api_data` volume, and prints the admin password once in
+  the `api` container logs. An optional root `.env` still overrides everything
+  (the installers continue to generate one), so existing setups are unchanged.
+
+- **Login brute-force throttle (ADR-023)** — `/api/v1/auth/login` now enforces a
+  per-IP failed-login sliding window on top of the global rate limit. After
+  `AUTH_MAX_FAILED_LOGINS` failures (default 10) within
+  `AUTH_LOGIN_WINDOW_SECONDS` (default 300 s) an IP gets `429` + `Retry-After`
+  and an `auth.login.throttled` audit event; a successful login clears the
+  counter. Per-IP rather than per-account so an attacker can't lock out a known
+  admin. Set `AUTH_MAX_FAILED_LOGINS=0` to disable.
+
+### Changed
+
+- **Deployment hardening (ADR-022)** — Postgres, Qdrant, and Prometheus now bind
+  to `127.0.0.1` instead of every interface (Qdrant ships no auth by default and
+  was previously LAN-reachable, bypassing API auth); only the API (`:8000`) and
+  Grafana (`:3001`) stay LAN-exposed. Every service gained `restart:
+  unless-stopped` and json-file log rotation (10 MB × 3), Grafana now waits for a
+  healthy Prometheus, and `QDRANT_API_KEY` is plumbed through the backend client
+  for operators who enable Qdrant auth.
+
+- **Dashboard theme no longer flashes on launch** — the saved light/dark choice
+  is read before the first frame instead of asynchronously after startup, so
+  dark-mode users no longer see a light flash on every launch. Light remains the
+  default.
+
+### Security
+
+- **Fail-fast on default secrets in production (#7, ADR-022)** — with
+  `ENVIRONMENT=production` the API refuses to start when the database password is
+  a known default/placeholder (and, as defense-in-depth, when the JWT or admin
+  secrets are placeholders), instead of silently serving with weak credentials.
+
+- **Login brute-force throttle (ADR-023)** — see Added. The v0.3.0 security probe
+  also re-confirmed no path-traversal / zip-slip exposure in document ingestion
+  (uploaded filenames never touch the filesystem and no archive is ever
+  extracted) and that the node model-pull API is token-gated.
+
 ## [0.2.1] - 2026-07-11
 
 ### Security
@@ -174,7 +225,8 @@ desktop dashboard.
   image, desktop installers (.dmg / .exe / .AppImage) built by a tagged
   release workflow, and an agent installer script.
 
-[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/abdra7/Lycosa/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/abdra7/Lycosa/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/abdra7/Lycosa/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/abdra7/Lycosa/releases/tag/v0.1.0
