@@ -49,6 +49,7 @@ async def retrieve(
     top_k: int = 5,
     requested_by_user_id: uuid.UUID | None = None,
     requested_by_api_key_id: uuid.UUID | None = None,
+    min_score: float = 0.0,
 ) -> RetrievalResult:
     started = time.perf_counter()
 
@@ -93,6 +94,8 @@ async def retrieve(
     # merge across collections by relevance; collection order (freshness)
     # already breaks exact ties because sort is stable
     chunks.sort(key=lambda c: c.score, reverse=True)
+    if min_score > 0.0:
+        chunks = [c for c in chunks if c.score >= min_score]
     chunks = chunks[:top_k]
 
     latency_ms = (time.perf_counter() - started) * 1000
