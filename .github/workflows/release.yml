@@ -199,8 +199,11 @@ jobs:
       - name: Extract release notes from CHANGELOG.md
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          awk -v ver="$VERSION" '
-            $0 ~ "^## \\[" ver "\\]" { flag = 1; next }
+          # match the section header by literal prefix (index), not a dynamic
+          # regex: gawk 5.4 rewrites the escaped "\\[" into a character class
+          # and silently matches nothing.
+          awk -v hdr="## [$VERSION]" '
+            index($0, hdr) == 1 { flag = 1; next }
             /^## \[/ { if (flag) exit }
             flag { print }
           ' CHANGELOG.md > release_notes.md
