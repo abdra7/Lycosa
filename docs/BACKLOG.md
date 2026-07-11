@@ -77,12 +77,16 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
 ## Config / ops (not code)
 
 - Dependency automation is live (ADR-021): Dependabot weekly + security
-  updates, `protect-main` ruleset requiring green CI on PRs. 2026-07-11 bumps
-  merged (Actions, Prometheus v3.13, Grafana 13, Qdrant v1.18, python
-  3.14-slim image) — the running stack won't pick them up until
+  updates, `protect-main` ruleset requiring green CI on PRs.
+- **RESOLVED 2026-07-12** — the live dev stack was rebuilt onto the hardened
+  v0.3.0 compose with the merged image bumps (Prometheus v3.13.1, Grafana
+  13.1.0, Qdrant v1.18.2, `python:3.14-slim` api) via
   `docker compose -f infra/docker-compose.yml up -d --build --pull always`.
-- The live dev stack runs with placeholder secrets (`JWT_SECRET`,
-  `POSTGRES_PASSWORD`, Grafana) and a corrupted root `.env` (an accidental
-  PowerShell paste clobbered `DEFAULT_ADMIN_PASSWORD` and left a node API key in
-  the file). Fine on a trusted LAN; **rotate secrets and clean `.env` before any
-  exposure.** Left untouched per instruction — see #7 for the code-side guard.
+  Datastores now bind to `127.0.0.1`, all services have `restart:
+  unless-stopped`.
+- **RESOLVED 2026-07-12** — live-stack secrets rotated and the corrupted root
+  `.env` rewritten clean (54 lines, `ENVIRONMENT=production`): new `JWT_SECRET`,
+  Postgres role password (`ALTER USER`), Grafana admin password (`grafana cli
+  reset-admin-password`), and the admin app password (in-DB hash update). The
+  leaked node API key (prefix `da836410`) was revoked. Dev data preserved
+  (4 nodes, 33 tasks, 3 documents). Code-side guard for defaults is #7 (ADR-022).
