@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-11
+
 ### Added
 
 - **Grounded knowledge answers (ADR-019)** — knowledge-driven tasks now answer
@@ -160,5 +162,6 @@ desktop dashboard.
   image, desktop installers (.dmg / .exe / .AppImage) built by a tagged
   release workflow, and an agent installer script.
 
-[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/abdra7/Lycosa/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/abdra7/Lycosa/releases/tag/v0.1.0
