@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # curl is used by the compose healthcheck
 RUN apt-get update \
