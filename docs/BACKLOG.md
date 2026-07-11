@@ -13,6 +13,10 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
   closed). Limiter keys on client IP only.
 - **Delete a decommissioned node** — shipped (`DELETE /api/v1/nodes/{id}` +
   dashboard admin action).
+- **Fail-fast on default/placeholder secrets in production (#7)** — FIXED in
+  v0.3.0 (ADR-022), together with zero-config startup (first-run generated
+  secrets) and compose hardening (localhost-bound datastores, restart
+  policies, log rotation).
 
 ## Open GitHub issues (from the v0.2.0 QA audit)
 
@@ -24,8 +28,6 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
   throughput ceiling under concurrency) — *enhancement*
 - **#5** QA: distributed load-testing harness (hey/k6) off-laptop for real
   capacity numbers — *tech-debt*
-- **#7** Security: fail-fast on default/placeholder secrets when
-  `ENVIRONMENT=production` — *security*
 - **#8** Security: document/harden the RAG prompt-injection trust boundary
   (currently operator-gated upload) — *security*
 - **#9** Observability: return `503` (not opaque `500`) when a datastore is down
@@ -58,6 +60,11 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
   ignore-major): the existing `postgres_data` volume is data-directory
   incompatible with 18; needs a dump/restore or `pg_upgrade` migration path,
   ideally scripted for existing installs. Re-enable the major when planned.
+- ADR-022 residuals: per-service compose env scoping (postgres/api/grafana
+  still receive the full root `.env` when one exists); auto-generated Qdrant
+  API key shared between the qdrant service and the api (today Qdrant auth is
+  opt-in via `QDRANT_API_KEY`, mitigated by the 127.0.0.1 port binding); TLS
+  guidance for LAN deployments (reverse-proxy example).
 - Align the Python version story: the backend image now runs
   `python:3.14-slim` (merged 2026-07-11) while CI, `requires-python`, and
   ruff `target-version` still say 3.11. Works (validated), but pick one:
