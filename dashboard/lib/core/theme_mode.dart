@@ -37,23 +37,24 @@ final themeModeStoreProvider = Provider<ThemeModeStore>(
   (ref) => SecureThemeModeStore(),
 );
 
-/// Light/dark preference. Defaults to light (brand spec is light-first),
-/// restores the saved choice on startup, and persists every change.
-class ThemeModeController extends Notifier<ThemeMode> {
-  @override
-  ThemeMode build() {
-    _restore();
+/// Saved theme read before `runApp` so the very first frame is already the
+/// right theme — no light flash for dark-mode users. Light on empty/error.
+Future<ThemeMode> loadInitialThemeMode(ThemeModeStore store) async {
+  try {
+    return await store.load() == 'dark' ? ThemeMode.dark : ThemeMode.light;
+  } on Exception {
     return ThemeMode.light;
   }
+}
 
-  Future<void> _restore() async {
-    try {
-      final saved = await ref.read(themeModeStoreProvider).load();
-      if (saved == 'dark') state = ThemeMode.dark;
-    } on Exception {
-      // storage unavailable (e.g. tests) → keep the light default
-    }
-  }
+/// Seeded in main() with the pre-frame value; light-first per the brand spec.
+final initialThemeModeProvider = Provider<ThemeMode>((_) => ThemeMode.light);
+
+/// Light/dark preference. Starts from the pre-frame initial value and
+/// persists every change.
+class ThemeModeController extends Notifier<ThemeMode> {
+  @override
+  ThemeMode build() => ref.read(initialThemeModeProvider);
 
   void toggle() =>
       set(state == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark);

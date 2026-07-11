@@ -8,8 +8,16 @@ import 'features/auth/login_screen.dart';
 import 'features/setup/connection_screen.dart';
 import 'features/shell/shell_screen.dart';
 
-void main() {
-  runApp(const ProviderScope(child: LycosaApp()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // read the saved theme before the first frame so it never flashes light
+  final initialTheme = await loadInitialThemeMode(SecureThemeModeStore());
+  runApp(
+    ProviderScope(
+      overrides: [initialThemeModeProvider.overrideWithValue(initialTheme)],
+      child: const LycosaApp(),
+    ),
+  );
 }
 
 class LycosaApp extends ConsumerWidget {
