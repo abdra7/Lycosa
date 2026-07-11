@@ -553,3 +553,48 @@ table covers 8000/8010/5353). SSDP was rejected: DNS-SD is the standard for
 service discovery on modern LANs and both ecosystems (python zeroconf, Dart
 multicast_dns) are mature. Controller-side discovery can be revisited if the
 controller ever runs with host networking.
+
+---
+
+## ADR-019: Grounded knowledge tasks — inject a grounding instruction, refuse when no relevant context
+
+**Date:** 2026-07-11
+
+**Context:** v0.2.0 Phase 4 & 5 validation, run live against a real Ollama
+`llama3.2:1b` node, showed the RAG path could hallucinate: a neutral,
+out-of-scope prompt ("In which city is the Lycosa headquarters located?" — not
+in any document) made the model fabricate "Dallas, Texas" and falsely attribute
+it to the retrieved context. Two platform causes: (1) the Knowledge Router had
+no relevance threshold, so it always returned top-k chunks even when the best
+match was irrelevant (with the default `hashing` embedder an out-of-scope query
+even scored *higher*, 0.40, than an in-scope one, 0.23 — bag-of-words overlap on
+common words); (2) nothing instructed the LLM to answer only from context, so
+grounding happened only if the operator's own prompt said so. FR-6/FR-9 and the
+v0.2.0 playbook require the model to admit uncertainty ("I cannot answer this
+based on the retrieved knowledge.") when the answer is not in the sources.
+
+**Decision:**
+- **Grounding instruction:** when a task retrieves knowledge and finds relevant
+  context, the orchestrator wraps the dispatched prompt with an instruction to
+  answer using ONLY the retrieved context and, if the answer is absent, to reply
+  with the exact sentence `GROUNDED_REFUSAL`. The instruction is embedder- and
+  model-agnostic — it works even when scores are unreliable.
+- **Refusal short-circuit:** when retrieval *succeeds* but yields no relevant
+  chunks, the orchestrator returns `GROUNDED_REFUSAL` directly (task
+  `succeeded`, `result.grounded=false`, no node, no LLM call) instead of
+  dispatching an ungrounded prompt. A retrieval *infra failure* (e.g. Qdrant
+  down) is explicitly distinguished and still degrades to dispatch-without-
+  context — an outage is not an out-of-scope question.
+- **Tunable threshold:** `RETRIEVAL_MIN_SCORE` (default `0.0` = off, so the
+  public `/retrieve` API is unchanged) filters low-score chunks before they
+  reach an LLM; the task path passes it in. It is mainly useful with the
+  `fastembed` backend, whose scores are semantically meaningful; the grounding
+  instruction is the guarantee that does not depend on score calibration.
+
+**Consequences:** Knowledge-driven tasks no longer confidently invent answers
+for out-of-scope questions; in-scope grounded answers are unchanged (verified
+live: returned "Tarantula-7" and "42 nodes" from the ingested doc). The refusal
+is identical whether the LLM emits it or the orchestrator short-circuits it.
+Non-knowledge tasks are untouched. The `hashing` embedder's scores remain
+unreliable for thresholding — semantic precision/recall still wants `fastembed`
+(tracked as a separate backlog/issue). No API contract change.
