@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # knowledge plane (ADR-013)
     embedding_backend: str = "hashing"  # hashing | fastembed
     embedding_dim: int = 384
+    # grounding (ADR-019): drop retrieved chunks scoring below this before they
+    # reach an LLM. 0.0 keeps every chunk (the /retrieve API default); the
+    # task-grounding path in the orchestrator applies it so out-of-scope queries
+    # yield no context and trigger the grounded refusal instead of hallucination.
+    retrieval_min_score: float = 0.0
 
 
 @lru_cache

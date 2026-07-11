@@ -29,6 +29,22 @@ logger = logging.getLogger("lycosa.orchestrator")
 
 AGENT_TOKEN_HEADER = "X-Agent-Token"
 
+# Grounding (ADR-019): the exact sentence a grounded task returns when the
+# retrieved knowledge does not contain the answer. Kept as a constant so the
+# refusal is identical whether the LLM produces it (per the instruction below)
+# or the orchestrator short-circuits it (no relevant context at all).
+GROUNDED_REFUSAL = "I cannot answer this based on the retrieved knowledge."
+
+_GROUNDING_INSTRUCTION = (
+    "Answer the task using ONLY the retrieved context below. "
+    "Do not use any outside or prior knowledge. If the context does not "
+    f'contain the answer, reply with exactly this sentence: "{GROUNDED_REFUSAL}"\n\n'
+)
+
+
+def _grounded_prompt(context_text: str, task_prompt: str) -> str:
+    return f"{_GROUNDING_INSTRUCTION}Retrieved context:\n{context_text}\n\n---\n\nTask: {task_prompt}"
+
 
 def _select_model(node: Node, requested: str | None) -> str | None:
     if requested:
@@ -93,20 +109,37 @@ async def submit_task(
         body.prompt if task_type == TaskType.RETRIEVAL else None
     )
     if knowledge_query:
+        retrieval_failed = False
+        knowledge = None
         try:
             knowledge = await retrieve(
                 db,
                 knowledge_query,
                 requested_by_user_id=created_by_user_id,
                 requested_by_api_key_id=created_by_api_key_id,
+                min_score=get_settings().retrieval_min_score,
             )
-            if knowledge.chunks:
-                prompt = (
-                    "Use the following retrieved context to complete the task.\n\n"
-                    f"{knowledge.context_text}\n\n---\n\nTask: {body.prompt}"
-                )
         except Exception:
+            # an infra failure (e.g. Qdrant down) is not an out-of-scope
+            # question — degrade to dispatch-without-context rather than refuse
+            retrieval_failed = True
             logger.exception("knowledge retrieval failed; dispatching without context")
+
+        if not retrieval_failed:
+            if knowledge and knowledge.chunks:
+                # ground the answer in the retrieved context (ADR-019)
+                prompt = _grounded_prompt(knowledge.context_text, body.prompt)
+            else:
+                # retrieval succeeded but nothing relevant: return the grounded
+                # refusal instead of letting the LLM answer from outside knowledge
+                logger.info("no relevant knowledge for query; returning grounded refusal")
+                return await _finish(
+                    db,
+                    task,
+                    TaskStatus.SUCCEEDED,
+                    result={"output": GROUNDED_REFUSAL, "model": None, "node": None,
+                            "grounded": False},
+                )
 
     candidates = await rank_candidates(db, task_type, model=body.model)
     max_attempts = get_settings().task_max_attempts

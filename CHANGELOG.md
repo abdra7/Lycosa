@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Grounded knowledge answers (ADR-019)** — knowledge-driven tasks now answer
+  strictly from retrieved context. The orchestrator injects a grounding
+  instruction telling the model to use only the retrieved context and, when the
+  answer isn't there, to reply "I cannot answer this based on the retrieved
+  knowledge." If retrieval finds nothing relevant, the controller returns that
+  refusal directly without calling an LLM. A tunable `RETRIEVAL_MIN_SCORE`
+  (default off) drops low-score chunks before they reach the model. Found by the
+  v0.2.0 Phase 4 & 5 live validation, where an out-of-scope question previously
+  made the model fabricate an answer and cite the context for it.
+
 ### Fixed
 
 - **Add-node command no longer hands out an unreachable `localhost`** — when the
