@@ -520,7 +520,11 @@ story is the README's front door: controller one-liner, per-OS desktop
 download, dashboard-minted agent join command. Unsigned binaries will show
 OS warnings — documented, and the first thing to revisit if adoption grows.
 
+---
+
 ## ADR-018: LAN discovery — agents advertise over mDNS, the desktop dashboard scans
+
+**Date:** 2026-07-06
 
 **Context:** Operators expected LAN devices running `lycosa-agent` to show up
 in the dashboard automatically (Sprint 11 Ticket #103); v0.1.0 only had the
@@ -629,3 +633,52 @@ now share one bucket — acceptable at LAN scope, and the documented upgrade pat
 is unchanged: a Redis-backed store plus trusted-proxy `X-Forwarded-For` handling
 when the controller runs behind a proxy or scales horizontally. No API contract
 change; the 429 envelope and `Retry-After` header are unchanged.
+
+---
+
+## ADR-021: Automated dependency updates via Dependabot; `main` protected by a ruleset
+
+**Date:** 2026-07-11
+
+**Context:** Dependency freshness was manual (the maintenance guardrails call
+for a CVE audit each release, but nothing ran between releases), and `main`
+had no enforcement behind the "tests gate merges" convention — GitHub showed
+the "branch not protected" warning, and nothing technically stopped an
+un-reviewed merge or force-push.
+
+**Decision:**
+- **Dependabot version updates** (`.github/dependabot.yml`): weekly Monday
+  scans across six surfaces — `pip` for `/backend` and `/agent`
+  (PEP 621 `pyproject.toml`), `pub` for `/dashboard`, `docker` for
+  `backend/Dockerfile`, `docker-compose` for `infra/docker-compose.yml` image
+  tags, and `github-actions`. Minor/patch bumps are grouped into one PR per
+  package; majors arrive individually. Commit prefixes follow our convention
+  (`chore(deps)` / `chore(ci)`); PRs are labeled per area. Dependabot
+  **security alerts + security updates** are enabled repo-side, so CVE-driven
+  PRs arrive immediately regardless of the weekly schedule.
+- **Branch protection** via a `protect-main` ruleset: no deletion or
+  force-push; merges into `main` require a PR with all three CI checks green
+  (Backend / Dashboard / Agent lint + test). The repository-admin role has an
+  always-on bypass so the solo-maintainer direct-push workflow (phase commits)
+  keeps working; Dependabot and feature branches are fully gated. Repo-level
+  auto-merge is enabled.
+- **First scan triage (same day):** merged the Actions group (checkout v7,
+  setup-python v6, artifact v7/v8, gh-release v3), Prometheus v2.53 → v3.13
+  (our `prometheus.yml` is static scrape configs — v3-compatible),
+  Grafana 11 → 13, Qdrant v1.14.1 → v1.18.2, and the backend base image
+  python 3.11-slim → 3.14-slim (validated by a local image build + in-container
+  `import app.main` smoke test, since CI does not build the Dockerfile).
+  **Rejected Postgres 16 → 18** (`@dependabot ignore this major version`):
+  an existing `postgres_data` volume written by 16 cannot start under 18
+  without a dump/restore or `pg_upgrade` migration — deferred until that
+  migration is planned (backlog).
+
+**Consequences:** ADR-002's image pins are no longer frozen at their original
+versions; Dependabot proposes bumps and CI + review gate them (ADR-002's
+pin-for-reproducibility intent stands — versions are still exact, just
+maintained). Two costs surfaced immediately: the flaky
+`test_client_disconnect_does_not_lose_completion` test now blocks merges when
+it trips on unrelated PRs (deflake is on the backlog), and running deployments
+must rebuild/pull images (`docker compose up -d --build --pull always`) to
+actually receive merged bumps. Postgres stays on 16 until a migration story
+exists.
