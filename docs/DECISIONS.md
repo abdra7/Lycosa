@@ -598,3 +598,34 @@ is identical whether the LLM emits it or the orchestrator short-circuits it.
 Non-knowledge tasks are untouched. The `hashing` embedder's scores remain
 unreliable for thresholding — semantic precision/recall still wants `fastembed`
 (tracked as a separate backlog/issue). No API contract change.
+
+---
+
+## ADR-020: Rate limiter keys on client IP only (fixes the X-API-Key bypass)
+
+**Date:** 2026-07-11
+
+**Status:** Accepted (refines ADR-008)
+
+**Context:** ADR-008's in-process limiter keyed each bucket on the presented
+`X-API-Key` header (first 16 chars), falling back to client IP only when absent.
+v0.2.0 Phase 7 active fuzzing confirmed this is bypassable (finding F-2, issue
+#6): because the limiter runs before authentication and never validates the key,
+a caller can send a **different arbitrary `X-API-Key` on each request** to get a
+fresh bucket every time — escaping the limit entirely, including credential
+brute-force throttling on `/api/v1/auth/login` (150 attempts with a rotating
+header → 0 × 429, vs 30 × 429 normally).
+
+**Decision:** Key every rate-limit bucket on **client IP only**; ignore the
+`X-API-Key` header for limiting. A forged/rotating header can no longer spawn a
+new bucket. At LAN scope each node has its own IP, so an IP bucket still yields
+effectively per-node budgets. The bucket store is now module-level with a
+`reset_rate_limit()` helper so the process-wide middleware singleton can be
+isolated between tests.
+
+**Consequences:** The brute-force/DoS bypass is closed. Multiple logical clients
+behind a single IP (NAT, or a reverse proxy that doesn't forward the real IP)
+now share one bucket — acceptable at LAN scope, and the documented upgrade path
+is unchanged: a Redis-backed store plus trusted-proxy `X-Forwarded-For` handling
+when the controller runs behind a proxy or scales horizontally. No API contract
+change; the 429 envelope and `Retry-After` header are unchanged.

@@ -72,10 +72,10 @@
   restricted to their own node via `api_key.node_id`), agent exec token
   (constant-time `hmac.compare_digest`), unsafe deserialization (`yaml.safe_load`
   only). Issues to file (see `scripts/file_v020_qa_issues.sh`, label security):
-  - **Rate-limit bypass** via a rotating/bogus `X-API-Key` header — the limiter
-    keys on the unvalidated header before auth, so a fresh header value per
-    request escapes both key- and IP-buckets, including on `/auth/login`
-    (brute-force throttle defeated). Fix in `backend/app/core/ratelimit.py`.
+  - ~~Rate-limit bypass via a rotating/bogus `X-API-Key` header~~ **FIXED in
+    v0.2.1 (F-2, ADR-020, issue #6)** — limiter now keys on client IP only, so a
+    forged/rotating header can't spawn a fresh bucket. Reproduced live then
+    closed with a regression test.
   - **Fail-fast on default secrets in production** — placeholder `JWT_SECRET`
     (HS256) allows forged admin tokens; refuse to boot when
     `ENVIRONMENT=production` and secrets match known insecure defaults.

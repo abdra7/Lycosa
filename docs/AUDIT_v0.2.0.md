@@ -57,7 +57,7 @@ notes how severity rises if the controller is placed on an untrusted network.
 | # | Finding | Severity | Exposed | Status |
 |---|---|---|---|---|
 | F-1 | RAG hallucination — out-of-scope queries answered from model priors, no uncertainty admission | **Critical (for a RAG product)** | — | **FIXED** (ADR-019), in working tree; not yet committed/deployed |
-| F-2 | Rate-limit bypass via rotating/bogus `X-API-Key` header (limiter keys on unvalidated header before auth) | **Medium** | High (brute-force throttle defeat on `/auth/login`) | Open — issue #6; **confirmed live** (Phase 7: 150 brute-force logins with a rotating header → 0 × 429) |
+| F-2 | Rate-limit bypass via rotating/bogus `X-API-Key` header (limiter keys on unvalidated header before auth) | **Medium** | High (brute-force throttle defeat on `/auth/login`) | **FIXED in v0.2.1** (ADR-020, issue #6) — IP-only keying; confirmed live then closed with a regression test |
 | F-3 | Weak default/placeholder secrets usable as-is (`JWT_SECRET` → forgeable admin JWTs) | Low (LAN) | **High** | Open — code fail-fast issue filed; live `.env` left untouched by request |
 | F-4 | Single-worker controller — throughput ceiling, latency grows with concurrency | **Medium** (scalability) | Medium | Open — issue filed (add workers; depends on Redis rate limiter) |
 | F-5 | Datastore outage returns opaque `500` instead of `503` | Low | Low | Open — enhancement filed |
