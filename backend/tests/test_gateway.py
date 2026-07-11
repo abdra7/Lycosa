@@ -3,6 +3,7 @@
 from httpx import AsyncClient
 
 from app.core.config import get_settings
+from app.core.ratelimit import reset_rate_limit
 from app.core.security import API_KEY_HEADER
 
 
@@ -30,23 +31,47 @@ async def test_envelope_on_validation_error(client: AsyncClient) -> None:
 
 async def test_rate_limit_returns_429_envelope(client: AsyncClient) -> None:
     settings = get_settings()
+    reset_rate_limit()  # start from an empty bucket (limiter state is process-wide)
     settings.rate_limit_enabled = True
     settings.rate_limit_requests = 3
     settings.rate_limit_window_seconds = 60
-    # unique key header isolates this test's bucket from other suite traffic
-    headers = {API_KEY_HEADER: "lyc_ratelimit_test_bucket"}
     try:
         for _ in range(3):
-            response = await client.get("/api/v1/me", headers=headers)
+            response = await client.get("/api/v1/me")
             assert response.status_code == 401  # authenticated? no — but not rate-limited
 
-        limited = await client.get("/api/v1/me", headers=headers)
+        limited = await client.get("/api/v1/me")
         assert limited.status_code == 429
         assert limited.json()["error"]["code"] == "rate_limited"
         assert "Retry-After" in limited.headers
     finally:
         settings.rate_limit_enabled = False
         settings.rate_limit_requests = 120
+        reset_rate_limit()
+
+
+async def test_rate_limit_not_bypassed_by_rotating_api_key(client: AsyncClient) -> None:
+    """F-2 (ADR-020): a caller must not escape the limit by sending a different
+    X-API-Key header on each request. Keying is by client IP, so rotating the
+    header still lands in the same bucket."""
+    settings = get_settings()
+    reset_rate_limit()
+    settings.rate_limit_enabled = True
+    settings.rate_limit_requests = 3
+    settings.rate_limit_window_seconds = 60
+    try:
+        for i in range(3):
+            r = await client.get("/api/v1/me", headers={API_KEY_HEADER: f"bogus-key-{i}"})
+            assert r.status_code == 401  # not throttled yet, despite a new key each time
+
+        # a fourth request with yet another fresh key is still rate-limited
+        limited = await client.get("/api/v1/me", headers={API_KEY_HEADER: "bogus-key-99"})
+        assert limited.status_code == 429
+        assert limited.json()["error"]["code"] == "rate_limited"
+    finally:
+        settings.rate_limit_enabled = False
+        settings.rate_limit_requests = 120
+        reset_rate_limit()
 
 
 async def test_healthz_exempt_from_rate_limit(client: AsyncClient) -> None:
