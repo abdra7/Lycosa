@@ -1,0 +1,73 @@
+version: 2
+updates:
+  # Backend (FastAPI control plane) — reads backend/pyproject.toml
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "backend"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      backend-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Local Agent — reads agent/pyproject.toml
+  - package-ecosystem: "pip"
+    directory: "/agent"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "agent"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      agent-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Flutter Desktop dashboard — reads dashboard/pubspec.yaml
+  - package-ecosystem: "pub"
+    directory: "/dashboard"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "dashboard"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      dashboard-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Backend Docker base image — reads backend/Dockerfile
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Image tags in infra/docker-compose.yml (postgres, qdrant, prometheus, grafana)
+  - package-ecosystem: "docker-compose"
+    directory: "/infra"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "docker"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # GitHub Actions used in .github/workflows/
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]
