@@ -66,6 +66,59 @@ async def test_retrieval_type_task_auto_uses_prompt_as_query(
 
 
 @respx.mock(assert_all_mocked=False)
+async def test_grounding_instruction_injected_with_context(
+    respx_mock, client: AsyncClient, db_session: AsyncSession, users: dict, qdrant
+) -> None:
+    """When context is found, the dispatched prompt tells the model to answer
+    only from it and to emit the canonical refusal otherwise (ADR-019)."""
+    token = await login(client, ADMIN_EMAIL)
+    collection = await create_collection(client, token, name="venom-facts")
+    await upload(client, token, collection["id"], "venom.txt", VENOM_DOC)
+
+    await make_node(db_session, "llm-box", role="hybrid")
+    route = respx_mock.post("http://llm-box:8010/execute").mock(
+        return_value=Response(200, json={"status": "succeeded", "output": "answered"})
+    )
+
+    response = await client.post(
+        "/api/v1/tasks",
+        json={"prompt": "Is venom dangerous?", "knowledge_query": "lycosa venom effects"},
+        headers=bearer(token),
+    )
+    assert response.status_code == 201
+    dispatched = route.calls.last.request.read().decode()
+    assert "ONLY the retrieved context" in dispatched
+    assert "I cannot answer this based on the retrieved knowledge." in dispatched
+    assert "Lycosa venom is mild" in dispatched  # context still present
+
+
+@respx.mock(assert_all_mocked=False, assert_all_called=False)
+async def test_grounded_refusal_when_no_relevant_knowledge(
+    respx_mock, client: AsyncClient, db_session: AsyncSession, users: dict, qdrant
+) -> None:
+    """A knowledge task whose retrieval finds nothing returns the grounded
+    refusal without ever dispatching to an LLM (ADR-019)."""
+    token = await login(client, ADMIN_EMAIL)
+    # a node exists and would be schedulable, but must NOT be called
+    await make_node(db_session, "llm-box", role="hybrid")
+    route = respx_mock.post("http://llm-box:8010/execute").mock(
+        return_value=Response(200, json={"status": "succeeded", "output": "should not run"})
+    )
+
+    response = await client.post(
+        "/api/v1/tasks",
+        json={"prompt": "What is our HQ city?", "knowledge_query": "company headquarters city"},
+        headers=bearer(token),
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "succeeded"
+    assert body["result"]["output"] == "I cannot answer this based on the retrieved knowledge."
+    assert body["node_id"] is None
+    assert not route.called  # no LLM dispatch happened
+
+
+@respx.mock(assert_all_mocked=False)
 async def test_task_without_knowledge_query_is_untouched(
     respx_mock, client: AsyncClient, db_session: AsyncSession, users: dict, qdrant
 ) -> None:
