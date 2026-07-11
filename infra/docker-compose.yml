@@ -72,7 +72,7 @@ services:
       - lycosa
 
   grafana:
-    image: grafana/grafana:11.1.0
+    image: grafana/grafana:13.1.0
     # admin credentials come from GF_SECURITY_ADMIN_USER / GF_SECURITY_ADMIN_PASSWORD in .env
     env_file: ../.env
     volumes:
