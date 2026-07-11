@@ -43,7 +43,9 @@ _GROUNDING_INSTRUCTION = (
 
 
 def _grounded_prompt(context_text: str, task_prompt: str) -> str:
-    return f"{_GROUNDING_INSTRUCTION}Retrieved context:\n{context_text}\n\n---\n\nTask: {task_prompt}"
+    return (
+        f"{_GROUNDING_INSTRUCTION}Retrieved context:\n{context_text}\n\n---\n\nTask: {task_prompt}"
+    )
 
 
 def _select_model(node: Node, requested: str | None) -> str | None:
@@ -137,8 +139,12 @@ async def submit_task(
                     db,
                     task,
                     TaskStatus.SUCCEEDED,
-                    result={"output": GROUNDED_REFUSAL, "model": None, "node": None,
-                            "grounded": False},
+                    result={
+                        "output": GROUNDED_REFUSAL,
+                        "model": None,
+                        "node": None,
+                        "grounded": False,
+                    },
                 )
 
     candidates = await rank_candidates(db, task_type, model=body.model)
