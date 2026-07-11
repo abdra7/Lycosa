@@ -7,6 +7,7 @@ import asyncio
 
 from sqlalchemy import select
 
+from app.core.bootstrap import RUNTIME_SECRETS_FILENAME, load_runtime_secrets
 from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import get_sessionmaker
@@ -40,6 +41,12 @@ async def seed() -> None:
                 )
             )
             print(f"created admin user: {settings.default_admin_email}")
+            if load_runtime_secrets(settings.data_dir).get("admin_password_generated"):
+                print(
+                    f"generated admin password: {settings.default_admin_password}\n"
+                    f"  (persisted in {settings.data_dir}/{RUNTIME_SECRETS_FILENAME} — "
+                    "change it after first login)"
+                )
         else:
             print(f"admin user already exists: {settings.default_admin_email}")
 

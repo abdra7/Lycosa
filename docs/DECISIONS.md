@@ -682,3 +682,66 @@ it trips on unrelated PRs (deflake is on the backlog), and running deployments
 must rebuild/pull images (`docker compose up -d --build --pull always`) to
 actually receive merged bumps. Postgres stays on 16 until a migration story
 exists.
+
+## ADR-022: Zero-configuration startup — layered compose env defaults, first-run generated secrets, production fail-fast
+
+**Date:** 2026-07-12
+
+**Context:** v0.3.0's release goals include "clone → run" with no manual
+configuration. Until now `docker compose -f infra/docker-compose.yml up`
+hard-required a root `.env` (the compose `env_file` was mandatory), the
+backend shipped placeholder secrets (`change-me`, an insecure JWT fallback)
+that nothing stopped from reaching production (issue #7), every container
+received the entire `.env` (Grafana could read the DB password and JWT
+secret), Postgres/Qdrant/Prometheus ports were published to the whole LAN
+(Qdrant unauthenticated — a direct bypass of API auth), no service had a
+restart policy, and container logs grew unbounded.
+
+**Decision:**
+- **Layered compose env files:** each service reads a committed
+  `infra/compose-defaults.env` first, then an *optional* root `.env`
+  (`required: false`; later file wins — verified against Compose v5.1.4).
+  Fresh clones run with zero configuration; the installer-generated or
+  hand-written `.env` overrides everything, so existing installs behave
+  unchanged. Grafana only reads the optional `.env` — it has no use for the
+  DB defaults.
+- **First-run generated secrets** (`app/core/bootstrap.py`): when
+  `JWT_SECRET` or `DEFAULT_ADMIN_PASSWORD` are unset/placeholder,
+  `get_settings()` generates strong values and persists them to
+  `<DATA_DIR>/runtime-secrets.json` (0600 where supported; `DATA_DIR`
+  defaults to `./data`, a named `api_data` volume in Docker). The seed
+  script prints a generated admin password exactly once, on admin creation,
+  in the api logs. Because both the seed process and the API read the same
+  persisted file, they always agree.
+- **Production fail-fast (closes #7):** with `ENVIRONMENT=production` the
+  API refuses to start when the database password is a known default
+  (`change-me`, `lycosa`, `postgres`, empty) or — defense-in-depth, normally
+  auto-generated first — JWT/admin secrets are placeholders. The committed
+  compose default DB password (`lycosa`) is deliberately in the deny list.
+- **Network posture:** Postgres (5432), Qdrant (6333/6334), and Prometheus
+  (9090) now bind to `127.0.0.1` — reachable for local tooling, not the LAN.
+  Only the API (8000) and Grafana (3001) stay LAN-exposed; Grafana reaches
+  Prometheus over the internal network. `QDRANT_API_KEY` is now plumbed
+  through the backend client for operators who enable Qdrant auth.
+- **Operational hardening:** `restart: unless-stopped` and json-file log
+  rotation (10 MB × 3) on every service; Grafana waits for a *healthy*
+  Prometheus.
+- The bare-metal fallback `DATABASE_URL` default password changed from
+  `change-me` to `lycosa` to match the compose default, so a backend run
+  outside Docker connects to the zero-config Postgres out of the box.
+
+**Consequences:** `.env.example` is now override documentation rather than a
+required first step; install scripts still generate a full production-grade
+`.env` and continue to work unchanged. Restarting the api container no longer
+invalidates sessions in zero-config mode (the JWT secret persists in the
+`api_data` volume) — but deleting that volume rotates the JWT secret and the
+generated admin password credential of record. A user who ran the stack with
+a `.env` and later deletes it keeps the old Postgres password inside
+`postgres_data` while the api now expects the default — that mismatch needs
+either the `.env` restored or the volume re-initialised. Residual gaps
+logged to the backlog: per-service env scoping still ships the full `.env`
+to postgres/api/grafana when one exists, Qdrant auth is opt-in rather than
+auto-generated (it is localhost-bound by default), and TLS remains
+undocumented for LAN deployments. Tests pin `JWT_SECRET` /
+`DEFAULT_ADMIN_PASSWORD` in `tests/__init__.py` so the suite never triggers
+generation.

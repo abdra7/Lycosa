@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# first-run generated secrets (ADR-022)
+backend/data/
 *.pem
 *.key
 

@@ -25,7 +25,10 @@ def _store_error(operation: str, exc: Exception) -> KnowledgeStoreError:
 def get_qdrant() -> AsyncQdrantClient:
     global _client
     if _client is None:
-        _client = AsyncQdrantClient(url=get_settings().qdrant_url)
+        settings = get_settings()
+        _client = AsyncQdrantClient(
+            url=settings.qdrant_url, api_key=settings.qdrant_api_key or None
+        )
     return _client
 
 
