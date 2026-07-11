@@ -3,6 +3,11 @@ from sqlalchemy import select
 
 from app.api.deps import DbDep, PrincipalDep
 from app.core.config import get_settings
+from app.core.loginguard import (
+    clear_failures,
+    is_locked_out,
+    record_failure,
+)
 from app.models import Session
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.services.audit import audit
@@ -17,18 +22,49 @@ def _client_ip(request: Request) -> str | None:
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, request: Request, db: DbDep) -> TokenResponse:
-    """Password login. Issues a bearer token; success and failure are both audited."""
+    """Password login. Issues a bearer token; success and failure are both audited.
+
+    A per-IP brute-force throttle (ADR-023) rejects further attempts once an IP
+    accumulates too many recent failures; a successful login clears its counter.
+    """
+    settings = get_settings()
+    ip = _client_ip(request)
+    guard_on = settings.auth_max_failed_logins > 0 and ip is not None
+    if guard_on:
+        retry_after = is_locked_out(
+            ip,
+            max_failures=settings.auth_max_failed_logins,
+            window_seconds=settings.auth_login_window_seconds,
+        )
+        if retry_after:
+            await audit(
+                db,
+                action="auth.login.throttled",
+                detail={"email": body.email},
+                ip_address=ip,
+            )
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed login attempts — try again later",
+                headers={"Retry-After": str(retry_after)},
+            )
+
     user = await authenticate_user(db, body.email, body.password)
     if user is None:
+        if guard_on:
+            record_failure(ip, window_seconds=settings.auth_login_window_seconds)
         await audit(
             db,
             action="auth.login.failure",
             detail={"email": body.email},
-            ip_address=_client_ip(request),
+            ip_address=ip,
         )
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    if guard_on:
+        clear_failures(ip)
     token, session = await create_user_session(db, user)
     await audit(
         db,

@@ -28,6 +28,10 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
   throughput ceiling under concurrency) — *enhancement*
 - **#5** QA: distributed load-testing harness (hey/k6) off-laptop for real
   capacity numbers — *tech-debt*
+- **Login brute-force throttle** — SHIPPED in v0.3.0 (ADR-023): per-IP
+  failed-login sliding window on `/auth/login`, 429 + audit past the threshold.
+  (Security probe also re-confirmed no path-traversal/zip-slip on ingestion and
+  a token-gated node model-pull path.)
 - **#8** Security: document/harden the RAG prompt-injection trust boundary
   (currently operator-gated upload) — *security*
 - **#9** Observability: return `503` (not opaque `500`) when a datastore is down

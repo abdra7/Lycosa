@@ -89,6 +89,18 @@ def _rate_limit_off():
     settings.rate_limit_enabled = original
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_guard():
+    """The /auth/login brute-force throttle keeps process-wide failure buckets;
+    clear them between tests so failed-login cases don't accumulate across the
+    shared 127.0.0.1 bucket (the login-guard test manages its own settings)."""
+    from app.core.loginguard import reset_login_guard
+
+    reset_login_guard()
+    yield
+    reset_login_guard()
+
+
 @pytest_asyncio.fixture
 async def node_api_key(db_session: AsyncSession, roles: dict[str, Role]) -> tuple[str, ApiKey]:
     """A node-role API key: (full_key, record)."""

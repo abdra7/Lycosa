@@ -745,3 +745,41 @@ auto-generated (it is localhost-bound by default), and TLS remains
 undocumented for LAN deployments. Tests pin `JWT_SECRET` /
 `DEFAULT_ADMIN_PASSWORD` in `tests/__init__.py` so the suite never triggers
 generation.
+
+## ADR-023: Per-IP brute-force throttle on /auth/login
+
+**Date:** 2026-07-12
+
+**Context:** v0.3.0's security probe (playbook Step 2) reviewed the auth
+boundary for brute-force vectors. The global rate limiter (ADR-008/020) keys
+on client IP and covers `/auth/login`, and Argon2 makes each password check
+deliberately slow — but the default global budget (120 requests/60 s) is
+generous enough to grind ~120 password guesses per minute against a known
+account from a single IP, and operators routinely raise that limit for normal
+API traffic. There was no login-specific defense. (Path-traversal / zip-slip
+on document ingestion and the token-gated node model-pull path were both
+reviewed and found not vulnerable — filenames never touch the filesystem and
+there is no archive extraction; the pull API requires the agent token.)
+
+**Decision:** A dedicated, tighter sliding window (`app/core/loginguard.py`)
+keyed on client IP that counts only *failed* logins. After
+`AUTH_MAX_FAILED_LOGINS` failures (default 10) within
+`AUTH_LOGIN_WINDOW_SECONDS` (default 300 s), further login attempts — including
+one carrying the correct password — get `429` with `Retry-After` until the
+oldest failure ages out. A successful login clears the IP's counter, so
+legitimate users are never locked out by their own activity. Throttle events
+are audited (`auth.login.throttled`). `AUTH_MAX_FAILED_LOGINS=0` disables it.
+
+Deliberately a per-IP throttle, not an account lockout: locking by email would
+let an attacker deny service to a known admin by spamming bad passwords. Keyed
+by IP so at LAN scope one noisy host cannot lock out others. In-process and
+single-node like the rate limiter (ADR-020); a horizontally-scaled deployment
+needs a shared store and trusted-proxy `X-Forwarded-For` handling (backlog).
+
+**Consequences:** Brute-forcing a password now costs at most
+`AUTH_MAX_FAILED_LOGINS` guesses per window per IP on top of Argon2's per-guess
+cost. Shared-NAT LAN caveat: many users behind one IP share the failure
+budget — the default (10 / 5 min) is well clear of normal human mistyping, and
+the value is tunable. Tests reset the process-wide failure buckets via an
+autouse fixture so failed-login cases across the suite don't accumulate in the
+shared 127.0.0.1 bucket.
