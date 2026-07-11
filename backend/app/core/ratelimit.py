@@ -1,8 +1,11 @@
-"""In-process sliding-window rate limiter (ADR-008).
+"""In-process sliding-window rate limiter (ADR-008, keying revised in ADR-020).
 
-Keyed by API key when presented, else client IP. Single-process by design —
-good for the one-container controller; swap for a Redis backend when the API
-scales horizontally.
+Keyed strictly by client IP. A presented ``X-API-Key`` is deliberately NOT part
+of the key: keying on the raw header let a caller rotate/forge it to spawn a
+fresh bucket per request and escape the limit (F-2). At LAN scope each node has
+its own IP, so an IP bucket still gives per-node budgets. Single-process by
+design — swap for a Redis backend (and add X-Forwarded-For handling behind a
+trusted proxy) when the API scales horizontally.
 """
 
 import time
@@ -14,21 +17,24 @@ from starlette.responses import Response
 
 from app.core.config import get_settings
 from app.core.errors import error_response
-from app.core.security import API_KEY_HEADER
 
 _EXEMPT_PATHS = {"/healthz", "/docs", "/openapi.json"}
 
+# Module-level so it can be reset between tests (the app/middleware is a
+# process-wide singleton). Maps bucket key -> monotonic hit timestamps.
+_hits: dict[str, deque[float]] = {}
+
+
+def reset_rate_limit() -> None:
+    """Clear all rate-limit buckets (test isolation)."""
+    _hits.clear()
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app) -> None:  # noqa: ANN001
-        super().__init__(app)
-        self._hits: dict[str, deque[float]] = {}
-
     @staticmethod
     def _client_key(request: Request) -> str:
-        api_key = request.headers.get(API_KEY_HEADER)
-        if api_key:
-            return f"key:{api_key[:16]}"
+        # IP only: a forged/rotating X-API-Key header must not create a new
+        # bucket that escapes the limit (F-2 / ADR-020).
         return f"ip:{request.client.host if request.client else 'unknown'}"
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -40,7 +46,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         window_start = now - settings.rate_limit_window_seconds
         key = self._client_key(request)
 
-        hits = self._hits.setdefault(key, deque())
+        hits = _hits.setdefault(key, deque())
         while hits and hits[0] < window_start:
             hits.popleft()
 

@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-11
+
+### Security
+
+- **Rate-limit bypass fixed (F-2, ADR-020)** — the in-process rate limiter keyed
+  each bucket on the presented `X-API-Key` header, so a caller could send a
+  different arbitrary key on every request to get a fresh bucket and escape the
+  limit — including credential brute-force throttling on `/api/v1/auth/login`.
+  Buckets are now keyed on client IP only, so a forged/rotating header can't
+  spawn a new bucket. Found and reproduced live in the v0.2.0 Phase 7 security
+  audit (150 brute-force logins with a rotating header → 0 throttled).
+
 ## [0.2.0] - 2026-07-11
 
 ### Added
@@ -162,6 +174,7 @@ desktop dashboard.
   image, desktop installers (.dmg / .exe / .AppImage) built by a tagged
   release workflow, and an agent installer script.
 
-[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/abdra7/Lycosa/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/abdra7/Lycosa/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/abdra7/Lycosa/releases/tag/v0.1.0
