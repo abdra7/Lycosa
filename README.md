@@ -109,14 +109,22 @@ admin email/password, starts the stack, and prints the **controller URL**
 (e.g. `http://192.168.9.800:8000`) to enter in the desktop app. Every setting
 lives in the root `.env` — see `.env.example` for what exists.
 
-Prefer plain compose? `cp .env.example .env`, edit it, then:
+Prefer plain compose? A fresh clone runs with **zero configuration** — no
+`.env` needed:
 
 ```bash
 docker compose -f infra/docker-compose.yml up --build -d
 ```
 
+Safe defaults come from `infra/compose-defaults.env`; the API generates
+`JWT_SECRET` and an admin password on first run (the password is printed once
+in the `api` container logs — `docker compose -f infra/docker-compose.yml
+logs api`). A root `.env` (copy `.env.example`) overrides any of it.
+
 Local endpoints once up: API docs at `http://localhost:8000/docs`, Prometheus
-at `:9090`, Grafana at `:3001`.
+at `:9090` (localhost only), Grafana at `:3001`. Postgres and Qdrant are
+bound to `127.0.0.1` — only the API (`:8000`) and Grafana are reachable from
+the LAN.
 
 ### 2. Desktop dashboard (operator's machine)
 
