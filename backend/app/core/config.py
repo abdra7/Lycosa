@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 120  # per window, per API key / client IP
     rate_limit_window_seconds: int = 60
 
+    # brute-force throttle on /auth/login (ADR-023): after this many failed
+    # attempts from one IP within the window, further logins get 429 until the
+    # window clears. A successful login resets the counter. 0 disables it.
+    auth_max_failed_logins: int = 10
+    auth_login_window_seconds: int = 300
+
     # node liveness (ADR-011): timeout should be ~3x the agent interval
     agent_heartbeat_interval_seconds: int = 5
     heartbeat_timeout_seconds: int = 15
