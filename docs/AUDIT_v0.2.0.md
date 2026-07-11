@@ -44,7 +44,7 @@ controller is exposed beyond a trusted network.
 | 3 | Workflow engine | ✅ 19 tests — sequential/parallel/branch/retry/approval, traces persisted. Gaps: no tool/web-search/ingestion step kinds; 1-level nesting |
 | 4 & 5 | RAG & knowledge | ⚠️→✅ 59 tests green; **live test exposed hallucination on out-of-scope queries — FIXED (ADR-019)**. In-scope grounded answers correct |
 | 6 | Concurrency stress | ✅ Stable to 5000 concurrent: 0 5xx, flat memory, 13 ms recovery, rate limiter shed excess. Throughput ceiling was test-client-bound, not the controller |
-| 7 | Security (static) | ✅ Clean on SQLi/path-traversal/command-injection/authz/IDOR/deserialization. 3 findings (see register) |
+| 7 | Security (static + active) | ✅ Clean on SQLi/path-traversal/command-injection/authz/IDOR/deserialization — confirmed by live fuzzing (SQLi→401/422, traversal→payload-only/404, node-key privileged ops→403, JWT tampering→401). F-2 rate-limit bypass reproduced live |
 | 8 & 9 | Failure recovery | ✅ Excellent — clean errors + auto-recovery from Postgres/Qdrant outages; 0 controller crashes; loop-proof workflows/scheduler |
 
 ---
@@ -57,7 +57,7 @@ notes how severity rises if the controller is placed on an untrusted network.
 | # | Finding | Severity | Exposed | Status |
 |---|---|---|---|---|
 | F-1 | RAG hallucination — out-of-scope queries answered from model priors, no uncertainty admission | **Critical (for a RAG product)** | — | **FIXED** (ADR-019), in working tree; not yet committed/deployed |
-| F-2 | Rate-limit bypass via rotating/bogus `X-API-Key` header (limiter keys on unvalidated header before auth) | **Medium** | High (brute-force throttle defeat on `/auth/login`) | Open — issue filed |
+| F-2 | Rate-limit bypass via rotating/bogus `X-API-Key` header (limiter keys on unvalidated header before auth) | **Medium** | High (brute-force throttle defeat on `/auth/login`) | Open — issue #6; **confirmed live** (Phase 7: 150 brute-force logins with a rotating header → 0 × 429) |
 | F-3 | Weak default/placeholder secrets usable as-is (`JWT_SECRET` → forgeable admin JWTs) | Low (LAN) | **High** | Open — code fail-fast issue filed; live `.env` left untouched by request |
 | F-4 | Single-worker controller — throughput ceiling, latency grows with concurrency | **Medium** (scalability) | Medium | Open — issue filed (add workers; depends on Redis rate limiter) |
 | F-5 | Datastore outage returns opaque `500` instead of `503` | Low | Low | Open — enhancement filed |
@@ -125,9 +125,10 @@ deserialization (`yaml.safe_load`), transaction integrity / recovery.
 4. Add controller workers + a Redis-backed rate limiter for real concurrency (F-4).
 5. Add the production fail-fast-on-default-secrets guard (F-3).
 
-**Recommended next:** structured CSV/JSON loaders (F-7), a fastembed
-precision/recall benchmark (F-8), 503-on-outage (F-5), and — if desired — the one
-invasive phase not yet run: **Phase 7 active fuzzing** against a throwaway stack.
+**Recommended next:** fix F-2 (rate-limit bypass, confirmed live), structured
+CSV/JSON loaders (F-7), a fastembed precision/recall benchmark (F-8), and
+503-on-outage (F-5). Phase 7 active fuzzing is complete (all injection/authz
+vectors clean; F-2 reproduced).
 
 ---
 
