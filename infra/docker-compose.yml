@@ -78,10 +78,12 @@ services:
     env_file: *env-files
     restart: unless-stopped
     logging: *default-logging
+    # WORKERS>1 requires REDIS_URL + the redis profile (ADR-028); the app
+    # fails fast otherwise ($$ defers expansion to the container shell)
     command: >
       sh -c "alembic upgrade head
       && python scripts/seed_admin.py
-      && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers $${WORKERS:-1}"
     volumes:
       # first-run generated secrets (data/runtime-secrets.json) survive restarts
       - api_data:/srv/lycosa/data

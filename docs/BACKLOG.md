@@ -26,8 +26,10 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
 
 ## Open GitHub issues (from the v0.2.0 QA audit)
 
-- **#4** Controller: run multiple uvicorn/gunicorn workers (single worker today =
-  throughput ceiling under concurrency) — *enhancement*
+- **#4** Multi-worker controller — SHIPPED 2026-07-12 (ADR-027 + ADR-028):
+  `WORKERS=N` + `REDIS_URL` (+ `--profile redis`). Shared throttle windows,
+  Redis pub/sub event relay, single-leader sweeper/recovery, fail-fast
+  without Redis, `TRUSTED_PROXIES` X-Forwarded-For handling.
 - **#5** QA: distributed load-testing harness (hey/k6) off-laptop for real
   capacity numbers — *tech-debt*
 - **Login brute-force throttle** — SHIPPED in v0.3.0 (ADR-023): per-IP
@@ -50,8 +52,11 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
 
 - Re-embed job: switching a knowledge collection's embedding backend requires
   re-ingestion (ADR-013).
-- Redis-backed rate limiting + trusted-proxy `X-Forwarded-For` handling when the
-  API scales horizontally or runs multi-worker (ADR-008 / ADR-020; ties to #4).
+- Race-free ingest recovery for multi-worker (ADR-028 residual): a worker
+  respawned >10 min after boot re-runs recovery and can transiently mark an
+  in-flight document `failed` (self-heals at pipeline completion). Proper fix:
+  age-guard recovery on `updated_at` > INGEST_TIMEOUT and/or run it
+  periodically under the leader gate instead of only at startup.
 - Hot-reload of recommendation rules without an api restart (ADR-010).
 - Async task queue behind `POST /tasks` returning 202 + polling (ADR-012).
 - Shield synchronous workflow runs from client disconnects the same way
