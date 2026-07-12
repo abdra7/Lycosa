@@ -18,6 +18,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Shared rate-limit / login-guard state via Redis (ADR-027, #4 phase 1)** —
+  the request rate limiter and the failed-login throttle now keep their
+  sliding windows behind a store abstraction. By default nothing changes
+  (in-process buckets, no Redis required); setting `REDIS_URL` moves both
+  windows into Redis so they hold their configured limits across multiple
+  uvicorn workers. An optional `redis` compose service ships behind
+  `--profile redis`. If Redis is unreachable, the rate limiter fails open
+  (admits and logs) while the login guard fails closed.
 - **Scanned-PDF detection + opt-in OCR (ADR-026, #29)** — a PDF with pages but
   no text layer (a scan) now fails with an actionable message telling the
   operator it looks like a scanned document and how to enable OCR, instead of
