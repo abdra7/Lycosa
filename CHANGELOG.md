@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-12
+
+### Fixed
+
+- **Desktop app displayed the wrong version** — the in-app version constant
+  (`dashboard/lib/core/app_info.dart`) wasn't bumped alongside `pubspec.yaml`
+  for the 0.3.0 release, so the dashboard's shell screen showed `v0.2.1` on the
+  0.3.0 build. Corrected to match the release, with a test asserting the
+  constant tracks `pubspec.yaml` so the two can't drift again.
+
 ## [0.3.0] - 2026-07-12
 
 Production-readiness release: zero-configuration startup, hardened deployment
@@ -225,7 +235,8 @@ desktop dashboard.
   image, desktop installers (.dmg / .exe / .AppImage) built by a tagged
   release workflow, and an agent installer script.
 
-[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/abdra7/Lycosa/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/abdra7/Lycosa/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/abdra7/Lycosa/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/abdra7/Lycosa/compare/v0.1.0...v0.2.0
