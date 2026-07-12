@@ -17,5 +17,6 @@ RUN pip install --no-cache-dir .
 
 EXPOSE 8000
 
-# migrations + admin bootstrap run before serving (see infra/docker-compose.yml)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# migrations + admin bootstrap run before serving (see infra/docker-compose.yml).
+# WORKERS>1 requires REDIS_URL (ADR-028) — the app fails fast otherwise.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-1}"]

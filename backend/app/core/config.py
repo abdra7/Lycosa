@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     # failed-login windows are shared across uvicorn workers.
     redis_url: str = ""
 
+    # uvicorn worker processes (ADR-028). >1 requires REDIS_URL — without a
+    # shared store the throttles run at N× their limits and WebSocket events
+    # stay worker-local, so startup fails fast instead.
+    workers: int = 1
+
+    # reverse-proxy support (ADR-028): comma-separated IPs/CIDRs whose
+    # X-Forwarded-For header is honored when resolving the client IP that
+    # keys the rate limiter and login guard. Empty = header ignored.
+    trusted_proxies: str = ""
+
     # brute-force throttle on /auth/login (ADR-023): after this many failed
     # attempts from one IP within the window, further logins get 429 until the
     # window clears. A successful login resets the counter. 0 disables it.
@@ -115,9 +125,23 @@ def enforce_production_secrets(settings: Settings) -> None:
         )
 
 
+def enforce_multiworker_prereqs(settings: Settings) -> None:
+    """Fail fast when WORKERS>1 without REDIS_URL (ADR-028): every worker
+    would keep its own throttle buckets (N× the configured limits — a security
+    regression for the login guard) and events would only reach WebSocket
+    clients on the worker that published them."""
+    if settings.workers > 1 and not settings.redis_url:
+        raise RuntimeError(
+            f"refusing to start with WORKERS={settings.workers}: multi-worker "
+            "needs shared state — set REDIS_URL (see .env.example and the "
+            "'redis' compose profile) or run WORKERS=1"
+        )
+
+
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
     apply_runtime_secrets(settings)
     enforce_production_secrets(settings)
+    enforce_multiworker_prereqs(settings)
     return settings

@@ -18,6 +18,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Multi-worker controller (ADR-028, closes #4)** — set `WORKERS=N` (with
+  `REDIS_URL` and the `redis` compose profile) to run the API across N
+  uvicorn worker processes. WebSocket events are relayed through Redis
+  pub/sub so dashboards on any worker see every event; the offline sweeper
+  and stuck-ingestion recovery elect a single leader instead of running once
+  per worker; and `WORKERS>1` without `REDIS_URL` fails fast at startup
+  rather than silently multiplying every rate limit. New `TRUSTED_PROXIES`
+  setting: behind a reverse proxy you control, the rate limiter and login
+  throttle key on the forwarded client IP (header ignored by default —
+  spoofable). Defaults unchanged: single worker, no Redis.
 - **Shared rate-limit / login-guard state via Redis (ADR-027, #4 phase 1)** —
   the request rate limiter and the failed-login throttle now keep their
   sliding windows behind a store abstraction. By default nothing changes

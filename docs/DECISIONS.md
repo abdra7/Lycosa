@@ -950,3 +950,59 @@ by all. The login-guard functions became async (its call sites in
 `--profile redis` + `restart: unless-stopped` makes that window short. The
 `WORKERS` launch setting, cross-worker event bus, single-leader sweeper, and
 trusted-proxy client-IP handling land in the next phase.
+
+## ADR-028: Multi-worker controller launch (cross-worker events, leader gate, trusted proxies)
+
+**Date:** 2026-07-12
+
+**Context:** Phase 2 of #4, on top of the shared throttle store (ADR-027).
+Three per-process mechanisms remained: the WebSocket event bus (an event
+published on worker B never reached a dashboard connected to worker A), the
+offline sweeper and stuck-ingestion recovery (would run once per worker —
+redundant writes and a startup race), and client-IP resolution (behind a
+reverse proxy every caller shares the proxy's IP bucket; naively honoring
+X-Forwarded-For would re-open the F-2 spoof bypass).
+
+**Decision:**
+
+- **Cross-worker events:** `RedisEventBus(EventBus)` behind the existing
+  `get_event_bus()` factory (in-process default; Redis when `REDIS_URL` set),
+  so none of the 12 publish sites change. Every `publish` relays through one
+  Redis pub/sub channel; each worker runs a listener task that fans incoming
+  events out to its local WebSocket queues — every client on every worker
+  sees every event exactly once. If the relay fails, the event is delivered
+  locally (this worker's dashboards still see it) and logged; the listener
+  reconnects with 1s backoff. `publish` stays sync (fire-and-forget task).
+- **Single-leader background jobs:** `app/core/leader.py` `LeaderGate` —
+  `SET lycosa:leader:<job> <instance-id> NX EX <ttl>`, holder renews, others
+  stand down; no Redis configured = trivially leader. The offline sweeper
+  bids each interval (ttl = 3× interval, min 15s) so a dead leader is
+  replaced within one TTL. Ingest recovery runs under a 600s lock: the TTL
+  exceeds `INGEST_TIMEOUT` (300s) so a worker respawned mid-flight skips
+  recovery instead of false-flagging documents other workers are still
+  ingesting. Residual (accepted): a respawn >10 min after boot could
+  transiently mark an in-flight document failed; the running pipeline's
+  terminal commit overwrites it — self-healing. A fully race-free
+  (age-guarded, periodic) recovery is in the backlog. On Redis errors the
+  gate returns False (job pauses rather than running N×).
+- **Launch + fail-fast:** `WORKERS` setting (default 1); Dockerfile CMD and
+  the compose api command pass `--workers ${WORKERS:-1}` to uvicorn (no
+  gunicorn dependency). `get_settings()` raises at startup when `WORKERS>1`
+  without `REDIS_URL` — same fail-fast spirit as the ADR-022 production
+  secret guard — because per-worker throttles are a silent security
+  regression, not a tuning detail.
+- **Trusted proxies:** `TRUSTED_PROXIES` (comma-separated IPs/CIDRs, default
+  empty). `app/core/clientip.py` resolves the client IP used by the rate
+  limiter and login guard: the direct peer unless it is a trusted proxy, in
+  which case the *rightmost* X-Forwarded-For entry that is not itself a
+  trusted proxy (a conforming proxy appends the real client last, so
+  attacker-prepended entries are never reached). Header ignored entirely by
+  default — the F-2 lesson.
+
+**Consequences:** `WORKERS=N` + `REDIS_URL` + `--profile redis` gives a
+multi-process controller with correct limits, cluster-wide dashboard events,
+and exactly-one sweeper. Single-worker deployments are untouched (all
+defaults unchanged, Redis never contacted). Uvicorn's supervisor respawns
+crashed workers. Events now cost a Redis round-trip when enabled; WS clients
+on the publishing worker receive via the same relay path (uniform, no double
+delivery). Closes #4 with the load-test follow-up noted in BACKLOG.

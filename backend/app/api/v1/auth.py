@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
 from app.api.deps import DbDep, PrincipalDep
+from app.core.clientip import client_ip
 from app.core.config import get_settings
 from app.core.loginguard import (
     clear_failures,
@@ -17,7 +18,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+    # trusted-proxy aware (ADR-028): the login guard must throttle the real
+    # client, not the reverse proxy's IP
+    return client_ip(request)
 
 
 @router.post("/login", response_model=TokenResponse)
