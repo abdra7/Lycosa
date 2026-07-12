@@ -901,3 +901,52 @@ by default); vector-drawn PDFs with no text layer and no raster images OCR to
 nothing and fail with the "no readable text" message; OCR runs inside the
 ingest request like the rest of the pipeline (ADR-012) under the same
 5-minute timeout.
+
+## ADR-027: Shared sliding-window store (Redis, opt-in) for rate limit + login guard
+
+**Date:** 2026-07-12
+
+**Context:** The path to a multi-worker controller (#4) is blocked by
+per-process state. The rate limiter (ADR-008/020) and the failed-login
+throttle (ADR-023) both keep their sliding windows in module-level dicts, so
+under `uvicorn --workers N` every limit silently becomes N× the configured
+value — for the login guard that is a security regression, not just an
+accounting error. (First of two phases; the event bus, worker launch, and
+single-leader background tasks follow in a separate ADR.)
+
+**Decision:** Both throttles now share one abstraction,
+`app/core/window_store.py`, with identical semantics in two backends:
+
+- **`WindowStore`** — `try_hit` (admit-and-record; a rejected hit consumes no
+  budget; returns Retry-After seconds), `penalty` (check without recording),
+  `add`, `clear`. The rate limiter keys `rl:ip:<ip>`; the login guard keys
+  `login:<ip>`.
+- **`InProcessWindowStore`** (default, `REDIS_URL` unset): the pre-existing
+  dict-of-deques on the monotonic clock. Single-worker deployments change in
+  no way and need no Redis.
+- **`RedisWindowStore`** (`REDIS_URL` set): one sorted set per key — member =
+  unique id, score = wall-clock time (the only clock shared across
+  processes). Ops prune-by-score in a MULTI pipeline; `try_hit` adds first
+  and removes on rejection, so two racing workers cannot both take the last
+  budget slot; keys expire `window + 60s` after their last hit so idle IPs
+  cost nothing.
+- **Failure asymmetry (deliberate):** if Redis is unreachable the rate
+  limiter fails OPEN (admit + `logger.exception`) — a Redis blip must not
+  convert every API request into a 5xx. The login guard fails CLOSED (the
+  store error propagates and the login attempt errors) — an outage must not
+  hand an attacker an unthrottled brute-force window.
+- `redis>=5` becomes a required dependency (imported lazily; nothing connects
+  unless `REDIS_URL` is set). `fakeredis` (dev) proves cross-worker sharing
+  in tests with two store instances on one fake server. An optional
+  `redis:7-alpine` compose service sits behind `--profile redis`,
+  localhost-bound with the stack's standard restart/logging policy.
+
+**Consequences:** With `REDIS_URL` set, limits hold at their configured
+values regardless of worker count, and a lockout/clear on one worker is seen
+by all. The login-guard functions became async (its call sites in
+`auth.py` now await). Redis stays a strictly opt-in dependency; a set
+`REDIS_URL` pointing at a down Redis degrades per the failure rules above
+(rate limiting effectively off, logins erroring) until Redis returns —
+`--profile redis` + `restart: unless-stopped` makes that window short. The
+`WORKERS` launch setting, cross-worker event bus, single-leader sweeper, and
+trusted-proxy client-IP handling land in the next phase.

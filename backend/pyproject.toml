@@ -25,6 +25,7 @@ dependencies = [
     "pypdf>=4.2",
     "python-docx>=1.1",
     "python-multipart>=0.0.9",
+    "redis>=5.0",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +38,7 @@ dev = [
     "respx>=0.21",
     "ruff>=0.5",
     "aiosqlite>=0.20",
+    "fakeredis>=2.23",
 ]
 
 [tool.hatch.build.targets.wheel]

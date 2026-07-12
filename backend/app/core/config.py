@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 120  # per window, per API key / client IP
     rate_limit_window_seconds: int = 60
 
+    # shared throttle state (ADR-027): empty = in-process buckets (single-worker
+    # behavior, no Redis needed); set e.g. redis://redis:6379/0 so rate-limit and
+    # failed-login windows are shared across uvicorn workers.
+    redis_url: str = ""
+
     # brute-force throttle on /auth/login (ADR-023): after this many failed
     # attempts from one IP within the window, further logins get 429 until the
     # window clears. A successful login resets the counter. 0 disables it.

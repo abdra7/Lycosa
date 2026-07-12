@@ -1,4 +1,5 @@
-"""Per-IP failed-login throttle (ADR-023).
+"""Per-IP failed-login throttle (ADR-023; state moved behind the window store
+in ADR-027).
 
 The global rate limiter (ratelimit.py) caps total request volume per IP, but on
 a production node that budget (120/min) is generous enough to grind password
@@ -9,48 +10,38 @@ by their own activity.
 
 Deliberately a throttle, not an account lockout — locking an account by email
 would let an attacker deny service to a known admin. Keyed by IP, so at LAN
-scope one noisy host cannot lock out others. Single-process, like the rate
-limiter; move to a shared store when the API scales horizontally.
+scope one noisy host cannot lock out others.
+
+Failure windows live in the window store: per-process by default, shared
+across uvicorn workers when REDIS_URL is set. Unlike the rate limiter, store
+errors here propagate (fail closed): a Redis outage must not hand an attacker
+an unthrottled window (ADR-027).
 """
 
-import time
-from collections import deque
+from app.core.window_store import InProcessWindowStore, get_window_store
 
-# IP -> monotonic timestamps of recent failed logins.
-_failures: dict[str, deque[float]] = {}
+_KEY_PREFIX = "login:"
 
 
 def reset_login_guard() -> None:
-    """Clear all failed-login buckets (test isolation)."""
-    _failures.clear()
+    """Clear all in-process failed-login buckets (test isolation). Tests that
+    install a Redis-backed store manage its lifetime themselves."""
+    store = get_window_store()
+    if isinstance(store, InProcessWindowStore):
+        store.clear_prefix(_KEY_PREFIX)
 
 
-def _prune(bucket: deque[float], window_start: float) -> None:
-    while bucket and bucket[0] < window_start:
-        bucket.popleft()
-
-
-def is_locked_out(ip: str, *, max_failures: int, window_seconds: int) -> int:
+async def is_locked_out(ip: str, *, max_failures: int, window_seconds: int) -> int:
     """Return seconds to wait if `ip` has too many recent failures, else 0."""
-    bucket = _failures.get(ip)
-    if not bucket:
-        return 0
-    now = time.monotonic()
-    window_start = now - window_seconds
-    _prune(bucket, window_start)
-    if len(bucket) < max_failures:
-        return 0
-    # locked until the oldest failure ages out of the window
-    return max(1, int(bucket[0] - window_start) + 1)
+    return await get_window_store().penalty(
+        f"{_KEY_PREFIX}{ip}", limit=max_failures, window_seconds=window_seconds
+    )
 
 
-def record_failure(ip: str, *, window_seconds: int) -> None:
-    now = time.monotonic()
-    bucket = _failures.setdefault(ip, deque())
-    _prune(bucket, now - window_seconds)
-    bucket.append(now)
+async def record_failure(ip: str, *, window_seconds: int) -> None:
+    await get_window_store().add(f"{_KEY_PREFIX}{ip}", window_seconds=window_seconds)
 
 
-def clear_failures(ip: str) -> None:
+async def clear_failures(ip: str) -> None:
     """A successful login wipes the IP's failure history."""
-    _failures.pop(ip, None)
+    await get_window_store().clear(f"{_KEY_PREFIX}{ip}")

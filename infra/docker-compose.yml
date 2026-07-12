@@ -53,6 +53,26 @@ services:
     networks:
       - lycosa
 
+  # Optional (ADR-027): started only with `--profile redis`. Shares the
+  # rate-limit / failed-login windows across uvicorn workers; the API uses it
+  # only when REDIS_URL is set (e.g. redis://redis:6379/0 in the root .env).
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      # localhost-only: redis has no auth here; the API reaches it over the
+      # internal network
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - lycosa
+
   api:
     build: ../backend
     env_file: *env-files

@@ -1,33 +1,41 @@
-"""In-process sliding-window rate limiter (ADR-008, keying revised in ADR-020).
+"""Sliding-window rate limiter (ADR-008; keying revised in ADR-020; state
+moved behind the window store in ADR-027).
 
 Keyed strictly by client IP. A presented ``X-API-Key`` is deliberately NOT part
 of the key: keying on the raw header let a caller rotate/forge it to spawn a
 fresh bucket per request and escape the limit (F-2). At LAN scope each node has
-its own IP, so an IP bucket still gives per-node budgets. Single-process by
-design — swap for a Redis backend (and add X-Forwarded-For handling behind a
-trusted proxy) when the API scales horizontally.
+its own IP, so an IP bucket still gives per-node budgets.
+
+Bucket state lives in the window store: per-process by default, shared across
+uvicorn workers when REDIS_URL is set. If the shared store is unreachable the
+limiter fails OPEN (admit + log) — a Redis blip must not turn every API request
+into a 5xx; the login guard is the one that fails closed (ADR-027).
 """
 
-import time
-from collections import deque
+import logging
 
+from redis.exceptions import RedisError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.config import get_settings
 from app.core.errors import error_response
+from app.core.window_store import InProcessWindowStore, get_window_store
+
+logger = logging.getLogger("lycosa.ratelimit")
 
 _EXEMPT_PATHS = {"/healthz", "/docs", "/openapi.json"}
 
-# Module-level so it can be reset between tests (the app/middleware is a
-# process-wide singleton). Maps bucket key -> monotonic hit timestamps.
-_hits: dict[str, deque[float]] = {}
+_KEY_PREFIX = "rl:"
 
 
 def reset_rate_limit() -> None:
-    """Clear all rate-limit buckets (test isolation)."""
-    _hits.clear()
+    """Clear all in-process rate-limit buckets (test isolation). Tests that
+    install a Redis-backed store manage its lifetime themselves."""
+    store = get_window_store()
+    if isinstance(store, InProcessWindowStore):
+        store.clear_prefix(_KEY_PREFIX)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -35,28 +43,27 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _client_key(request: Request) -> str:
         # IP only: a forged/rotating X-API-Key header must not create a new
         # bucket that escapes the limit (F-2 / ADR-020).
-        return f"ip:{request.client.host if request.client else 'unknown'}"
+        return f"{_KEY_PREFIX}ip:{request.client.host if request.client else 'unknown'}"
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         settings = get_settings()
         if not settings.rate_limit_enabled or request.url.path in _EXEMPT_PATHS:
             return await call_next(request)
 
-        now = time.monotonic()
-        window_start = now - settings.rate_limit_window_seconds
-        key = self._client_key(request)
+        try:
+            retry_after = await get_window_store().try_hit(
+                self._client_key(request),
+                limit=settings.rate_limit_requests,
+                window_seconds=settings.rate_limit_window_seconds,
+            )
+        except (RedisError, OSError):
+            logger.exception("rate-limit store unreachable — admitting request (fail-open)")
+            return await call_next(request)
 
-        hits = _hits.setdefault(key, deque())
-        while hits and hits[0] < window_start:
-            hits.popleft()
-
-        if len(hits) >= settings.rate_limit_requests:
-            retry_after = max(1, int(hits[0] - window_start) + 1)
+        if retry_after:
             return error_response(
                 429,
                 "Rate limit exceeded",
                 headers={"Retry-After": str(retry_after)},
             )
-
-        hits.append(now)
         return await call_next(request)
