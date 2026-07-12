@@ -29,6 +29,8 @@ dependencies = [
 
 [project.optional-dependencies]
 embeddings = ["fastembed>=0.3"]
+# OCR for scanned/image-only PDFs; also needs the tesseract binary on the host
+ocr = ["pytesseract>=0.3.10", "pillow>=10"]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",

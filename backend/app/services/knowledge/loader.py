@@ -11,6 +11,28 @@ class ExtractionError(ValueError):
     """The document's text could not be extracted; message is operator-facing."""
 
 
+def _ocr_pdf(filename: str, reader: Any) -> str | None:
+    """Best-effort OCR over the page images of a text-layer-less PDF. Returns
+    None when the optional OCR stack (`.[ocr]` extra + the tesseract binary)
+    is not installed, so the caller can fail with an operator-facing message
+    instead — OCR stays off by default (ADR-026)."""
+    try:
+        import pytesseract
+        from PIL import Image  # noqa: F401 — pypdf needs Pillow to decode page images
+    except ImportError:
+        return None
+    pages: list[str] = []
+    try:
+        for page in reader.pages:
+            texts = [pytesseract.image_to_string(image.image) for image in page.images]
+            pages.append("\n".join(t.strip() for t in texts if t.strip()))
+    except pytesseract.TesseractNotFoundError:
+        return None
+    except Exception as exc:
+        raise ExtractionError(f"OCR failed for PDF {filename!r}: {exc}") from exc
+    return "\n\n".join(p for p in pages if p)
+
+
 def _extract_pdf(filename: str, data: bytes) -> str:
     from pypdf import PdfReader
 
@@ -26,13 +48,28 @@ def _extract_pdf(filename: str, data: bytes) -> str:
                 raise ExtractionError(
                     f"PDF {filename!r} is password-protected — upload a decrypted copy"
                 )
-        return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
     except ExtractionError:
         raise
     except Exception as exc:
         raise ExtractionError(
             f"could not parse PDF {filename!r} (corrupt or unsupported file): {exc}"
         ) from exc
+    if text.strip() or not len(reader.pages):
+        return text
+    # pages but no text layer: a scanned/image-only PDF (issue #29)
+    ocr_text = _ocr_pdf(filename, reader)
+    if ocr_text is None:
+        raise ExtractionError(
+            f"PDF {filename!r} has no text layer — it looks like a scanned/image-only "
+            "document. OCR support is not installed on this controller (install the "
+            "backend's [ocr] extra plus the tesseract binary), or upload a text-layer PDF"
+        )
+    if not ocr_text.strip():
+        raise ExtractionError(
+            f"PDF {filename!r} has no text layer and OCR found no readable text in its pages"
+        )
+    return ocr_text
 
 
 def _extract_docx(filename: str, data: bytes) -> str:
