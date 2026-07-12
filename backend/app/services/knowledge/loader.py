@@ -35,6 +35,28 @@ def _extract_pdf(filename: str, data: bytes) -> str:
         ) from exc
 
 
+def _extract_docx(filename: str, data: bytes) -> str:
+    """Paragraphs become blank-line-separated blocks (so the paragraph chunker
+    packs them); each table row becomes a 'cell | cell | ...' block."""
+    import docx
+
+    try:
+        document = docx.Document(BytesIO(data))
+    except Exception as exc:
+        raise ExtractionError(
+            f"could not parse DOCX {filename!r} (corrupt or unsupported file): {exc}"
+        ) from exc
+    blocks = [p.text.strip() for p in document.paragraphs if p.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                blocks.append(" | ".join(cells))
+    if not blocks:
+        raise ExtractionError(f"DOCX {filename!r} contained no extractable text")
+    return "\n\n".join(blocks)
+
+
 def _extract_csv(filename: str, data: bytes) -> str:
     """Each row becomes a 'header: value | ...' paragraph so retrieval can
     isolate a single record. The first row is taken as the header (ADR-024)."""
@@ -107,17 +129,47 @@ def _extract_json(filename: str, data: bytes) -> str:
     return text
 
 
+_ZIP_MAGIC = b"PK\x03\x04"  # docx/xlsx/pptx/odt/zip
+_OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # legacy .doc/.xls/.ppt
+# A real text file may carry a few mojibake bytes (still replaced, not fatal);
+# wholesale binary decodes to a large share of replacement chars — refuse it.
+_MAX_REPLACEMENT_CHARS = 4
+_MAX_REPLACEMENT_RATIO = 0.05
+
+
+def _decode_text(filename: str, data: bytes) -> str:
+    """UTF-8 fallback for md/txt/code, refusing binary content: silently
+    embedding undecodable bytes stores unsearchable junk as 'embedded' (#28)."""
+    if data.startswith(_ZIP_MAGIC) or data.startswith(_OLE2_MAGIC):
+        raise ExtractionError(
+            f"{filename!r} is a binary document format with no loader — "
+            "supported formats: .pdf, .docx, .csv, .json, and plain text"
+        )
+    text = data.decode("utf-8", errors="replace")
+    replacements = text.count("�")
+    if "\x00" in text or (
+        replacements > _MAX_REPLACEMENT_CHARS and replacements / len(text) > _MAX_REPLACEMENT_RATIO
+    ):
+        raise ExtractionError(
+            f"{filename!r} is not UTF-8 text — "
+            "supported formats: .pdf, .docx, .csv, .json, and plain text"
+        )
+    return text
+
+
 def extract_text(filename: str, data: bytes) -> str:
-    """PDF via pypdf; CSV/JSON parsed structure-aware (ADR-024); everything
-    else treated as UTF-8 text (md/txt/code)."""
+    """PDF via pypdf; DOCX via python-docx; CSV/JSON parsed structure-aware
+    (ADR-024); everything else must decode as UTF-8 text (md/txt/code)."""
     name = filename.lower()
     if name.endswith(".pdf"):
         return _extract_pdf(filename, data)
+    if name.endswith(".docx"):
+        return _extract_docx(filename, data)
     if name.endswith(".csv"):
         return _extract_csv(filename, data)
     if name.endswith(".json"):
         return _extract_json(filename, data)
-    return data.decode("utf-8", errors="replace")
+    return _decode_text(filename, data)
 
 
 def chunk_text(text: str, size: int = 800, overlap: int = 100) -> list[str]:

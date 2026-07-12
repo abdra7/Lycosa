@@ -822,3 +822,45 @@ row); very wide single rows or huge single JSON objects can still exceed the
 chunk size and get hard-split mid-value; and deeply nested JSON produces long
 path prefixes. Routing is by file extension only — a CSV uploaded as `.txt` is
 still treated as plain text. Nothing changes for text/markdown/code or PDF.
+
+## ADR-025: DOCX loader and a binary-content guard on the text fallback
+
+**Date:** 2026-07-12
+
+**Context:** `extract_text` routed `.pdf`/`.csv`/`.json` and decoded
+**everything else** as UTF-8 with `errors="replace"`. A `.docx` is an OOXML ZIP
+archive, so its bytes were decoded into replacement-character garbage, chunked,
+embedded, and reported `embedded` — a 2-paragraph docx produced 50 junk chunks
+and its real text was unretrievable. Silent corruption, worse than failing.
+(Issue #28.)
+
+**Decision:**
+
+- **DOCX loader** (`_extract_docx`, new required dependency `python-docx>=1.1`):
+  body paragraphs become blank-line-separated blocks (so the existing
+  paragraph chunker packs them, mirroring ADR-024), and each table row becomes
+  a `cell | cell | …` block appended after the paragraphs. A docx with no
+  extractable text, or bytes that fail to parse as OOXML, raise
+  `ExtractionError`. `python-docx` is a required (not optional) dependency:
+  docx is a mainstream format, the wheel is small, and an optional dep would
+  reintroduce a silently-degraded mode.
+- **Binary guard on the fallback** (`_decode_text`): the UTF-8 fallback now
+  *refuses* content it cannot treat as text, raising `ExtractionError` (clean
+  `failed` document, 4xx at the API) instead of storing junk:
+  - ZIP magic (`PK\x03\x04` — xlsx/pptx/odt/zip) and OLE2 magic (legacy
+    .doc/.xls/.ppt) are rejected by signature with a "no loader for this
+    format" message listing the supported formats;
+  - after decoding, content with NUL characters (e.g. UTF-16 without
+    transcoding) or more than 4 replacement characters exceeding 5% of the
+    text is rejected as "not UTF-8 text". The two-part threshold keeps the
+    pre-existing contract that a text file with a few stray mojibake bytes
+    still ingests (they stay replaced), while wholesale binary — which decodes
+    to a large share of replacement chars — fails loudly.
+
+**Consequences:** `.docx` text (including tables) is retrievable; no binary
+format can reach the embedder as garbage anymore. Legacy `.doc`, `.xlsx`,
+`.pptx` etc. now fail with an actionable message instead of "succeeding" —
+loaders for those can be added later behind the same routing. Non-UTF-8 text
+encodings (e.g. Latin-1 heavy text, UTF-16) are rejected rather than partially
+mangled; transcode before upload. Extension-based routing is unchanged
+(ADR-024's known limit).
