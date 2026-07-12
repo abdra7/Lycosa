@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`.docx` uploads were silently corrupted (ADR-025, #28)** — a `.docx` fell
+  through to the plain-text fallback, so its ZIP bytes were embedded as
+  replacement-character garbage while the document still reported `embedded`.
+  DOCX is now parsed with `python-docx` (paragraphs and table rows become
+  retrievable chunks), and the plain-text fallback refuses binary content
+  (ZIP/OLE2 signatures, NUL bytes, high replacement-character ratio) with a
+  clear extraction error instead of storing junk.
+
 ### Added
 
 - **Structure-aware CSV/JSON ingestion (ADR-024, #2)** — uploaded `.csv` and
