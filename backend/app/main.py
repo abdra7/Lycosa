@@ -11,6 +11,7 @@ from app.api.v1 import events
 from app.api.v1.router import api_v1_router
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
+from app.core.leader import get_leader_gate
 from app.core.logging import request_id_var, setup_logging
 from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS
 from app.core.ratelimit import RateLimitMiddleware
@@ -26,10 +27,17 @@ setup_logging(settings.log_level)
 
 
 async def _offline_sweeper() -> None:
-    """Background loop: mark nodes offline when heartbeats stop (ADR-011)."""
+    """Background loop: mark nodes offline when heartbeats stop (ADR-011).
+    Under multiple workers only the leader sweeps (ADR-028); the others keep
+    bidding each interval and take over if the leader's lock expires."""
     while True:
-        await asyncio.sleep(get_settings().offline_sweep_interval_seconds)
+        interval = get_settings().offline_sweep_interval_seconds
+        await asyncio.sleep(interval)
         try:
+            if not await get_leader_gate().try_lead(
+                "offline-sweeper", ttl_seconds=max(15, interval * 3)
+            ):
+                continue
             async with get_sessionmaker()() as db:
                 flipped = await sweep_offline_nodes(db)
                 if flipped:
@@ -41,12 +49,17 @@ async def _offline_sweeper() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # a crash mid-ingest strands documents in 'uploaded' / jobs in 'running';
-    # recover them before serving traffic (E2E-02)
+    # recover them before serving traffic (E2E-02). One worker is enough — at
+    # boot no pipeline is live anywhere, so the first worker to take the lock
+    # recovers for all of them. The TTL exceeds INGEST_TIMEOUT so a worker
+    # respawned mid-flight skips recovery instead of false-flagging documents
+    # other workers are still ingesting (ADR-028).
     try:
-        async with get_runtime_sessionmaker()() as db:
-            recovered = await recover_stuck_ingestions(db)
-            if recovered:
-                logger.info("recovered %d document(s) stuck by a mid-ingest restart", recovered)
+        if await get_leader_gate().try_lead("ingest-recovery", ttl_seconds=600):
+            async with get_runtime_sessionmaker()() as db:
+                recovered = await recover_stuck_ingestions(db)
+                if recovered:
+                    logger.info("recovered %d document(s) stuck by a mid-ingest restart", recovered)
     except Exception:
         logger.exception("stuck-ingestion recovery failed; continuing startup")
     task = asyncio.create_task(_offline_sweeper())

@@ -19,6 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.core.clientip import client_ip
 from app.core.config import get_settings
 from app.core.errors import error_response
 from app.core.window_store import InProcessWindowStore, get_window_store
@@ -42,8 +43,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _client_key(request: Request) -> str:
         # IP only: a forged/rotating X-API-Key header must not create a new
-        # bucket that escapes the limit (F-2 / ADR-020).
-        return f"{_KEY_PREFIX}ip:{request.client.host if request.client else 'unknown'}"
+        # bucket that escapes the limit (F-2 / ADR-020). Behind a trusted
+        # proxy the forwarded client IP is used instead (ADR-028).
+        return f"{_KEY_PREFIX}ip:{client_ip(request) or 'unknown'}"
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         settings = get_settings()
