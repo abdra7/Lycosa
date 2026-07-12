@@ -19,11 +19,13 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
   policies, log rotation).
 - **Structure-aware CSV/JSON loaders (#2)** — SHIPPED (ADR-024): `.csv`/`.json`
   parsed row/record-oriented so retrieval isolates individual records.
+- **Embedding precision/recall benchmark (#3)** — SHIPPED: `hashing` vs
+  `fastembed` harness (`backend/scripts/benchmark_embeddings.py`) + measured
+  results in `docs/rag_embedding_benchmark.md` (fastembed = perfect recall@3/MRR
+  on paraphrased queries; hashing stays keyword-level).
 
 ## Open GitHub issues (from the v0.2.0 QA audit)
 
-- **#3** RAG: benchmark precision/recall on the `fastembed` backend; the default
-  `hashing` embedder is keyword-level only — *tech-debt*
 - **#4** Controller: run multiple uvicorn/gunicorn workers (single worker today =
   throughput ceiling under concurrency) — *enhancement*
 - **#5** QA: distributed load-testing harness (hey/k6) off-laptop for real

@@ -15,6 +15,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   can isolate an individual row or record. Malformed files report a clean
   extraction error rather than a 500. Text, markdown, code, and PDF are
   unchanged.
+- **Embedding backend benchmark (#3)** — `backend/scripts/benchmark_embeddings.py`
+  measures precision@k / recall@k / MRR of the default `hashing` backend against
+  `fastembed` on a labeled retrieval set. Measured results and guidance on when
+  to switch backends are in `docs/rag_embedding_benchmark.md` (fastembed reached
+  perfect recall@3 and MRR on the paraphrased-query set; hashing stayed
+  keyword-level).
 
 ## [0.3.1] - 2026-07-12
 
