@@ -73,14 +73,16 @@ You are the engineering partner building and maintaining Lycosa.
   throttle (ADR-023), dashboard theme no-flash. Backend `0.3.0`, dashboard
   `0.3.0+4`.
 - **v0.3.0 + v0.3.1 released** (tags, GHCR images + desktop installers).
-- **v0.4.0** — knowledge-plane format fixes + multi-worker controller:
-  structure-aware CSV/JSON loaders (ADR-024, #2), embedding benchmark (#3),
-  `.docx` silent-corruption fix + binary-content guard (ADR-025, #28),
-  scanned-PDF detection + opt-in `[ocr]` extra (ADR-026, #29), Redis-backed
-  shared throttle windows (ADR-027) and multi-worker launch — cross-worker
-  event bus, leader-gated background jobs, `WORKERS` fail-fast,
-  `TRUSTED_PROXIES` (ADR-028, closes #4). Backend `0.4.0`, dashboard
-  `0.4.0+6`. Open items live in `docs/BACKLOG.md`.
+- **v0.4.0 RELEASED** (tag `v0.4.0`, GHCR image + 4 desktop installers) —
+  knowledge-plane format fixes + multi-worker controller: structure-aware
+  CSV/JSON loaders (ADR-024, #2), embedding benchmark (#3), `.docx`
+  silent-corruption fix + binary-content guard (ADR-025, #28), scanned-PDF
+  detection + opt-in `[ocr]` extra (ADR-026, #29), Redis-backed shared
+  throttle windows (ADR-027) and multi-worker launch — cross-worker event
+  bus, leader-gated background jobs, `WORKERS` fail-fast, `TRUSTED_PROXIES`
+  (ADR-028, closes #4). Backend `0.4.0`, dashboard `0.4.0+6`; suite 280
+  tests. The operator's live stack runs v0.4.0 with `WORKERS=2` + redis.
+  Open items and next-work candidates live in `docs/BACKLOG.md`.
 
 ---
 
