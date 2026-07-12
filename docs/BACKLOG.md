@@ -34,6 +34,12 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
   failed-login sliding window on `/auth/login`, 429 + audit past the threshold.
   (Security probe also re-confirmed no path-traversal/zip-slip on ingestion and
   a token-gated node model-pull path.)
+- **#28** RAG: `.docx` files silently ingested as corrupt garbage (no DOCX
+  loader; binary ZIP decoded as UTF-8) — *bug*. Reproduced live 2026-07-12:
+  2-paragraph docx → 50 junk chunks, unretrievable, but `status: embedded`.
+  Add python-docx + reject undecodable binary formats.
+- **#29** RAG: scanned / image-only PDFs yield no text (pypdf has no OCR) —
+  *enhancement*. Text PDFs work; scans fail with "no extractable text".
 - **#8** Security: document/harden the RAG prompt-injection trust boundary
   (currently operator-gated upload) — *security*
 - **#9** Observability: return `503` (not opaque `500`) when a datastore is down
