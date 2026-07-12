@@ -1,7 +1,6 @@
 # --- Secrets / local config ---
 .env
 .env.*
-!.env.example
 # first-run generated secrets (ADR-022)
 backend/data/
 *.pem
@@ -67,3 +66,21 @@ logs/
 /Lycosa_Claude_Build_Playbook*.md
 /*.claude.md
 
+
+# --- Repository hygiene: untrack local-only dev/reference files ---
+.env.example
+AUDIT vo.2.O.md
+BACKLOG.md
+DECISIONS.md
+QA_capability_tests_2026-07-12.md
+QA v03.O.md
+rag_embedding_benchmarkmd
+.claude/command
+
+# --- Repository hygiene: untrack public-sensitive docs (round 2, exact docs/ paths) ---
+docs/AUDIT_v0.2.0.md
+docs/BACKLOG.md
+docs/DECISIONS.md
+docs/QA_capability_tests_2026-07-12.md
+docs/QA_v0.3.0.md
+docs/rag_embedding_benchmark.md
