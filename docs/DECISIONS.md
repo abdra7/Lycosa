@@ -783,3 +783,42 @@ budget — the default (10 / 5 min) is well clear of normal human mistyping, and
 the value is tunable. Tests reset the process-wide failure buckets via an
 autouse fixture so failed-login cases across the suite don't accumulate in the
 shared 127.0.0.1 bucket.
+
+## ADR-024: Structure-aware CSV/JSON ingestion loaders
+
+**Date:** 2026-07-12
+
+**Context:** The ingestion loader (ADR-013) branched only on `.pdf`; every
+other file — including `.csv` and `.json` — was decoded as one UTF-8 blob and
+handed to the paragraph-aware chunker. Because CSV rows and JSON records aren't
+separated by blank lines, a spreadsheet or record file collapsed into one giant
+chunk (or arbitrary hard-splits), so retrieval could never isolate a single row
+or record. (Issue #2.)
+
+**Decision:** `extract_text` now routes `.csv` and `.json` by extension (the
+same pattern as `.pdf`) to structure-aware loaders in
+`app/services/knowledge/loader.py`:
+
+- **CSV** (`_extract_csv`, stdlib `csv`): the first row is taken as the header;
+  each subsequent row becomes a `header: value | header: value` paragraph, and
+  rows are joined with blank lines so each record is an independent "paragraph"
+  the existing `chunk_text` packs to size. Empty cells are dropped; ragged rows
+  keep the labels they have; a UTF-8 BOM is stripped. A file with no data rows
+  below the header raises `ExtractionError`.
+- **JSON** (`_extract_json`, stdlib `json`): a top-level array yields one
+  record (paragraph) per element; any other value is flattened to
+  `a.b[0]: value` leaf lines (dot paths for objects, `[i]` for arrays), with
+  JSON-typed scalars (`null`/`true`/`false`). Malformed JSON raises
+  `ExtractionError`.
+
+Malformed CSV/JSON raise `ExtractionError` (a `ValueError` subclass), so the
+API maps them to a 4xx and ingestion records a clean `failed` document instead
+of a 500 — consistent with the PDF path.
+
+**Consequences:** CSV/JSON documents are now retrievable per-row/record, which
+is the point of ingesting structured data. Known limits (logged, not blocking):
+the first CSV row is always treated as the header (headerless CSVs mislabel one
+row); very wide single rows or huge single JSON objects can still exceed the
+chunk size and get hard-split mid-value; and deeply nested JSON produces long
+path prefixes. Routing is by file extension only — a CSV uploaded as `.txt` is
+still treated as plain text. Nothing changes for text/markdown/code or PDF.

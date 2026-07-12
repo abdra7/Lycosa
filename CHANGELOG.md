@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Structure-aware CSV/JSON ingestion (ADR-024, #2)** — uploaded `.csv` and
+  `.json` documents are now parsed by structure instead of decoded as one
+  opaque text blob. Each CSV row becomes a `header: value | …` record and each
+  JSON array element / object leaf becomes a `path: value` line, so retrieval
+  can isolate an individual row or record. Malformed files report a clean
+  extraction error rather than a 500. Text, markdown, code, and PDF are
+  unchanged.
+
 ## [0.3.1] - 2026-07-12
 
 ### Fixed
