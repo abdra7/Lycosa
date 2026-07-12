@@ -17,11 +17,11 @@ local notes not yet filed. Full v0.2.0 QA detail lives in
   v0.3.0 (ADR-022), together with zero-config startup (first-run generated
   secrets) and compose hardening (localhost-bound datastores, restart
   policies, log rotation).
+- **Structure-aware CSV/JSON loaders (#2)** — SHIPPED (ADR-024): `.csv`/`.json`
+  parsed row/record-oriented so retrieval isolates individual records.
 
 ## Open GitHub issues (from the v0.2.0 QA audit)
 
-- **#2** RAG: structure-aware loaders for CSV/JSON (currently ingested as plain
-  text) — *enhancement*
 - **#3** RAG: benchmark precision/recall on the `fastembed` backend; the default
   `hashing` embedder is keyword-level only — *tech-debt*
 - **#4** Controller: run multiple uvicorn/gunicorn workers (single worker today =
