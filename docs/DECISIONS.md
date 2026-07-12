@@ -864,3 +864,40 @@ loaders for those can be added later behind the same routing. Non-UTF-8 text
 encodings (e.g. Latin-1 heavy text, UTF-16) are rejected rather than partially
 mangled; transcode before upload. Extension-based routing is unchanged
 (ADR-024's known limit).
+
+## ADR-026: Scanned-PDF detection with an opt-in OCR path
+
+**Date:** 2026-07-12
+
+**Context:** PDF extraction (ADR-013) reads the text layer via pypdf. A
+scanned/image-only PDF — very common for real-world contracts, manuals, and
+forms — has no text layer, so every page yielded `""` and ingestion failed
+with the generic "no extractable text in document", giving the operator no
+clue that the PDF was a scan or what to do about it. (Issue #29.)
+
+**Decision:** When a parsed PDF has pages but its joined text layer is empty,
+`_extract_pdf` now treats it as a scan:
+
+- **OCR off by default** (opt-in via dependency presence): a new
+  `ocr = ["pytesseract>=0.3.10", "pillow>=10"]` extra, which also requires the
+  `tesseract` binary on the host/image. The base image stays light and
+  air-gapped-friendly; installing the extra is the switch — no config knob.
+- With the stack installed, `_ocr_pdf` runs tesseract over each page's
+  embedded images (pypdf `page.images`, decoded by Pillow) and returns the
+  per-page text joined with blank lines. Verified live in a container with
+  tesseract: an image-only PDF round-tripped its sentence exactly.
+- Without the stack (import fails or the tesseract binary is missing),
+  `_ocr_pdf` returns `None` and extraction raises an **operator-facing**
+  `ExtractionError`: the PDF "has no text layer — it looks like a
+  scanned/image-only document", naming the `[ocr]` extra as the remedy. OCR
+  that runs but finds nothing raises a distinct "OCR found no readable text"
+  error; an OCR crash mid-run surfaces as `ExtractionError`, not a 500.
+
+**Consequences:** Text-layer PDFs are untouched (the scan path only triggers
+on an empty layer). Operators get an actionable message instead of a generic
+failure, and can enable OCR per-controller by installing the extra. Limits:
+OCR quality depends on scan resolution and tesseract's language packs (English
+by default); vector-drawn PDFs with no text layer and no raster images OCR to
+nothing and fail with the "no readable text" message; OCR runs inside the
+ingest request like the rest of the pipeline (ADR-012) under the same
+5-minute timeout.
