@@ -18,6 +18,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Scanned-PDF detection + opt-in OCR (ADR-026, #29)** — a PDF with pages but
+  no text layer (a scan) now fails with an actionable message telling the
+  operator it looks like a scanned document and how to enable OCR, instead of
+  the generic "no extractable text in document". Installing the new backend
+  `[ocr]` extra (`pytesseract` + `pillow`, plus the `tesseract` binary) turns
+  on OCR over the page images, making scanned PDFs retrievable; the base
+  install stays unchanged. Text-layer PDFs are unaffected.
 - **Structure-aware CSV/JSON ingestion (ADR-024, #2)** — uploaded `.csv` and
   `.json` documents are now parsed by structure instead of decoded as one
   opaque text blob. Each CSV row becomes a `header: value | …` record and each
