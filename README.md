@@ -189,10 +189,10 @@ controller can actually reach.
 
 ## Screenshots
 
-<!--
-Add screenshots of the dashboard here once captured, e.g.:
-<p align="center"><img src="docs/assets/screenshot-nodes.png" width="720" alt="Nodes view" /></p>
--->
+<img width="959" height="599" alt="image" src="https://github.com/user-attachments/assets/3c45f389-fcae-4341-b9a1-27b2df2666ee" />
+<img width="1600" height="1000" alt="image" src="https://github.com/user-attachments/assets/42e7d8e2-e2e0-4703-b145-c19323846244" />
+
+
 
 *Screenshots of the redesigned dashboard are coming with the next release.*
 
