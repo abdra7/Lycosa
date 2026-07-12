@@ -72,8 +72,15 @@ You are the engineering partner building and maintaining Lycosa.
   fail-fast on default secrets (ADR-022, closes #7), per-IP login brute-force
   throttle (ADR-023), dashboard theme no-flash. Backend `0.3.0`, dashboard
   `0.3.0+4`.
-- **v0.3.0 released** (tag `v0.3.0`, GHCR image + desktop installers). Open
-  hardening/tech-debt items and ops follow-ups live in `docs/BACKLOG.md`.
+- **v0.3.0 + v0.3.1 released** (tags, GHCR images + desktop installers).
+- **v0.4.0** — knowledge-plane format fixes + multi-worker controller:
+  structure-aware CSV/JSON loaders (ADR-024, #2), embedding benchmark (#3),
+  `.docx` silent-corruption fix + binary-content guard (ADR-025, #28),
+  scanned-PDF detection + opt-in `[ocr]` extra (ADR-026, #29), Redis-backed
+  shared throttle windows (ADR-027) and multi-worker launch — cross-worker
+  event bus, leader-gated background jobs, `WORKERS` fail-fast,
+  `TRUSTED_PROXIES` (ADR-028, closes #4). Backend `0.4.0`, dashboard
+  `0.4.0+6`. Open items live in `docs/BACKLOG.md`.
 
 ---
 
@@ -81,7 +88,7 @@ You are the engineering partner building and maintaining Lycosa.
 
 | File | What it holds |
 |---|---|
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision log — ADR-001…023, every design choice and its rationale |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision log — ADR-001…028, every design choice and its rationale |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Open work: GitHub issues, local backlog, ops/config follow-ups |
 | [docs/AUDIT_v0.2.0.md](docs/AUDIT_v0.2.0.md) | v0.2.0 end-to-end QA/security/resilience audit report |
 | [docs/QA_v0.3.0.md](docs/QA_v0.3.0.md) | v0.3.0 production release audit + readiness scorecard (92/100) |

@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-12
+
+Knowledge-plane format fixes and a multi-worker controller: `.docx` and
+scanned-PDF ingestion handled properly (silent-corruption bug fixed), and the
+API can now run across multiple uvicorn workers with shared throttles,
+cluster-wide WebSocket events, and single-leader background jobs (opt-in via
+Redis; single-worker defaults unchanged).
+
 ### Fixed
 
 - **`.docx` uploads were silently corrupted (ADR-025, #28)** — a `.docx` fell
@@ -286,7 +294,8 @@ desktop dashboard.
   image, desktop installers (.dmg / .exe / .AppImage) built by a tagged
   release workflow, and an agent installer script.
 
-[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/abdra7/Lycosa/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/abdra7/Lycosa/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/abdra7/Lycosa/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/abdra7/Lycosa/compare/v0.2.0...v0.2.1
