@@ -31,7 +31,7 @@ async def login(body: LoginRequest, request: Request, db: DbDep) -> TokenRespons
     ip = _client_ip(request)
     guard_on = settings.auth_max_failed_logins > 0 and ip is not None
     if guard_on:
-        retry_after = is_locked_out(
+        retry_after = await is_locked_out(
             ip,
             max_failures=settings.auth_max_failed_logins,
             window_seconds=settings.auth_login_window_seconds,
@@ -53,7 +53,7 @@ async def login(body: LoginRequest, request: Request, db: DbDep) -> TokenRespons
     user = await authenticate_user(db, body.email, body.password)
     if user is None:
         if guard_on:
-            record_failure(ip, window_seconds=settings.auth_login_window_seconds)
+            await record_failure(ip, window_seconds=settings.auth_login_window_seconds)
         await audit(
             db,
             action="auth.login.failure",
@@ -64,7 +64,7 @@ async def login(body: LoginRequest, request: Request, db: DbDep) -> TokenRespons
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if guard_on:
-        clear_failures(ip)
+        await clear_failures(ip)
     token, session = await create_user_session(db, user)
     await audit(
         db,
