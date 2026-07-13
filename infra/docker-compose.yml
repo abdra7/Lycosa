@@ -16,7 +16,7 @@ x-logging: &default-logging
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     env_file: *env-files
     restart: unless-stopped
     logging: *default-logging
