@@ -57,7 +57,7 @@ services:
   # rate-limit / failed-login windows across uvicorn workers; the API uses it
   # only when REDIS_URL is set (e.g. redis://redis:6379/0 in the root .env).
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     profiles: ["redis"]
     restart: unless-stopped
     logging: *default-logging
