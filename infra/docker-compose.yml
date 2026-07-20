@@ -34,7 +34,7 @@ services:
       - lycosa
 
   qdrant:
-    image: qdrant/qdrant:v1.18.2
+    image: qdrant/qdrant:v1.18.3
     restart: unless-stopped
     logging: *default-logging
     volumes:
