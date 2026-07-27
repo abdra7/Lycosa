@@ -123,7 +123,7 @@ services:
       - lycosa
 
   grafana:
-    image: grafana/grafana:13.1.0
+    image: grafana/grafana:13.1.1
     # without a root .env Grafana uses its stock admin/admin login and forces
     # a password change on first sign-in; set GF_SECURITY_ADMIN_* to override
     # (only the operator .env here — Grafana has no use for the DB defaults)
