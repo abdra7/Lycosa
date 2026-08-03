@@ -104,7 +104,7 @@ services:
       - lycosa
 
   prometheus:
-    image: prom/prometheus:v3.13.1
+    image: prom/prometheus:v3.13.2
     restart: unless-stopped
     logging: *default-logging
     volumes:
