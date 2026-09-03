@@ -19,9 +19,9 @@ Turn the devices you already own into one cooperative AI execution fabric.
 **Lycosa** is a LAN-first, distributed multi-agent AI orchestration platform.
 It turns workstations, laptops, homelab boxes, and mini-PCs into one
 cooperative AI execution fabric. Each device runs a Local Agent that can host
-a local LLM (Ollama first), tools, and metrics; a central controller
+a local LLM (Ollama), tools, and metrics; a central controller
 discovers devices, recommends each one a role based on its hardware,
-schedules tasks with failover, routes knowledge (RAG) requests, runs
+schedules tasks, routes knowledge (RAG) requests, runs
 multi-step workflows with human approval gates, and streams everything live
 to a native desktop dashboard.
 
@@ -31,7 +31,7 @@ to a native desktop dashboard.
   registration and recommended one of **AI Compute · Hybrid · Knowledge ·
   Tool · Vision · Storage**, with a human-readable rationale and per-role
   confidence scores. Accept the recommendation or override it.
-- **Task scheduling with failover** — the scheduler places work by role and
+- **Task scheduling** — the scheduler places work by role and
   capacity and retries on the next best candidate when a node drops.
 - **Knowledge routing (RAG)** — upload documents into collections, embed
   them locally, and retrieve across the fabric with a built-in playground.
