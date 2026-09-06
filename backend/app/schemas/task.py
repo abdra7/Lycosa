@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,13 @@ class TaskCreate(BaseModel):
     # when set (or for retrieval-type tasks, using the prompt), the Knowledge
     # Router injects retrieved context into the prompt before dispatch
     knowledge_query: str | None = None
+    provider: Literal["ollama", "anthropic"] = "ollama"
+    requires_privacy: bool = False
+    required_vram_mb: int | None = Field(default=None, ge=0)
+    required_ram_mb: int | None = Field(default=None, ge=0)
+    allow_cpu_fallback: bool = False
+    max_tokens: int = Field(default=4096, ge=1, le=16384)
+    temperature: float = Field(default=0.2, ge=0, le=1)
 
 
 class TaskExecutionOut(BaseModel):

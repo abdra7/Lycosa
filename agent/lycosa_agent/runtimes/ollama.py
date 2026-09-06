@@ -4,6 +4,8 @@ from typing import Any
 
 import httpx
 
+from lycosa_agent.runtimes.chat import RuntimeRequest, RuntimeResponse
+
 
 class OllamaAdapter:
     name = "ollama"
@@ -33,3 +35,27 @@ class OllamaAdapter:
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+    async def complete(
+        self, request: RuntimeRequest, credential: str | None = None
+    ) -> RuntimeResponse:
+        response = await self._client.post(
+            "/api/chat",
+            json={
+                "model": request.model.removeprefix("ollama/"),
+                "messages": [m.model_dump() for m in request.messages],
+                "stream": False,
+                "options": {"temperature": request.temperature, "num_predict": request.max_tokens},
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        return RuntimeResponse(
+            output=data["message"]["content"],
+            provider=self.name,
+            model=request.model,
+            usage={
+                "input_tokens": data.get("prompt_eval_count", 0),
+                "output_tokens": data.get("eval_count", 0),
+            },
+        )

@@ -15,6 +15,7 @@ Semantics, identical in both backends:
   a successful login).
 """
 
+import math
 import time
 from abc import ABC, abstractmethod
 from collections import deque
@@ -44,7 +45,7 @@ class WindowStore(ABC):
 
 
 def _retry_after(oldest: float, window_start: float) -> int:
-    return max(1, int(oldest - window_start) + 1)
+    return max(1, math.ceil(oldest - window_start))
 
 
 class InProcessWindowStore(WindowStore):

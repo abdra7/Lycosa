@@ -5,19 +5,28 @@ Every request must carry the agent token this agent registered with
 """
 
 import hmac
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from lycosa_agent.runtimes.base import RuntimeAdapter
+from lycosa_agent.runtimes.base import LocalRuntimeAdapter
+from lycosa_agent.runtimes.chat import ChatMessage, RuntimeRequest
+from lycosa_agent.runtimes.registry import provider_registry
 
 AGENT_TOKEN_HEADER = "X-Agent-Token"
 
 
 class ExecuteRequest(BaseModel):
     model: str = Field(min_length=1)
-    prompt: str
+    prompt: str = ""
+    messages: list[ChatMessage] | None = None
+    provider: Literal["ollama", "anthropic"] = "ollama"
+    max_tokens: int = Field(default=4096, ge=1, le=16384)
+    temperature: float = Field(default=0.2, ge=0, le=1)
+    stream: Literal[False] = False
+    tools: list = Field(default_factory=list, max_length=0)
+    agent_loop: Literal[False] = False
     options: dict[str, Any] = {}
 
 
@@ -37,8 +46,10 @@ class PullResponse(BaseModel):
     error: str | None = None
 
 
-def create_app(adapter: RuntimeAdapter, token: str) -> FastAPI:
+def create_app(adapter: LocalRuntimeAdapter, token: str, *, cloud_enabled: bool = False) -> FastAPI:
     app = FastAPI(title="Lycosa Local Agent", docs_url=None, redoc_url=None)
+    app.state.running_tasks = 0
+    registry = provider_registry(adapter)
 
     async def check_token(
         x_agent_token: Annotated[str | None, Header()] = None,
@@ -66,11 +77,33 @@ def create_app(adapter: RuntimeAdapter, token: str) -> FastAPI:
             return PullResponse(status="failed", error=str(exc))
 
     @app.post("/execute", response_model=ExecuteResponse, dependencies=[Depends(check_token)])
-    async def execute(body: ExecuteRequest) -> ExecuteResponse:
+    async def execute(
+        body: ExecuteRequest,
+        x_provider_credential: Annotated[str | None, Header()] = None,
+    ) -> ExecuteResponse:
+        if body.provider != "ollama" and (not cloud_enabled or not x_provider_credential):
+            raise HTTPException(403, "Cloud execution is not authorized")
+        app.state.running_tasks += 1
         try:
-            output = await adapter.generate(body.model, body.prompt, body.options)
+            if body.messages is not None or body.provider != "ollama":
+                request = RuntimeRequest(
+                    model=body.model,
+                    messages=body.messages or [ChatMessage(role="user", content=body.prompt)],
+                    max_tokens=body.max_tokens,
+                    temperature=body.temperature,
+                )
+                result = await registry[body.provider].complete(request, x_provider_credential)
+                output = result.output
+            else:
+                output = await adapter.generate(body.model, body.prompt, body.options)
         except Exception as exc:  # noqa: BLE001 — report, don't crash the agent
-            return ExecuteResponse(status="failed", error=str(exc))
+            return ExecuteResponse(
+                status="failed",
+                error=("Cloud provider request failed" if body.provider != "ollama" else str(exc)),
+            )
+        finally:
+            app.state.running_tasks -= 1
+            x_provider_credential = None
         return ExecuteResponse(status="succeeded", output=output)
 
     return app

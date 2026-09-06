@@ -4,6 +4,8 @@
 
 # Lycosa
 
+Created and maintained by [abdra7](https://github.com/abdra7).
+
 **AI Operations Layer for Local and Cloud AI Agents**
 
 Turn the devices you already own into one cooperative AI execution fabric.
@@ -74,7 +76,8 @@ flowchart LR
     API -- "dispatch tasks" --> A1 & A2 & A3
 ```
 
-See [docs/DECISIONS.md](docs/DECISIONS.md) for the architecture decision log.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development conventions;
+the detailed architecture decision log is maintained in the project vault.
 
 ## Installation
 
@@ -107,7 +110,7 @@ On Windows hosts, use PowerShell: `.\scripts\install.ps1`
 The installer checks Docker, generates secrets into `.env`, asks for your
 admin email/password, starts the stack, and prints the **controller URL**
 (e.g. `http://192.168.9.800:8000`) to enter in the desktop app. Every setting
-lives in the root `.env` — see `.env.example` for what exists.
+lives in the root `.env`; committed defaults are in `infra/compose-defaults.env`.
 
 Prefer plain compose? A fresh clone runs with **zero configuration** — no
 `.env` needed:
@@ -119,7 +122,7 @@ docker compose -f infra/docker-compose.yml up --build -d
 Safe defaults come from `infra/compose-defaults.env`; the API generates
 `JWT_SECRET` and an admin password on first run (the password is printed once
 in the `api` container logs — `docker compose -f infra/docker-compose.yml
-logs api`). A root `.env` (copy `.env.example`) overrides any of it.
+logs api`). The installer-generated root `.env` overrides these defaults.
 
 Local endpoints once up: API docs at `http://localhost:8000/docs`, Prometheus
 at `:9090` (localhost only), Grafana at `:3001`. Postgres and Qdrant are
@@ -208,6 +211,11 @@ controller can actually reach.
 
 ## Roadmap
 
+An incremental V2 implementation adds GPU/VRAM telemetry, a provider-neutral
+chat contract, opt-in Anthropic execution, Controller-owned OS-vault BYOK and
+explainable routing. See [Sprint 12 setup and limitations](docs/SPRINT12.md)
+for configuration, compatibility, security requirements and remaining live checks.
+
 - Node decommissioning (remove stale nodes from the inventory)
 - Async task queue behind `POST /tasks` (202 + polling)
 - Re-embed job when a knowledge collection switches embedding backend
@@ -216,7 +224,7 @@ controller can actually reach.
 - Kubernetes manifests under `infra/` (the controller is a single-process
   design today)
 
-See [docs/BACKLOG.md](docs/BACKLOG.md) for the full backlog.
+The detailed backlog is maintained in the project vault.
 
 ## Repository layout
 

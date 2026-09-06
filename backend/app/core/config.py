@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     # task dispatch (ADR-012)
     task_dispatch_timeout_seconds: int = 120
     task_max_attempts: int = 3
+    # Nonsecret policy. Keys live only in the controller account's OS vault.
+    cloud_allowed_node_ids: list[str] = []
+    cloud_node_origins: dict[str, str] = {}
+    cloud_models: list[str] = []
+    routing_vram_safety_margin_mb: int = 512
 
     # knowledge plane (ADR-013)
     embedding_backend: str = "hashing"  # hashing | fastembed

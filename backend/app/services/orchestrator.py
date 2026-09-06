@@ -23,7 +23,8 @@ from app.schemas.task import TaskCreate
 from app.services.audit import audit
 from app.services.classifier import classify, preferred_roles
 from app.services.knowledge.router import retrieve
-from app.services.scheduler import rank_candidates
+from app.services.provider_secrets import SecretStoreUnavailable, provider_key
+from app.services.scheduler import route_candidates
 
 logger = logging.getLogger("lycosa.orchestrator")
 
@@ -71,6 +72,44 @@ async def _dispatch(node: Node, model: str, prompt: str, options: dict[str, Any]
         return response.json()
 
 
+async def _dispatch_cloud(node: Node, body: TaskCreate, prompt: str) -> dict[str, Any]:
+    credential = None
+    try:
+        credential = provider_key(body.provider)
+        if not credential:
+            return {"status": "failed", "error": "Provider credential unavailable"}
+        async with httpx.AsyncClient(
+            timeout=get_settings().task_dispatch_timeout_seconds, follow_redirects=False
+        ) as client:
+            response = await client.post(
+                f"{node.agent_url.rstrip('/')}/execute",
+                json={
+                    "provider": body.provider,
+                    "model": body.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": body.max_tokens,
+                    "temperature": body.temperature,
+                },
+                headers={AGENT_TOKEN_HEADER: node.agent_token, "X-Provider-Credential": credential},
+            )
+            if response.is_success:
+                result = response.json()
+                if (
+                    isinstance(result, dict)
+                    and result.get("status") == "succeeded"
+                    and isinstance(result.get("output"), str)
+                ):
+                    return {
+                        "status": "succeeded",
+                        "output": result["output"].replace(credential, "[REDACTED]"),
+                    }
+    except (httpx.HTTPError, SecretStoreUnavailable, ValueError, TypeError):
+        pass
+    finally:
+        credential = None
+    return {"status": "failed", "error": "Cloud execution failed"}
+
+
 async def submit_task(
     db: AsyncSession,
     body: TaskCreate,
@@ -85,6 +124,8 @@ async def submit_task(
             "model": body.model,
             "options": body.options,
             "knowledge_query": body.knowledge_query,
+            "provider": body.provider,
+            "requires_privacy": body.requires_privacy,
         },
         created_by_user_id=created_by_user_id,
         created_by_api_key_id=created_by_api_key_id,
@@ -147,7 +188,16 @@ async def submit_task(
                     },
                 )
 
-    candidates = await rank_candidates(db, task_type, model=body.model)
+    credentials_available = False
+    if body.provider != "ollama" and not body.requires_privacy:
+        try:
+            credentials_available = bool(provider_key(body.provider))
+        except SecretStoreUnavailable:
+            pass
+    decisions = await route_candidates(
+        db, task_type, body, credentials_available=credentials_available
+    )
+    candidates = [decision.node for decision in decisions]
     max_attempts = get_settings().task_max_attempts
 
     if not candidates:
@@ -165,6 +215,14 @@ async def submit_task(
 
     last_error = "unknown"
     for attempt, node in enumerate(candidates[:max_attempts], start=1):
+        routing = decisions[attempt - 1].explain()
+        await audit(
+            db,
+            action="task.routing",
+            resource_type="task",
+            resource_id=str(task.id),
+            detail=routing,
+        )
         task.status = TaskStatus.ASSIGNED
         task.assigned_at = datetime.now(UTC)
         task.node_id = node.id
@@ -189,7 +247,18 @@ async def submit_task(
             continue
 
         try:
-            outcome = await _dispatch(node, model, prompt, body.options)
+            options = dict(body.options)
+            if "max_tokens" in body.model_fields_set:
+                options["num_predict"] = body.max_tokens
+            if "temperature" in body.model_fields_set:
+                options["temperature"] = body.temperature
+            if decisions[attempt - 1].cpu_only:
+                options["num_gpu"] = 0
+            outcome = (
+                await _dispatch_cloud(node, body, prompt)
+                if body.provider != "ollama"
+                else await _dispatch(node, model, prompt, options)
+            )
         except httpx.HTTPError as exc:
             last_error = f"node {node.name}: {exc}"
             logger.warning("dispatch attempt %d failed: %s", attempt, last_error)
@@ -204,7 +273,12 @@ async def submit_task(
                 db,
                 task,
                 TaskStatus.SUCCEEDED,
-                result={"output": outcome.get("output"), "model": model, "node": str(node.id)},
+                result={
+                    "output": outcome.get("output"),
+                    "model": model,
+                    "node": str(node.id),
+                    "routing": routing,
+                },
             )
 
         last_error = f"node {node.name}: {outcome.get('error', 'agent reported failure')}"

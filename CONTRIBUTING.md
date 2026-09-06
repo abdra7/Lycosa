@@ -17,7 +17,8 @@ contributor (human or agent) follows these conventions.
 /scripts   install scripts, release tooling, one-off automation
 ```
 
-New top-level directories require a decision recorded in `docs/DECISIONS.md`.
+New top-level directories require a decision recorded in the project vault's
+architecture decision log.
 
 ## Branching
 
@@ -30,6 +31,14 @@ Trunk-based development. `main` is always deployable.
   the initial scaffold commit.
 
 ## Commits
+
+Project owner and maintainer: **abdra7**.
+
+AI-assisted work performed for abdra7 is attributed to abdra7, not to the
+assistant tool. Do not add AI tools as commit authors, co-authors, or project
+contributors. Preserve attribution for actual human contributors and required
+third-party license notices. Provider names in integrations and technical
+documentation identify supported products, not project contributors.
 
 [Conventional Commits](https://www.conventionalcommits.org/):
 
@@ -65,9 +74,10 @@ deliverable (e.g. `feat: node registration and hardware profile ingestion`).
 
 ## Config and secrets
 
-- All configuration and secrets are supplied via environment variables.
-- `.env.example` is committed and kept up to date with every variable the
-  stack needs, documented with a comment and a safe placeholder/default.
+- Runtime configuration uses environment variables. Cloud provider keys use
+  the controller OS vault; never put them in environment files or task options.
+- Public defaults are documented in `infra/compose-defaults.env` and feature
+  guides. Internal `.env.example` and operational notes remain untracked.
 - Real secrets (`.env`, credentials, keys) are never committed — see
   `.gitignore`.
 
@@ -82,5 +92,5 @@ deliverable (e.g. `feat: node registration and hardware profile ingestion`).
 ## Architecture decisions
 
 Whenever a non-obvious architectural choice is made (a library, a schema
-shape, a protocol, a trade-off), append an entry to `docs/DECISIONS.md`
+shape, a protocol, a trade-off), append an entry to the project vault's decision log
 before the phase is considered complete.

@@ -279,7 +279,7 @@ class _NodesTable extends StatelessWidget {
             DataColumn(label: Text('Status')),
             DataColumn(label: Text('Role')),
             DataColumn(label: Text('Recommended')),
-            DataColumn(label: Text('Heartbeat')),
+            DataColumn(label: Text('Usage')),
             DataColumn(label: Text('CPU')),
             DataColumn(label: Text('RAM')),
           ],

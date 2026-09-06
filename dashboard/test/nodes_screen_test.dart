@@ -142,7 +142,7 @@ Future<void> settle(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('node list renders status, roles, and heartbeat age', (
+  testWidgets('node list renders status, roles, and Usage update age', (
     tester,
   ) async {
     final controller = fakeController(nodes: [nodeJson(role: 'hybrid')]);
@@ -152,6 +152,8 @@ void main() {
     await settle(tester);
 
     expect(find.text('gpu-box'), findsOneWidget);
+    expect(find.text('Usage'), findsOneWidget);
+    expect(find.text('Heartbeat'), findsNothing);
     expect(find.text('online'), findsOneWidget);
     expect(find.text('hybrid'), findsOneWidget);
     expect(find.text('hybrid (85%)'), findsOneWidget);
