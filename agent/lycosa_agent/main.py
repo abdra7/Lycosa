@@ -37,6 +37,7 @@ async def _register_with_retry(
     client: ControllerClient, settings: AgentSettings, agent_url: str, agent_token: str
 ) -> dict:
     profile = collect_profile(settings.ollama_url)
+    profile.setdefault("extra", {})["cloud_execution_capability"] = settings.cloud_execution_enabled
     for attempt, backoff in enumerate([0, *_REGISTER_BACKOFF_SECONDS]):
         if backoff:
             await asyncio.sleep(backoff)
@@ -113,6 +114,9 @@ async def _auto_configure_model(
     logger.info("auto-setup complete: %s is installed and ready", best["model"])
     try:  # re-register so the controller's inventory/scheduler see the model now
         profile = (profile_factory or (lambda: collect_profile(settings.ollama_url)))()
+        profile.setdefault("extra", {})["cloud_execution_capability"] = (
+            settings.cloud_execution_enabled
+        )
         await client.register(
             settings.node_name, profile, agent_url=agent_url, agent_token=agent_token
         )
@@ -121,10 +125,23 @@ async def _auto_configure_model(
     return best["model"]
 
 
-async def _heartbeat_loop(client: ControllerClient, interval: int) -> None:
+async def _heartbeat_loop(
+    client: ControllerClient, interval: int, exec_app=None, adapter=None
+) -> None:
     while True:
         try:
-            response = await client.heartbeat(collect_metrics())
+            metrics = await asyncio.to_thread(
+                collect_metrics, exec_app.state.running_tasks if exec_app else 0
+            )
+            if adapter is not None:
+                healthy = False
+                try:
+                    await asyncio.wait_for(adapter.list_models(), timeout=2)
+                    healthy = True
+                except Exception:
+                    pass
+                metrics["runtime_health"] = {"ollama": healthy}
+            response = await client.heartbeat(metrics)
             interval = int(response.get("heartbeat_interval_seconds", interval))
         except httpx.HTTPError as exc:
             logger.warning("heartbeat failed: %s", exc)
@@ -142,7 +159,9 @@ async def run(settings: AgentSettings) -> None:
     node = await _register_with_retry(client, settings, agent_url, agent_token)
 
     adapter = OllamaAdapter(settings.ollama_url)
-    exec_app = create_app(adapter, token=agent_token)
+    exec_app = create_app(
+        adapter, token=agent_token, cloud_enabled=settings.cloud_execution_enabled
+    )
     server = uvicorn.Server(
         uvicorn.Config(
             exec_app, host=settings.exec_host, port=settings.exec_port, log_level="warning"
@@ -160,7 +179,7 @@ async def run(settings: AgentSettings) -> None:
     try:
         await asyncio.gather(
             server.serve(),
-            _heartbeat_loop(client, settings.heartbeat_interval_seconds),
+            _heartbeat_loop(client, settings.heartbeat_interval_seconds, exec_app, adapter),
             _auto_configure_model(
                 client,
                 adapter,

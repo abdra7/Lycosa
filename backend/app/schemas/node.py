@@ -46,12 +46,24 @@ class NodeRegisterRequest(BaseModel):
 
 
 class GpuMetrics(BaseModel):
+    index: int | None = Field(default=None, ge=0)
+    vendor: str | None = None
+    name: str | None = None
+    available: bool = True
+    utilization_percent: float | None = Field(default=None, ge=0, le=100)
+    memory_used_mb: float | None = Field(default=None, ge=0)
+    memory_total_mb: float | None = Field(default=None, gt=0)
+    memory_percent: float | None = Field(default=None, ge=0, le=100)
+    temperature_c: float | None = None
     util_percent: float | None = Field(default=None, ge=0, le=100)
     mem_used_gb: float | None = Field(default=None, ge=0)
     temp_c: float | None = None
 
 
 class NodeMetrics(BaseModel):
+    runtime_health: dict[str, bool | None] = {}
+    ram_available_mb: float | None = Field(default=None, ge=0)
+    gpu_unavailable_reason: str | None = None
     cpu_percent: float = Field(ge=0, le=100)
     ram_percent: float = Field(ge=0, le=100)
     ram_used_gb: float | None = Field(default=None, ge=0)

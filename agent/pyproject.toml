@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "lycosa-agent"
 version = "0.1.0"
 description = "Lycosa Local Agent — turns a device into a node in the Lycosa fabric"
+authors = [{ name = "abdra7" }]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
@@ -21,6 +22,7 @@ dependencies = [
 lycosa-agent = "lycosa_agent.main:cli"
 
 [project.optional-dependencies]
+gpu = ["nvidia-ml-py>=12"]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",

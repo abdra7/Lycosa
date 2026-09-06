@@ -18,9 +18,16 @@ from app.core.config import get_settings
 from app.core.window_store import (
     InProcessWindowStore,
     RedisWindowStore,
+    _retry_after,
     get_window_store,
     set_window_store,
 )
+
+
+def test_retry_after_exact_second_does_not_add_extra_second() -> None:
+    assert _retry_after(1000.0, 940.0) == 60
+    assert _retry_after(1000.1, 940.0) == 61
+    assert _retry_after(940.0, 940.0) == 1
 
 
 def _two_worker_stores() -> tuple[RedisWindowStore, RedisWindowStore]:

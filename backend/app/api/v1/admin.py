@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -6,16 +7,42 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 
 from app.api.deps import DbDep, Principal, require_roles
+from app.core.config import get_settings
 from app.core.security import generate_api_key
 from app.models import ApiKey, AuditLog, Role
 from app.models.user import ROLE_ADMIN
 from app.schemas.apikey import ApiKeyCreate, ApiKeyCreatedOut, ApiKeyOut
 from app.schemas.auth import AuditLogOut
 from app.services.audit import audit
+from app.services.provider_registry import PROVIDERS
+from app.services.provider_secrets import SecretStoreUnavailable, provider_key
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 AdminDep = Annotated[Principal, Depends(require_roles(ROLE_ADMIN))]
+
+
+@router.get("/providers")
+async def list_providers(_principal: AdminDep) -> list[dict]:
+    """Safe registry metadata; configuration is not proof of provider validity."""
+    settings = get_settings()
+    result = []
+    for name, provider in PROVIDERS.items():
+        configured = None
+        if provider.execution_mode == "cloud":
+            try:
+                configured = bool(provider_key(name))
+            except SecretStoreUnavailable:
+                configured = False
+        result.append(
+            {
+                **asdict(provider),
+                "credential_configured": configured,
+                "models": settings.cloud_models if provider.execution_mode == "cloud" else [],
+                "availability": "evaluated per node at dispatch",
+            }
+        )
+    return result
 
 
 def _client_ip(request: Request) -> str | None:

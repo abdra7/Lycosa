@@ -7,6 +7,7 @@ import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'nodes_screen.dart';
 import 'providers.dart';
+import 'gpu_usage.dart';
 
 class NodeDetailScreen extends ConsumerWidget {
   const NodeDetailScreen({super.key, required this.nodeId});
@@ -35,10 +36,7 @@ class NodeDetailScreen extends ConsumerWidget {
                     _MetricsCard(node: n),
                     _ProfileCard(node: n),
                   ];
-                  final right = <Widget>[
-                    _RoleCard(node: n),
-                    _LlmCard(node: n),
-                  ];
+                  final right = <Widget>[_RoleCard(node: n), _LlmCard(node: n)];
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -262,7 +260,7 @@ class _IdentityCardState extends ConsumerState<_IdentityCard> {
                 StatusChip(status: node.status),
                 const SizedBox(height: 6),
                 Text(
-                  'heartbeat ${heartbeatAge(node.lastHeartbeatAt)}',
+                  'Usage updated ${heartbeatAge(node.lastHeartbeatAt)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -402,10 +400,10 @@ class _MetricsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final metrics = node.metrics;
     return _CardShell(
-      title: 'Latest metrics',
+      title: 'Usage',
       icon: Icons.monitor_heart_outlined,
       child: metrics == null
-          ? const Text('No heartbeat received yet.')
+          ? const Text('No usage data received yet.')
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -425,13 +423,7 @@ class _MetricsCard extends StatelessWidget {
                   (metrics['disk_percent'] as num?)?.toDouble(),
                 ),
                 _KeyValue('Running tasks', '${metrics['running_tasks'] ?? 0}'),
-                for (final (index, gpu)
-                    in ((metrics['gpus'] as List?) ?? const []).indexed)
-                  _KeyValue(
-                    'GPU $index',
-                    '${(gpu['util_percent'] as num?)?.toStringAsFixed(0) ?? '—'}% util'
-                        ' · ${(gpu['temp_c'] as num?)?.toStringAsFixed(0) ?? '—'}°C',
-                  ),
+                GpuUsage(metrics: metrics),
               ],
             ),
     );

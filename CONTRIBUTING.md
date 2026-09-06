@@ -31,6 +31,14 @@ Trunk-based development. `main` is always deployable.
 
 ## Commits
 
+Project owner and maintainer: **abdra7**.
+
+AI-assisted work performed for abdra7 is attributed to abdra7, not to the
+assistant tool. Do not add AI tools as commit authors, co-authors, or project
+contributors. Preserve attribution for actual human contributors and required
+third-party license notices. Provider names in integrations and technical
+documentation identify supported products, not project contributors.
+
 [Conventional Commits](https://www.conventionalcommits.org/):
 
 - `feat:` — new capability

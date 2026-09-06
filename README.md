@@ -4,6 +4,8 @@
 
 # Lycosa
 
+Created and maintained by [abdra7](https://github.com/abdra7).
+
 **AI Operations Layer for Local and Cloud AI Agents**
 
 Turn the devices you already own into one cooperative AI execution fabric.
@@ -207,6 +209,11 @@ controller can actually reach.
   entirely over the REST API (`/docs`) without the desktop app.
 
 ## Roadmap
+
+An incremental V2 implementation adds GPU/VRAM telemetry, a provider-neutral
+chat contract, opt-in Anthropic execution, Controller-owned OS-vault BYOK and
+explainable routing. See [Sprint 12 setup and limitations](docs/SPRINT12.md)
+for configuration, compatibility, security requirements and remaining live checks.
 
 - Node decommissioning (remove stale nodes from the inventory)
 - Async task queue behind `POST /tasks` (202 + polling)
