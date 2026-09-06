@@ -21,9 +21,9 @@ Turn the devices you already own into one cooperative AI execution fabric.
 **Lycosa** is a LAN-first, distributed multi-agent AI orchestration platform.
 It turns workstations, laptops, homelab boxes, and mini-PCs into one
 cooperative AI execution fabric. Each device runs a Local Agent that can host
-a local LLM (Ollama first), tools, and metrics; a central controller
+a local LLM (Ollama), tools, and metrics; a central controller
 discovers devices, recommends each one a role based on its hardware,
-schedules tasks with failover, routes knowledge (RAG) requests, runs
+schedules tasks, routes knowledge (RAG) requests, runs
 multi-step workflows with human approval gates, and streams everything live
 to a native desktop dashboard.
 
@@ -33,7 +33,7 @@ to a native desktop dashboard.
   registration and recommended one of **AI Compute · Hybrid · Knowledge ·
   Tool · Vision · Storage**, with a human-readable rationale and per-role
   confidence scores. Accept the recommendation or override it.
-- **Task scheduling with failover** — the scheduler places work by role and
+- **Task scheduling** — the scheduler places work by role and
   capacity and retries on the next best candidate when a node drops.
 - **Knowledge routing (RAG)** — upload documents into collections, embed
   them locally, and retrieve across the fabric with a built-in playground.
@@ -76,7 +76,8 @@ flowchart LR
     API -- "dispatch tasks" --> A1 & A2 & A3
 ```
 
-See [docs/DECISIONS.md](docs/DECISIONS.md) for the architecture decision log.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development conventions;
+the detailed architecture decision log is maintained in the project vault.
 
 ## Installation
 
@@ -109,7 +110,7 @@ On Windows hosts, use PowerShell: `.\scripts\install.ps1`
 The installer checks Docker, generates secrets into `.env`, asks for your
 admin email/password, starts the stack, and prints the **controller URL**
 (e.g. `http://192.168.9.800:8000`) to enter in the desktop app. Every setting
-lives in the root `.env` — see `.env.example` for what exists.
+lives in the root `.env`; committed defaults are in `infra/compose-defaults.env`.
 
 Prefer plain compose? A fresh clone runs with **zero configuration** — no
 `.env` needed:
@@ -121,7 +122,7 @@ docker compose -f infra/docker-compose.yml up --build -d
 Safe defaults come from `infra/compose-defaults.env`; the API generates
 `JWT_SECRET` and an admin password on first run (the password is printed once
 in the `api` container logs — `docker compose -f infra/docker-compose.yml
-logs api`). A root `.env` (copy `.env.example`) overrides any of it.
+logs api`). The installer-generated root `.env` overrides these defaults.
 
 Local endpoints once up: API docs at `http://localhost:8000/docs`, Prometheus
 at `:9090` (localhost only), Grafana at `:3001`. Postgres and Qdrant are
@@ -223,7 +224,7 @@ for configuration, compatibility, security requirements and remaining live check
 - Kubernetes manifests under `infra/` (the controller is a single-process
   design today)
 
-See [docs/BACKLOG.md](docs/BACKLOG.md) for the full backlog.
+The detailed backlog is maintained in the project vault.
 
 ## Repository layout
 
