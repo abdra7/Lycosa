@@ -62,6 +62,7 @@ Thumbs.db
 # --- Logs ---
 *.log
 logs/
+/tmp/pdfs/
 
 # --- Claude Build Documentation Policy ---
 /CLAUDE.md
