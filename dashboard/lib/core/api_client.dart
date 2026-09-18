@@ -616,6 +616,8 @@ class ApiClient {
     String? type,
     String? model,
     String? knowledgeQuery,
+    String? knowledgeCollection,
+    String provider = 'ollama',
   }) async {
     final response = await _send(
       () => _http.post(
@@ -626,6 +628,8 @@ class ApiClient {
           'type': ?type,
           'model': ?model,
           'knowledge_query': ?knowledgeQuery,
+          'knowledge_collection': ?knowledgeCollection,
+          if (provider != 'ollama') 'provider': provider,
         }),
       ),
       timeout: const Duration(minutes: 7),
@@ -819,6 +823,49 @@ class ApiClient {
     return _decodeList(
       response,
     ).map((e) => ApiKeyInfo.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listProviders() async {
+    final response = await _send(
+      () => _http.get(_uri('/api/v1/admin/providers'), headers: _headers),
+    );
+    return _decodeList(response).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> saveProviderKey(
+    String provider,
+    String key,
+    String storage,
+  ) async {
+    final uri = _uri('/api/v1/admin/providers/$provider/credential');
+    if (uri.scheme != 'https' &&
+        !(uri.scheme == 'http' &&
+            ['localhost', '127.0.0.1', '::1'].contains(uri.host))) {
+      throw StateError(
+        'Provider keys require HTTPS or a loopback controller URL.',
+      );
+    }
+    final response = await _send(() async {
+      final request = http.Request('PUT', uri)
+        ..followRedirects = false
+        ..headers.addAll(_headers)
+        ..body = jsonEncode({'key': key, 'storage': storage});
+      return http.Response.fromStream(await _http.send(request));
+    });
+    if (response.statusCode >= 300 && response.statusCode < 400) {
+      throw StateError('Provider key redirects are not allowed.');
+    }
+    _decode(response);
+  }
+
+  Future<void> deleteProviderKey(String provider, String storage) async {
+    final response = await _send(
+      () => _http.delete(
+        _uri('/api/v1/admin/providers/$provider/credential?storage=$storage'),
+        headers: _headers,
+      ),
+    );
+    _decode(response);
   }
 
   Future<void> revokeApiKey(String id) async {

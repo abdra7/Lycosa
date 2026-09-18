@@ -15,6 +15,7 @@ from lycosa_agent.config import AgentSettings
 from lycosa_agent.discovery import DiscoveryAdvertiser
 from lycosa_agent.executor import create_app
 from lycosa_agent.hwprofile import collect_profile
+from lycosa_agent.knowledge import capabilities
 from lycosa_agent.metrics import collect_metrics
 from lycosa_agent.runtimes.ollama import OllamaAdapter
 
@@ -38,6 +39,7 @@ async def _register_with_retry(
 ) -> dict:
     profile = collect_profile(settings.ollama_url)
     profile.setdefault("extra", {})["cloud_execution_capability"] = settings.cloud_execution_enabled
+    profile["extra"]["agent_capabilities"] = capabilities()
     for attempt, backoff in enumerate([0, *_REGISTER_BACKOFF_SECONDS]):
         if backoff:
             await asyncio.sleep(backoff)
@@ -117,6 +119,7 @@ async def _auto_configure_model(
         profile.setdefault("extra", {})["cloud_execution_capability"] = (
             settings.cloud_execution_enabled
         )
+        profile["extra"]["agent_capabilities"] = capabilities()
         await client.register(
             settings.node_name, profile, agent_url=agent_url, agent_token=agent_token
         )

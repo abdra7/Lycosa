@@ -4,12 +4,14 @@ Every request must carry the agent token this agent registered with
 (X-Agent-Token) — see ADR-011.
 """
 
+import asyncio
 import hmac
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
+from lycosa_agent.knowledge import GroundedRequest, GroundedResponse, answer, capabilities
 from lycosa_agent.runtimes.base import LocalRuntimeAdapter
 from lycosa_agent.runtimes.chat import ChatMessage, RuntimeRequest
 from lycosa_agent.runtimes.registry import provider_registry
@@ -50,6 +52,7 @@ def create_app(adapter: LocalRuntimeAdapter, token: str, *, cloud_enabled: bool 
     app = FastAPI(title="Lycosa Local Agent", docs_url=None, redoc_url=None)
     app.state.running_tasks = 0
     registry = provider_registry(adapter)
+    rag_slots = asyncio.Semaphore(2)
 
     async def check_token(
         x_agent_token: Annotated[str | None, Header()] = None,
@@ -66,6 +69,27 @@ def create_app(adapter: LocalRuntimeAdapter, token: str, *, cloud_enabled: bool 
     @app.get("/models", dependencies=[Depends(check_token)])
     async def models() -> list[str]:
         return await adapter.list_models()
+
+    @app.get("/capabilities", dependencies=[Depends(check_token)])
+    async def agent_capabilities() -> dict:
+        return capabilities()
+
+    @app.post("/rag/answer", response_model=GroundedResponse, dependencies=[Depends(check_token)])
+    async def grounded_answer(body: GroundedRequest) -> GroundedResponse:
+        if rag_slots.locked():
+            raise HTTPException(429, "Grounded-answer capacity busy; retry later")
+        async with rag_slots:
+            app.state.running_tasks += 1
+            try:
+                return await answer(adapter, body)
+            except TimeoutError:
+                raise HTTPException(504, "Local grounded answer timed out") from None
+            except Exception:
+                raise HTTPException(
+                    502, "Local grounded answer failed; check model/runtime"
+                ) from None
+            finally:
+                app.state.running_tasks -= 1
 
     @app.post("/models/pull", response_model=PullResponse, dependencies=[Depends(check_token)])
     async def pull_model(body: PullRequest) -> PullResponse:

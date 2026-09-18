@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
 import '../../core/session.dart';
+import 'providers_dialog.dart';
 
 final auditLogsProvider = FutureProvider.autoDispose<List<AuditLogEntry>>((
   ref,
@@ -39,6 +40,14 @@ class AdminScreen extends ConsumerWidget {
             children: [
               Text('Admin', style: Theme.of(context).textTheme.headlineSmall),
               const Spacer(),
+              TextButton.icon(
+                icon: const Icon(Icons.cloud_outlined),
+                label: const Text('Providers'),
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (_) => const ProvidersDialog(),
+                ),
+              ),
               IconButton(
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh),

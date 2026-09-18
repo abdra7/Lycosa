@@ -68,3 +68,6 @@ pip install -e ".[dev]"
 pytest
 ruff check . && ruff format --check .
 ```
+# Capability and MCP follow-up
+
+See [CAPABILITIES.md](CAPABILITIES.md) for the optional local MCP companion, authenticated grounded-answer endpoint, limits and tests. Existing running agents must restart to load this increment.

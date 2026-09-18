@@ -2,6 +2,8 @@
 
 Maintainer: **abdra7**.
 
+Follow-up local increment: [OpenRouter desktop setup](OPENROUTER.md) adds the selected free model, controller-side execution and desktop credential controls. The historical scope below describes the original Sprint 12 merge.
+
 ## Included
 
 - Per-GPU Usage and VRAM measurements through optional NVML, with an

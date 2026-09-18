@@ -20,9 +20,11 @@ dependencies = [
 
 [project.scripts]
 lycosa-agent = "lycosa_agent.main:cli"
+lycosa-agent-mcp = "lycosa_agent.mcp_server:main"
 
 [project.optional-dependencies]
 gpu = ["nvidia-ml-py>=12"]
+mcp = ["mcp>=1.28,<2"]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",

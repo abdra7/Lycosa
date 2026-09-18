@@ -251,6 +251,38 @@ class _CreateWorkflowDialogState extends ConsumerState<CreateWorkflowDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            TextButton.icon(
+              icon: const Icon(Icons.cloud_outlined),
+              label: const Text('Use OpenRouter free template'),
+              onPressed: _busy
+                  ? null
+                  : () {
+                      _definition.text = jsonEncode({
+                        'steps': [
+                          {
+                            'id': 'plan',
+                            'kind': 'task',
+                            'provider': 'openrouter',
+                            'model': 'nvidia/nemotron-3.5-lightning:free',
+                            'prompt': 'Plan how to: {{input}}',
+                          },
+                          {
+                            'id': 'gate',
+                            'kind': 'approval',
+                            'message': 'Review before continuing',
+                          },
+                          {
+                            'id': 'answer',
+                            'kind': 'task',
+                            'provider': 'openrouter',
+                            'model': 'nvidia/nemotron-3.5-lightning:free',
+                            'prompt':
+                                'Explain this plan: {{steps.plan.output}}',
+                          },
+                        ],
+                      });
+                    },
+            ),
             TextField(
               controller: _name,
               decoration: const InputDecoration(labelText: 'Name'),

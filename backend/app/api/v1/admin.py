@@ -1,9 +1,10 @@
 import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, SecretStr
 from sqlalchemy import select
 
 from app.api.deps import DbDep, Principal, require_roles
@@ -14,8 +15,14 @@ from app.models.user import ROLE_ADMIN
 from app.schemas.apikey import ApiKeyCreate, ApiKeyCreatedOut, ApiKeyOut
 from app.schemas.auth import AuditLogOut
 from app.services.audit import audit
+from app.services.openrouter import MODEL as OPENROUTER_MODEL
 from app.services.provider_registry import PROVIDERS
-from app.services.provider_secrets import SecretStoreUnavailable, provider_key
+from app.services.provider_secrets import (
+    SecretStoreUnavailable,
+    manage_key,
+    provider_key,
+    set_session_key,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -38,11 +45,87 @@ async def list_providers(_principal: AdminDep) -> list[dict]:
             {
                 **asdict(provider),
                 "credential_configured": configured,
-                "models": settings.cloud_models if provider.execution_mode == "cloud" else [],
-                "availability": "evaluated per node at dispatch",
+                "models": [OPENROUTER_MODEL]
+                if name == "openrouter"
+                else (settings.cloud_models if provider.execution_mode == "cloud" else []),
+                "availability": "evaluated at controller dispatch"
+                if name == "openrouter"
+                else "evaluated per node at dispatch",
             }
         )
     return result
+
+
+class ProviderKeyInput(BaseModel):
+    key: SecretStr
+    storage: Literal["vault", "session"] = "vault"
+
+
+@router.put("/providers/{provider}/credential", status_code=204)
+async def save_provider_credential(
+    provider: Literal["anthropic", "openrouter"],
+    body: ProviderKeyInput,
+    principal: AdminDep,
+    db: DbDep,
+) -> None:
+    # Transport is enforced by the desktop client (HTTPS except loopback).
+    # Deploy the API behind TLS for any remote admin access.
+    key = body.key.get_secret_value()
+    if (
+        not key
+        or key != key.strip()
+        or len(key) > 4096
+        or any(ord(c) < 33 or ord(c) > 126 for c in key)
+    ):
+        raise HTTPException(422, "Invalid provider credential")
+    if body.storage == "session" and provider != "openrouter":
+        raise HTTPException(422, "Session storage is available only for OpenRouter")
+    try:
+        if body.storage == "session":
+            set_session_key(provider, key)
+        else:
+            manage_key(provider, key)
+            set_session_key(provider, None) if get_settings().workers == 1 else None
+    except SecretStoreUnavailable:
+        raise HTTPException(
+            503, "Secure storage unavailable; session storage requires one worker"
+        ) from None
+    finally:
+        key = None
+    await audit(
+        db,
+        action="provider.credential.set",
+        actor_user_id=principal.id,
+        resource_type="provider",
+        resource_id=provider,
+        detail={"storage": body.storage},
+    )
+    await db.commit()
+
+
+@router.delete("/providers/{provider}/credential", status_code=204)
+async def delete_provider_credential(
+    provider: Literal["anthropic", "openrouter"],
+    principal: AdminDep,
+    db: DbDep,
+    storage: Literal["vault", "session"] = "vault",
+) -> None:
+    try:
+        if storage == "session":
+            set_session_key(provider, None)
+        else:
+            manage_key(provider, None)
+    except SecretStoreUnavailable:
+        raise HTTPException(503, "Credential removal failed for the selected storage") from None
+    await audit(
+        db,
+        action="provider.credential.delete",
+        actor_user_id=principal.id,
+        resource_type="provider",
+        resource_id=provider,
+        detail={"storage": storage},
+    )
+    await db.commit()
 
 
 def _client_ip(request: Request) -> str | None:

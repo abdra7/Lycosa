@@ -37,7 +37,11 @@ class TaskStepDef(_BaseStep):
     prompt: str = Field(min_length=1)
     task_type: TaskType | None = None
     model: str | None = None
+    provider: Literal["ollama", "anthropic", "openrouter"] = "ollama"
+    requires_privacy: bool = False
+    max_tokens: int = Field(default=4096, ge=1, le=16384)
     knowledge_query: str | None = None
+    knowledge_collection: str | None = None
     retries: int = Field(default=0, ge=0, le=5)
 
     def template_refs(self) -> set[str]:

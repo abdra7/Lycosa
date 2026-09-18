@@ -23,6 +23,7 @@ from app.schemas.task import TaskCreate
 from app.services.audit import audit
 from app.services.classifier import classify, preferred_roles
 from app.services.knowledge.router import retrieve
+from app.services.openrouter import complete as complete_openrouter
 from app.services.provider_secrets import SecretStoreUnavailable, provider_key
 from app.services.scheduler import route_candidates
 
@@ -124,6 +125,7 @@ async def submit_task(
             "model": body.model,
             "options": body.options,
             "knowledge_query": body.knowledge_query,
+            "knowledge_collection": body.knowledge_collection,
             "provider": body.provider,
             "requires_privacy": body.requires_privacy,
         },
@@ -145,6 +147,14 @@ async def submit_task(
     )
     await db.commit()
 
+    if body.provider != "ollama" and body.requires_privacy:
+        return await _finish(
+            db,
+            task,
+            TaskStatus.FAILED,
+            error="Privacy requires local execution; external providers are denied",
+        )
+
     # knowledge injection: explicit query wins; retrieval-type tasks use the
     # prompt itself. The agent never learns where knowledge lives (FR-9).
     prompt = body.prompt
@@ -158,11 +168,19 @@ async def submit_task(
             knowledge = await retrieve(
                 db,
                 knowledge_query,
+                collection_name=body.knowledge_collection,
                 requested_by_user_id=created_by_user_id,
                 requested_by_api_key_id=created_by_api_key_id,
                 min_score=get_settings().retrieval_min_score,
             )
         except Exception:
+            if body.provider != "ollama":
+                return await _finish(
+                    db,
+                    task,
+                    TaskStatus.FAILED,
+                    error="Knowledge retrieval failed; external execution cancelled",
+                )
             # an infra failure (e.g. Qdrant down) is not an out-of-scope
             # question — degrade to dispatch-without-context rather than refuse
             retrieval_failed = True
@@ -187,6 +205,22 @@ async def submit_task(
                         "grounded": False,
                     },
                 )
+
+    if body.provider == "openrouter":
+        task.status = TaskStatus.RUNNING
+        task.started_at = datetime.now(UTC)
+        await db.commit()
+        outcome = await complete_openrouter(body, prompt)
+        if "error" in outcome:
+            return await _finish(db, task, TaskStatus.FAILED, error=outcome["error"])
+        await audit(
+            db,
+            action="task.routing",
+            resource_type="task",
+            resource_id=str(task.id),
+            detail=outcome["routing"],
+        )
+        return await _finish(db, task, TaskStatus.SUCCEEDED, result=outcome)
 
     credentials_available = False
     if body.provider != "ollama" and not body.requires_privacy:

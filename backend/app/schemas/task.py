@@ -15,7 +15,8 @@ class TaskCreate(BaseModel):
     # when set (or for retrieval-type tasks, using the prompt), the Knowledge
     # Router injects retrieved context into the prompt before dispatch
     knowledge_query: str | None = None
-    provider: Literal["ollama", "anthropic"] = "ollama"
+    knowledge_collection: str | None = None
+    provider: Literal["ollama", "anthropic", "openrouter"] = "ollama"
     requires_privacy: bool = False
     required_vram_mb: int | None = Field(default=None, ge=0)
     required_ram_mb: int | None = Field(default=None, ge=0)

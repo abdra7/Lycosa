@@ -274,6 +274,10 @@ async def _run_task(
         prompt=render(step.prompt, run.input, run.context),
         type=step.task_type,
         model=step.model,
+        provider=step.provider,
+        requires_privacy=step.requires_privacy,
+        knowledge_collection=step.knowledge_collection,
+        max_tokens=step.max_tokens,
         knowledge_query=(
             render(step.knowledge_query, run.input, run.context) if step.knowledge_query else None
         ),

@@ -24,14 +24,16 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   final _prompt = TextEditingController();
   final _model = TextEditingController();
   final _knowledgeQuery = TextEditingController();
+  final _knowledgeCollection = TextEditingController();
   String _type = 'auto';
+  String _provider = 'ollama';
   bool _busy = false;
   TaskInfo? _lastResult;
   String? _error;
 
   @override
   void dispose() {
-    for (final c in [_prompt, _model, _knowledgeQuery]) {
+    for (final c in [_prompt, _model, _knowledgeQuery, _knowledgeCollection]) {
       c.dispose();
     }
     super.dispose();
@@ -48,6 +50,10 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     try {
       final task = await client.submitTask(
         prompt: _prompt.text.trim(),
+        provider: _provider,
+        knowledgeCollection: _knowledgeCollection.text.trim().isEmpty
+            ? null
+            : _knowledgeCollection.text.trim(),
         type: _type == 'auto' ? null : _type,
         model: _model.text.trim().isEmpty ? null : _model.text.trim(),
         knowledgeQuery: _knowledgeQuery.text.trim().isEmpty
@@ -117,6 +123,40 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: _provider,
+              decoration: const InputDecoration(labelText: 'Provider'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'ollama',
+                  child: Text('Ollama (local)'),
+                ),
+                DropdownMenuItem(
+                  value: 'openrouter',
+                  child: Text('OpenRouter (Nemotron free)'),
+                ),
+                DropdownMenuItem(
+                  value: 'anthropic',
+                  child: Text('Anthropic API'),
+                ),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() {
+                      _provider = value!;
+                      _model.text = value == 'openrouter'
+                          ? 'nvidia/nemotron-3.5-lightning:free'
+                          : '';
+                    }),
+            ),
+            if (_provider != 'ollama')
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'External provider: prompt and retrieved context leave your machine. Configure the API key in Admin > Providers.',
+                ),
+              ),
             TextField(
               controller: _prompt,
               maxLines: 3,
@@ -164,6 +204,13 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                   onPressed: _busy ? null : _submit,
                 ),
               ],
+            ),
+            TextField(
+              controller: _knowledgeCollection,
+              decoration: const InputDecoration(
+                labelText:
+                    'Knowledge collection (optional name; blank searches all collections)',
+              ),
             ),
             if (_busy)
               const Padding(

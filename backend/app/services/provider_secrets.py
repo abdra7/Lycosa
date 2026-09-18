@@ -2,6 +2,21 @@
 
 import sys
 
+# Explicit opt-in session storage for single-worker controllers without an OS vault.
+# Never a fallback: only the authenticated admin session-key endpoint writes here.
+_session_keys: dict[str, str] = {}
+
+
+def set_session_key(provider: str, value: str | None) -> None:
+    from app.core.config import get_settings
+
+    if get_settings().workers != 1:
+        raise SecretStoreUnavailable("Session credentials require one controller worker")
+    if value is None:
+        _session_keys.pop(provider, None)
+    else:
+        _session_keys[provider] = value
+
 
 class SecretStoreUnavailable(Exception):
     pass
@@ -25,6 +40,10 @@ def _vault():
 
 
 def provider_key(provider: str) -> str | None:
+    from app.core.config import get_settings
+
+    if get_settings().workers == 1 and provider in _session_keys:
+        return _session_keys[provider]
     try:
         return _vault().get_password("Lycosa/providers", provider)
     except Exception:
@@ -50,7 +69,7 @@ def main() -> None:
         description="Manage controller BYOK in the OS credential vault"
     )
     parser.add_argument("action", choices=["set", "delete", "status"])
-    parser.add_argument("provider", choices=["anthropic"])
+    parser.add_argument("provider", choices=["anthropic", "openrouter"])
     args = parser.parse_args()
     try:
         if args.action == "status":

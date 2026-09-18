@@ -19,4 +19,5 @@ class Provider:
 PROVIDERS = {
     "ollama": Provider("ollama", "local", "local"),
     "anthropic": Provider("anthropic", "cloud", "external"),
+    "openrouter": Provider("openrouter", "cloud", "external"),
 }
