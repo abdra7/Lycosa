@@ -154,7 +154,7 @@ def main():
                                 "provider": "openrouter",
                                 "model": MODEL,
                                 "max_tokens": 512,
-                               "prompt": "Return only the support code from this context: "
+                                "prompt": "Return only the support code from this context: "
                                 "{{steps.lookup.output}}",
                             },
                             {
