@@ -62,6 +62,7 @@ Thumbs.db
 # --- Logs ---
 *.log
 logs/
+/tmp/pdfs/
 
 # --- Claude Build Documentation Policy ---
 /CLAUDE.md
@@ -87,3 +88,10 @@ docs/DECISIONS.md
 docs/QA_capability_tests_2026-07-12.md
 docs/QA_v0.3.0.md
 docs/rag_embedding_benchmark.md
+
+# --- Local-only reports, PDFs, and context docs ---
+reports/
+output/pdf/
+docs/OPENROUTER.md
+docs/SPRINT12.md
+*.pdf

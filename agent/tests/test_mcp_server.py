@@ -6,11 +6,12 @@ import sys
 import pytest
 
 pytest.importorskip("mcp")
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 
 
 async def test_stdio_handshake_and_bounded_rag():
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
     params = StdioServerParameters(command=sys.executable, args=["-m", "lycosa_agent.mcp_server"])
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
