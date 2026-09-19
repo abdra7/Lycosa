@@ -1,13 +1,15 @@
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.task import ExecutionStatus, TaskStatus, TaskType
+from app.services.provider_registry import validate_provider
 
 
 class TaskCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     prompt: str = Field(min_length=1)
     type: TaskType | None = None  # omit to let the classifier decide
     model: str | None = None  # omit to use the chosen node's first available model
@@ -16,7 +18,8 @@ class TaskCreate(BaseModel):
     # Router injects retrieved context into the prompt before dispatch
     knowledge_query: str | None = None
     knowledge_collection: str | None = None
-    provider: Literal["ollama", "anthropic", "openrouter"] = "ollama"
+    provider: str = "ollama"
+    _provider = field_validator("provider")(validate_provider)
     requires_privacy: bool = False
     required_vram_mb: int | None = Field(default=None, ge=0)
     required_ram_mb: int | None = Field(default=None, ge=0)

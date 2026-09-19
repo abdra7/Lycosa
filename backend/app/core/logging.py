@@ -11,6 +11,8 @@ import sys
 from contextvars import ContextVar
 from datetime import UTC, datetime
 
+provider_request_var: ContextVar[bool] = ContextVar("provider_request", default=False)
+
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 task_id_var: ContextVar[str | None] = ContextVar("task_id", default=None)
 workflow_run_id_var: ContextVar[str | None] = ContextVar("workflow_run_id", default=None)
@@ -67,8 +69,11 @@ class JsonFormatter(logging.Formatter):
 
 
 def setup_logging(level: str = "info") -> None:
+    from app.core.phantom_privacy import phantom_request
+
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
+    handler.addFilter(lambda record: not phantom_request.get() and not provider_request_var.get())
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(level.upper())

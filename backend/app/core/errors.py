@@ -51,6 +51,10 @@ def register_error_handlers(app: FastAPI) -> None:
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
+        from app.core.phantom_privacy import is_phantom
+
+        if is_phantom(request.url.path):
+            return error_response(422, "Invalid Phantom request")
         details = [
             {
                 "field": ".".join(str(loc) for loc in err["loc"]),
@@ -64,6 +68,12 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        from app.core.phantom_privacy import is_phantom
+
+        if is_phantom(request.url.path):
+            return error_response(
+                500, "Phantom request failed", headers={"Cache-Control": "no-store"}
+            )
         # opaque by design: never leak internals to clients
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
         return error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")

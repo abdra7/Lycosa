@@ -78,7 +78,7 @@ async def test_provider_api_access_and_redaction(client, users, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "override", [{"provider": "openai"}, {"max_tokens": 0}, {"temperature": 2}]
+    "override", [{"provider": "not_a_provider"}, {"max_tokens": 0}, {"temperature": 2}]
 )
 async def test_virtual_api_invalid_request(client, users, override):
     token = await login(client, ADMIN_EMAIL)

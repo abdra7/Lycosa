@@ -13,7 +13,8 @@ COPY app ./app
 COPY config ./config
 COPY scripts ./scripts
 
-RUN pip install --no-cache-dir .
+ARG LYCOSA_EXTRAS=""
+RUN if [ -n "$LYCOSA_EXTRAS" ]; then pip install --no-cache-dir ".[${LYCOSA_EXTRAS}]"; else pip install --no-cache-dir .; fi
 
 EXPOSE 8000
 

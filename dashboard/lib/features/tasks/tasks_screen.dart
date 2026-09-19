@@ -7,6 +7,8 @@ import '../../core/api_exception.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'providers.dart';
+import 'phantom_dialog.dart';
+import '../../core/provider_catalog.dart';
 
 const _taskTypes = ['auto', 'coding', 'retrieval', 'tool', 'vision', 'general'];
 
@@ -28,6 +30,25 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   String _type = 'auto';
   String _provider = 'ollama';
   bool _busy = false;
+  List<String> _providers = providerLabels.keys.toList();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProviders();
+  }
+
+  Future<void> _loadProviders() async {
+    try {
+      final items = await ref.read(activeApiClientProvider)?.providerCatalog();
+      if (mounted && items != null && items.isNotEmpty) {
+        setState(() => _providers = items.map((p) => p['name'] as String).toList());
+      }
+    } catch (_) {
+      // Older controllers retain the built-in selections; server policy wins.
+    }
+  }
+
   TaskInfo? _lastResult;
   String? _error;
 
@@ -86,6 +107,18 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       children: [
         Text('Tasks', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.privacy_tip_outlined),
+            label: const Text('Phantom task (no history)'),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => const PhantomDialog(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         _submitCard(context),
         const SizedBox(height: 16),
         Text('Recent', style: Theme.of(context).textTheme.titleMedium),
@@ -127,19 +160,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
               isExpanded: true,
               initialValue: _provider,
               decoration: const InputDecoration(labelText: 'Provider'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'ollama',
-                  child: Text('Ollama (local)'),
-                ),
-                DropdownMenuItem(
-                  value: 'openrouter',
-                  child: Text('OpenRouter (Nemotron free)'),
-                ),
-                DropdownMenuItem(
-                  value: 'anthropic',
-                  child: Text('Anthropic API'),
-                ),
+              items: [
+                for (final p in _providers)
+                  DropdownMenuItem(value: p, child: Text(providerLabels[p] ?? p)),
               ],
               onChanged: _busy
                   ? null

@@ -14,15 +14,18 @@ from app.core.errors import register_error_handlers
 from app.core.leader import get_leader_gate
 from app.core.logging import request_id_var, setup_logging
 from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS
+from app.core.phantom_privacy import PhantomPrivacyMiddleware, is_phantom
 from app.core.ratelimit import RateLimitMiddleware
 from app.db.session import get_runtime_sessionmaker, get_sessionmaker
 from app.services.knowledge.ingestion import recover_stuck_ingestions
 from app.services.node import sweep_offline_nodes
+from app.services.provider_registry import registry
 from app.version import APP_VERSION
 
 logger = logging.getLogger("lycosa.lifespan")
 
 settings = get_settings()
+registry()  # fail startup on invalid deployment-owned provider aliases
 setup_logging(settings.log_level)
 
 
@@ -81,6 +84,8 @@ app.add_middleware(RateLimitMiddleware)
 @app.middleware("http")
 async def observability_middleware(request: Request, call_next) -> Response:
     """Request id for log correlation + HTTP metrics per route template."""
+    if is_phantom(request.url.path):
+        return await call_next(request)
     request_id = uuid.uuid4().hex[:16]
     token = request_id_var.set(request_id)
     started = time.perf_counter()
@@ -94,6 +99,9 @@ async def observability_middleware(request: Request, call_next) -> Response:
     HTTP_DURATION.labels(request.method, path).observe(time.perf_counter() - started)
     response.headers["X-Request-ID"] = request_id
     return response
+
+
+app.add_middleware(PhantomPrivacyMiddleware)
 
 
 app.include_router(api_v1_router)
