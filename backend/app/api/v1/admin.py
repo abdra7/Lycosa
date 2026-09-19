@@ -16,7 +16,7 @@ from app.schemas.apikey import ApiKeyCreate, ApiKeyCreatedOut, ApiKeyOut
 from app.schemas.auth import AuditLogOut
 from app.services.audit import audit
 from app.services.openrouter import MODEL as OPENROUTER_MODEL
-from app.services.provider_registry import PROVIDERS
+from app.services.provider_registry import registry
 from app.services.provider_secrets import (
     SecretStoreUnavailable,
     manage_key,
@@ -34,7 +34,7 @@ async def list_providers(_principal: AdminDep) -> list[dict]:
     """Safe registry metadata; configuration is not proof of provider validity."""
     settings = get_settings()
     result = []
-    for name, provider in PROVIDERS.items():
+    for name, provider in registry().items():
         configured = None
         if provider.execution_mode == "cloud":
             try:
@@ -47,9 +47,13 @@ async def list_providers(_principal: AdminDep) -> list[dict]:
                 "credential_configured": configured,
                 "models": [OPENROUTER_MODEL]
                 if name == "openrouter"
-                else (settings.cloud_models if provider.execution_mode == "cloud" else []),
+                else (
+                    settings.provider_profiles[name].models
+                    if name in settings.provider_profiles
+                    else (settings.cloud_models if provider.execution_mode == "cloud" else [])
+                ),
                 "availability": "evaluated at controller dispatch"
-                if name == "openrouter"
+                if name == "openrouter" or provider.adapter == "litellm"
                 else "evaluated per node at dispatch",
             }
         )
@@ -63,13 +67,14 @@ class ProviderKeyInput(BaseModel):
 
 @router.put("/providers/{provider}/credential", status_code=204)
 async def save_provider_credential(
-    provider: Literal["anthropic", "openrouter"],
+    provider: str,
     body: ProviderKeyInput,
     principal: AdminDep,
     db: DbDep,
 ) -> None:
     # Transport is enforced by the desktop client (HTTPS except loopback).
     # Deploy the API behind TLS for any remote admin access.
+    _cloud_provider(provider)
     key = body.key.get_secret_value()
     if (
         not key
@@ -78,8 +83,6 @@ async def save_provider_credential(
         or any(ord(c) < 33 or ord(c) > 126 for c in key)
     ):
         raise HTTPException(422, "Invalid provider credential")
-    if body.storage == "session" and provider != "openrouter":
-        raise HTTPException(422, "Session storage is available only for OpenRouter")
     try:
         if body.storage == "session":
             set_session_key(provider, key)
@@ -105,11 +108,12 @@ async def save_provider_credential(
 
 @router.delete("/providers/{provider}/credential", status_code=204)
 async def delete_provider_credential(
-    provider: Literal["anthropic", "openrouter"],
+    provider: str,
     principal: AdminDep,
     db: DbDep,
     storage: Literal["vault", "session"] = "vault",
 ) -> None:
+    _cloud_provider(provider)
     try:
         if storage == "session":
             set_session_key(provider, None)
@@ -126,6 +130,12 @@ async def delete_provider_credential(
         detail={"storage": storage},
     )
     await db.commit()
+
+
+def _cloud_provider(name: str) -> None:
+    p = registry().get(name)
+    if p is None or p.execution_mode != "cloud":
+        raise HTTPException(422, "Unknown cloud provider")
 
 
 def _client_ip(request: Request) -> str | None:

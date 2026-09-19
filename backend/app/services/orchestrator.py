@@ -24,6 +24,7 @@ from app.services.audit import audit
 from app.services.classifier import classify, preferred_roles
 from app.services.knowledge.router import retrieve
 from app.services.openrouter import complete as complete_openrouter
+from app.services.provider_adapters import complete as complete_provider
 from app.services.provider_secrets import SecretStoreUnavailable, provider_key
 from app.services.scheduler import route_candidates
 
@@ -206,11 +207,15 @@ async def submit_task(
                     },
                 )
 
-    if body.provider == "openrouter":
+    if body.provider not in {"ollama", "anthropic"}:
         task.status = TaskStatus.RUNNING
         task.started_at = datetime.now(UTC)
         await db.commit()
-        outcome = await complete_openrouter(body, prompt)
+        outcome = await (
+            complete_openrouter(body, prompt)
+            if body.provider == "openrouter"
+            else complete_provider(body, prompt)
+        )
         if "error" in outcome:
             return await _finish(db, task, TaskStatus.FAILED, error=outcome["error"])
         await audit(

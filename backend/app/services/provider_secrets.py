@@ -69,7 +69,11 @@ def main() -> None:
         description="Manage controller BYOK in the OS credential vault"
     )
     parser.add_argument("action", choices=["set", "delete", "status"])
-    parser.add_argument("provider", choices=["anthropic", "openrouter"])
+    from app.services.provider_registry import registry
+
+    parser.add_argument(
+        "provider", choices=[n for n, p in registry().items() if p.privacy == "external"]
+    )
     args = parser.parse_args()
     try:
         if args.action == "status":

@@ -1,6 +1,7 @@
 import logging
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -9,6 +10,7 @@ from app.core.bootstrap import (
     ensure_runtime_secrets,
     is_placeholder,
 )
+from app.schemas.provider import ProviderProfile
 
 logger = logging.getLogger("lycosa.config")
 
@@ -77,6 +79,18 @@ class Settings(BaseSettings):
     cloud_node_origins: dict[str, str] = {}
     cloud_models: list[str] = []
     routing_vram_safety_margin_mb: int = 512
+
+    # New cloud adapters are opt-in. Exact provider/model policy is admin-owned.
+    provider_profiles: dict[str, ProviderProfile] = {}
+
+    # Isolated local-only inference; unavailable unless deliberately provisioned.
+    phantom_enabled: bool = False
+    phantom_models: dict[str, str] = {}  # alias -> absolute preinstalled GGUF file
+    phantom_image: str = "lycosa-phantom:local"
+    phantom_timeout_seconds: int = Field(default=120, ge=1, le=600)
+    phantom_memory_mb: int = Field(default=4096, ge=256, le=131072)
+    phantom_cpus: float = Field(default=2, ge=0.5, le=32)
+    phantom_max_concurrent: int = Field(default=1, ge=1, le=8)
 
     # knowledge plane (ADR-013)
     embedding_backend: str = "hashing"  # hashing | fastembed

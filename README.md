@@ -272,3 +272,9 @@ report vulnerabilities.
 ## License
 
 Lycosa is released under the [MIT License](LICENSE).
+
+## Ephemeral execution and provider adapters
+
+- [Ephemeral Phantom Agents](docs/PHANTOM_AGENTS.md): isolated local inference with no task-content persistence; opt-in Linux/Docker deployment, explicit limits on memory-erasure claims.
+- [LLM provider adapters](docs/PROVIDER_ADAPTERS.md): controller-side provider catalogue, administrator-owned model policies and credential setup.
+- [Validation record](docs/VALIDATION_PHANTOM_PROVIDERS.md): automated coverage and remaining deployment acceptance.
