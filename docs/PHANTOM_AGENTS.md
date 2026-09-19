@@ -1,6 +1,6 @@
 # Ephemeral Phantom Agents
 
-Status: implementation on `feat/phantom-agents-provider-adapters`; isolated CPU inference requires the deployment below. This is **application-level no-content-retention**, not a certified “Zero-Trace AI” standard or forensic memory-erasure guarantee.
+Status: source implementation on `Phantom_Agent` at `af51866`; isolated CPU inference requires the deployment below. This is **application-level no-content-retention**, not a certified “Zero-Trace AI” standard or forensic memory-erasure guarantee.
 
 ## Contract
 

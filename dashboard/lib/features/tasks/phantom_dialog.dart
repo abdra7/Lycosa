@@ -62,8 +62,10 @@ class _PhantomDialogState extends ConsumerState<PhantomDialog> {
       setState(() => _output = result['output'] as String);
       _expiry = Timer(const Duration(seconds: 60), _clear);
     } catch (_) {
-      if (mounted) setState(() => _error =
-        'Phantom did not return a confirmed result. No history lookup is available. Ask the administrator to check isolation and cleanup.');
+      if (mounted) {
+        setState(() => _error =
+          'Phantom did not return a confirmed result. No history lookup is available. Ask the administrator to check isolation and cleanup.');
+      }
     } finally {
       prompt = '';
       if (mounted) setState(() => _busy = false);

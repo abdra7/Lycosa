@@ -1,5 +1,21 @@
 # Validation record: Phantom and provider adapters
 
+## Local integration review — 2026-09-19
+
+Source: Phantom_Agent at af51866; replayed onto cleaned main dd98e2a. No application-code conflicts or duplicate feature implementation were found. The smoke-script formatting overlap was already present. A pre-existing agent formatting issue and a new Phantom dialog lint issue were corrected.
+
+- Backend: 364 passed, 2 optional SDK tests initially skipped, 13 warnings. Follow-up: all 64 focused Phantom/provider/workflow tests passed, including both SDK transport tests, after installing LiteLLM 1.101.0 and preparing its tokenizer cache. These 64 overlap the full suite and are not additional independent coverage.
+- SDK environment: the Windows wheel required public tokenizer data. Set `CUSTOM_TIKTOKEN_CACHE_DIR` to the prepared cache for offline runs; the standard `TIKTOKEN_CACHE_DIR` is overridden by this SDK. Initial sandbox download failures were environmental, not adapter failures.
+- Agent: 48 passed.
+- Flutter 3.44.1 / Dart 3.12.1: analysis passed; all 79 tests passed. One non-fatal existing widget hit-test warning remains.
+- Ruff lint and format checks passed across backend and agent; worker lint passed.
+- No real provider calls, GGUF execution, native desktop visual acceptance or physical memory-erasure verification were performed.
+
+## Historical team validation (retained for provenance)
+
+The record below describes the original implementation environment. Its unpushed-patch instructions and unavailable-Flutter statement are historical, not current integration instructions.
+
+
 Date: 19 September 2026. Source baseline: `e91df7e4b522e7a72befbb06d7178808173eae3e` from `abdra7/Lycosa`. Working branch: `feat/phantom-agents-provider-adapters`.
 
 ## Completed

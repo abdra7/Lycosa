@@ -38,9 +38,7 @@ async def _register_with_retry(
     client: ControllerClient, settings: AgentSettings, agent_url: str, agent_token: str
 ) -> dict:
     profile = collect_profile(settings.ollama_url)
-    profile.setdefault("extra", {})["cloud_execution_capability"] = (
-        settings.cloud_execution_enabled
-    )
+    profile.setdefault("extra", {})["cloud_execution_capability"] = settings.cloud_execution_enabled
     profile["extra"]["agent_capabilities"] = capabilities()
     for attempt, backoff in enumerate([0, *_REGISTER_BACKOFF_SECONDS]):
         if backoff:
