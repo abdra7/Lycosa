@@ -637,6 +637,50 @@ class ApiClient {
     return TaskInfo.fromJson(_decode(response));
   }
 
+  Future<List<Map<String, dynamic>>> providerCatalog() async {
+    final response = await _send(
+      () => _http.get(_uri('/api/v1/providers'), headers: _headers),
+    );
+    return _decodeList(response).map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  Future<Map<String, dynamic>> phantomCapabilities() async {
+    final response = await _send(
+      () => _http.get(_uri('/api/v1/phantom/capabilities'), headers: _headers),
+    );
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> submitPhantom({
+    required String prompt,
+    required String model,
+  }) async {
+    final uri = _uri('/api/v1/phantom/tasks');
+    if (uri.scheme != 'https' &&
+        !['localhost', '127.0.0.1', '::1'].contains(uri.host)) {
+      throw StateError('Phantom input requires HTTPS or a loopback controller.');
+    }
+    final request = http.Request('POST', uri)
+      ..followRedirects = false
+      ..headers.addAll({..._headers, 'Cache-Control': 'no-store'})
+      ..body = jsonEncode({
+        'prompt': prompt,
+        'model': model,
+        'provider': 'phantom_local',
+      });
+    final response = await _send(
+      () async {
+        final result = await http.Response.fromStream(await _http.send(request));
+        if (result.statusCode >= 300 && result.statusCode < 400) {
+          throw StateError('Phantom redirects are forbidden.');
+        }
+        return result;
+      },
+      timeout: const Duration(minutes: 11),
+    );
+    return _decode(response);
+  }
+
   Future<List<TaskInfo>> listTasks({String? status}) async {
     final query = status != null ? '?status=$status' : '';
     final response = await _send(

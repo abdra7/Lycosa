@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/session.dart';
+import '../../core/provider_catalog.dart';
 
 class ProvidersDialog extends ConsumerStatefulWidget {
   const ProvidersDialog({super.key});
@@ -14,6 +15,27 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
   String _storage = 'session';
   String _message = '';
   bool _busy = false;
+  List<String> _providers = providerLabels.keys.where((p) => p != 'ollama').toList();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProviders();
+  }
+
+  Future<void> _loadProviders() async {
+    try {
+      final items = await ref.read(activeApiClientProvider)?.providerCatalog();
+      if (mounted && items != null && items.isNotEmpty) {
+        setState(() => _providers = items
+            .where((p) => p['execution_mode'] == 'cloud')
+            .map((p) => p['name'] as String)
+            .toList());
+      }
+    } catch (_) {
+      // Preserve the default catalogue on a disconnected controller.
+    }
+  }
 
   @override
   void dispose() {
@@ -69,27 +91,22 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'OpenRouter runs the selected free Nemotron model directly from the controller. Anthropic requires a separately configured trusted HTTPS agent. OpenAI and Gemini direct adapters are not implemented.',
+              'Cloud providers require administrator-enabled model policies and credentials. New adapters run on the controller; Anthropic retains its trusted-agent route. Bedrock and Vertex AI may instead use configured workload identity. Phantom never uses cloud providers.',
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _provider,
               decoration: const InputDecoration(labelText: 'Provider'),
-              items: const [
-                DropdownMenuItem(
-                  value: 'openrouter',
-                  child: Text('OpenRouter'),
-                ),
-                DropdownMenuItem(
-                  value: 'anthropic',
-                  child: Text('Anthropic API'),
-                ),
+              items: [
+                for (final p in _providers)
+                  DropdownMenuItem(value: p, child: Text(providerLabels[p] ?? p)),
               ],
               onChanged: _busy
                   ? null
                   : (v) => setState(() {
                       _provider = v!;
-                      _storage = v == 'openrouter' ? 'session' : 'vault';
+                      _storage = 'session';
                       _key.clear();
                       _message = '';
                     }),
@@ -99,13 +116,12 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
               key: ValueKey(_provider),
               initialValue: _storage,
               decoration: const InputDecoration(labelText: 'Storage'),
-              items: [
-                if (_provider == 'openrouter')
-                  const DropdownMenuItem(
-                    value: 'session',
-                    child: Text('Controller memory (until restart)'),
-                  ),
-                const DropdownMenuItem(
+              items: const [
+                DropdownMenuItem(
+                  value: 'session',
+                  child: Text('Controller memory (until restart)'),
+                ),
+                DropdownMenuItem(
                   value: 'vault',
                   child: Text('Controller OS credential vault'),
                 ),

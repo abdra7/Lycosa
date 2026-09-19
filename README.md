@@ -213,8 +213,7 @@ controller can actually reach.
 
 An incremental V2 implementation adds GPU/VRAM telemetry, a provider-neutral
 chat contract, opt-in Anthropic execution, Controller-owned OS-vault BYOK and
-explainable routing. See [Sprint 12 setup and limitations](docs/SPRINT12.md)
-for configuration, compatibility, security requirements and remaining live checks.
+explainable routing. Sprint 12 setup and acceptance notes are maintained in the project Vault.
 
 - Node decommissioning (remove stale nodes from the inventory)
 - Async task queue behind `POST /tasks` (202 + polling)
@@ -272,3 +271,26 @@ report vulnerabilities.
 ## License
 
 Lycosa is released under the [MIT License](LICENSE).
+
+## Phantom Agents and Provider Adapters
+
+**Phantom Agents** run a single local CPU model in a fresh, network-disabled
+Docker container through `POST /api/v1/phantom/tasks`. They bypass persistent
+task history, RAG and workflows. Output is returned only after container removal
+is confirmed, and the desktop clears it after 60 seconds. Enable this explicitly
+on a Linux controller with a local Docker engine and a preinstalled GGUF model;
+the standard controller image does not grant Docker socket access automatically.
+This is application-level content-retention reduction, not guaranteed RAM erasure.
+See [Phantom setup and privacy boundaries](docs/PHANTOM_AGENTS.md).
+
+**Provider Adapters** add optional controller-side, non-streaming text inference
+through pinned LiteLLM, including OpenAI, Gemini, Azure, Bedrock, Vertex AI and
+administrator-defined aliases. Install `pip install -e ".[providers]"` from
+`backend/`, configure explicit provider/model allowlists in `PROVIDER_PROFILES`,
+and configure credentials in **Admin → Providers** or supported workload identity.
+Native Ollama, trusted-node Anthropic and free-model OpenRouter retain their
+existing routes. Privacy-required tasks reject external providers; ordinary cloud
+tasks remain persistent. See [provider setup](docs/PROVIDER_ADAPTERS.md).
+
+See the [validation record](docs/VALIDATION_PHANTOM_PROVIDERS.md) for automated
+coverage and the live deployment checks required before operational use.

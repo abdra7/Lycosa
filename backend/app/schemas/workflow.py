@@ -3,10 +3,11 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.task import TaskType
 from app.models.workflow import RunStatus, StepRunStatus
+from app.services.provider_registry import validate_provider
 
 _STEP_ID = r"^[a-z0-9][a-z0-9_-]*$"
 _TEMPLATE_REF_RE = re.compile(r"\{\{\s*steps\.([a-z0-9_-]+)\.output\s*\}\}")
@@ -28,16 +29,20 @@ class WhenClause(BaseModel):
 
 
 class _BaseStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: str = Field(pattern=_STEP_ID, max_length=100)
     when: WhenClause | None = None
 
 
 class TaskStepDef(_BaseStep):
+    model_config = ConfigDict(extra="forbid")
     kind: Literal["task"]
     prompt: str = Field(min_length=1)
     task_type: TaskType | None = None
     model: str | None = None
-    provider: Literal["ollama", "anthropic", "openrouter"] = "ollama"
+    provider: str = "ollama"
+    _provider = field_validator("provider")(validate_provider)
     requires_privacy: bool = False
     max_tokens: int = Field(default=4096, ge=1, le=16384)
     knowledge_query: str | None = None
@@ -82,6 +87,8 @@ StepDef = Annotated[
 
 
 class WorkflowDefinition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     steps: list[StepDef] = Field(min_length=1, max_length=50)
 
     @model_validator(mode="after")
@@ -109,6 +116,8 @@ class WorkflowDefinition(BaseModel):
 
 
 class WorkflowCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
     description: str | None = None
     definition: WorkflowDefinition
@@ -125,6 +134,8 @@ class WorkflowOut(BaseModel):
 
 
 class RunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     input: str = Field(min_length=1)
 
 
