@@ -2,13 +2,14 @@
 
 <img src="docs/assets/lycosa-logo.png" alt="Lycosa" width="160" />
 
-# Lycosa
+# Lycosa — Local, Cloud & Ephemeral AI Orchestration
 
 Created and maintained by [abdra7](https://github.com/abdra7).
 
-**AI Operations Layer for Local and Cloud AI Agents**
+**Local Agents · Provider Adapters · Phantom Agents**
 
-Turn the devices you already own into one cooperative AI execution fabric.
+Coordinate your own devices, approved cloud models, and isolated local inference
+from one desktop dashboard.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-A8C7FA.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/abdra7/Lycosa?color=A8C7FA)](https://github.com/abdra7/Lycosa/releases/latest)
@@ -18,17 +19,29 @@ Turn the devices you already own into one cooperative AI execution fabric.
 
 ---
 
-**Lycosa** is a LAN-first, distributed multi-agent AI orchestration platform.
-It turns workstations, laptops, homelab boxes, and mini-PCs into one
-cooperative AI execution fabric. Each device runs a Local Agent that can host
-a local LLM (Ollama), tools, and metrics; a central controller
-discovers devices, recommends each one a role based on its hardware,
-schedules tasks, routes knowledge (RAG) requests, runs
-multi-step workflows with human approval gates, and streams everything live
-to a native desktop dashboard.
+**Lycosa** is a LAN-first AI orchestration platform with three execution paths:
+**Local Agents** on your devices, **Provider Adapters** for approved cloud models,
+and **Phantom Agents** for ephemeral inference in an isolated local container.
+A FastAPI controller manages routing, knowledge retrieval (RAG), workflow
+approvals and Usage telemetry. A Flutter desktop dashboard brings those controls
+together on Windows, macOS and Linux.
+
+Normal tasks retain their results and operational history. Phantom tasks use a
+separate API and dialog, return an answer once, and bypass persistent task
+history. Both cloud adapters and Phantom execution require explicit setup.
 
 ## Features
 
+- **Phantom Agents** — opt-in local CPU inference in a fresh, network-disabled
+  Docker container for each request. Output is returned after container removal
+  is confirmed and cleared from the desktop dialog after 60 seconds.
+- **Provider Adapters** — opt-in controller-side text inference through LiteLLM,
+  with 21 built-in provider identifiers and administrator-defined aliases.
+  Exact model allowlists and explicit credentials control execution; tasks marked
+  `requires_privacy` reject external providers.
+- **Local Agents** — registered devices provide Ollama inference, model inventory,
+  hardware profiles and live Usage telemetry. An optional MCP stdio companion
+  exposes bounded capability, model-listing and evidence-answering tools.
 - **Device roles, automatically recommended** — every node is profiled at
   registration and recommended one of **AI Compute · Hybrid · Knowledge ·
   Tool · Vision · Storage**, with a human-readable rationale and per-role
@@ -43,7 +56,44 @@ to a native desktop dashboard.
   dashboard finds every machine running `lycosa-agent` on your network.
 - **Live operations view** — REST + WebSocket streaming into a native
   desktop dashboard (macOS / Windows / Linux), with Prometheus and Grafana
-  for metrics.
+  for metrics, including CPU/RAM and GPU/VRAM Usage where available.
+
+### Choose an execution path
+
+| Path | Where inference runs | Task content | Setup |
+|---|---|---|---|
+| **Local Agents** (`ollama`) | Registered LAN device | Normal task history is retained | Install an agent and a local model |
+| **Provider Adapters** (for example `openai`, `gemini`, `azure`) | Cloud provider, called by the controller | Normal task history is retained; provider retention also applies | Install the optional adapter extra, allowlist models and configure credentials |
+| **Native cloud routes** (`anthropic`, `openrouter`) | Trusted HTTPS agent for Anthropic; controller for free-model OpenRouter | Normal task history is retained | Configure the native route's credentials and policy |
+| **Phantom Agents** (`phantom_local`) | Fresh local CPU container | No application task-content persistence; one-time result | Linux host controller, local Docker socket and a preinstalled GGUF model |
+
+### Phantom Agents
+
+Use **Tasks → Phantom task (no history)** to run a configured local model through
+`POST /api/v1/phantom/tasks`. Each container has no network, read-only model
+weights, bounded resources and temporary scratch space. The response is returned
+only after Docker confirms removal; it cannot be retrieved from Recent Tasks.
+Phantom requests bypass RAG, workflows and task/audit writes.
+
+This reduces retained content at the application level. Container cleanup and
+clearing the dialog do not guarantee physical RAM erasure. The controller must
+run on a Linux host with access to its local Docker engine; the standard Compose
+deployment does not enable this access automatically.
+See [Phantom setup and privacy boundaries](docs/PHANTOM_AGENTS.md).
+
+### Provider Adapters
+
+Install `pip install -e ".[providers]"` from `backend/`, define exact model
+allowlists in `PROVIDER_PROFILES`, then configure API keys in **Admin → Providers**
+or supported Bedrock/Vertex AI workload identity. Docker builds can opt in with
+`LYCOSA_EXTRAS=providers`. The authenticated provider catalogue supplies the
+desktop's available aliases; a displayed name does not establish live access.
+
+Adapters support non-streaming text requests, including ordinary workflow task
+steps. They do not add tool calls, autonomous loops or automatic provider
+fallbacks. Native Ollama, trusted-node Anthropic and free-model OpenRouter keep
+their existing execution policies. See [provider setup](docs/PROVIDER_ADAPTERS.md)
+and the [Agent capability/MCP guide](agent/CAPABILITIES.md).
 
 ## Architecture
 
@@ -53,28 +103,60 @@ flowchart LR
         DASH["Desktop Dashboard\n(Flutter: macOS / Windows / Linux)"]
     end
 
-    subgraph controller["Controller (Docker Compose, headless)"]
-        API["Control Plane API\n(FastAPI)"]
-        PG[(PostgreSQL)]
-        QD[(Qdrant\nvectors)]
-        PROM[Prometheus]
-        GRAF[Grafana]
+    subgraph controller["FastAPI controller"]
+        API["Authenticated API"]
+        TASK["Persistent task orchestrator\nRouting, RAG and workflows"]
+        PROVIDERS["Controller cloud routes\nLiteLLM adapters / native OpenRouter"]
+        PHANTOM["Separate Phantom API\nNo task or audit writes"]
     end
 
-    subgraph fabric["LAN fabric"]
-        A1["Local Agent\n(AI Compute node)"]
-        A2["Local Agent\n(Knowledge node)"]
-        A3["Local Agent\n(Tool node)"]
+    subgraph data["Persistent platform services"]
+        PG[("PostgreSQL\nIdentity, tasks and workflows")]
+        QD[("Qdrant\nKnowledge vectors")]
+        REDIS[("Redis\nOptional shared state and events")]
     end
 
-    DASH -- "REST + WebSocket" --> API
-    API --- PG
-    API --- QD
-    PROM --> API
-    GRAF --> PROM
-    A1 & A2 & A3 -- "register + heartbeat" --> API
-    API -- "dispatch tasks" --> A1 & A2 & A3
+    subgraph fabric["Registered LAN devices"]
+        LOCAL["Local Agents\nOllama, capabilities and Usage"]
+        TRUSTED["Trusted HTTPS agent\nNative Anthropic route"]
+    end
+
+    subgraph isolated["Opt-in Linux host deployment"]
+        WORKER["Fresh Phantom CPU container\nNo network; removed after execution"]
+        MODEL[("Preinstalled GGUF\nRead-only weights")]
+    end
+
+    CLOUD["External model providers"]
+    OBS["Prometheus / Grafana\nOperational metrics"]
+
+    DASH -- "HTTPS / WebSocket" --> API
+    API --> TASK
+    API --> PHANTOM
+    TASK <--> PG
+    TASK <--> QD
+    API <--> REDIS
+    TASK --> LOCAL
+    TASK --> TRUSTED
+    TASK --> PROVIDERS
+    PROVIDERS --> CLOUD
+    TRUSTED --> CLOUD
+    LOCAL -- "Register and report Usage" --> API
+    PHANTOM -. "Read-only session validation" .-> PG
+    PHANTOM --> WORKER
+    MODEL --> WORKER
+    OBS -. "Scrape controller metrics" .-> API
 ```
+
+Normal tasks pass through the persistent orchestrator and may retrieve knowledge
+before inference. Controller-side cloud adapters do not require a local inference
+node. Phantom requests use their own authenticated execution path and never call
+the persistent orchestrator or cloud adapters. Session validation reads existing
+identity data; it does not create a Phantom task record.
+
+The standard deployment runs the controller and datastores with Docker Compose.
+Phantom additionally requires the explicit Linux host setup above. Multi-worker
+controllers require Redis for shared throttling, events and coordination;
+Phantom capacity limits apply separately to each controller worker.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development conventions;
 the detailed architecture decision log is maintained in the project vault.
@@ -109,7 +191,7 @@ On Windows hosts, use PowerShell: `.\scripts\install.ps1`
 
 The installer checks Docker, generates secrets into `.env`, asks for your
 admin email/password, starts the stack, and prints the **controller URL**
-(e.g. `http://192.168.9.800:8000`) to enter in the desktop app. Every setting
+(e.g. `http://192.168.9.80:8000`) to enter in the desktop app. Every setting
 lives in the root `.env`; committed defaults are in `infra/compose-defaults.env`.
 
 Prefer plain compose? A fresh clone runs with **zero configuration** — no
@@ -208,20 +290,28 @@ controller can actually reach.
   capacity, with automatic failover between candidates.
 - **Compose-only / headless** — run just the controller stack and drive it
   entirely over the REST API (`/docs`) without the desktop app.
+- **Controller-side cloud inference** — configure Provider Adapters for approved
+  models without installing an inference agent on each operator device.
+- **Ephemeral local inference** — enable Phantom on a Linux host controller with
+  a local Docker engine and preinstalled model, following its deployment guide.
 
 ## Roadmap
 
-An incremental V2 implementation adds GPU/VRAM telemetry, a provider-neutral
-chat contract, opt-in Anthropic execution, Controller-owned OS-vault BYOK and
-explainable routing. Sprint 12 setup and acceptance notes are maintained in the project Vault.
+Sprint 12 Usage telemetry and runtime routing, bounded Agent MCP/RAG capabilities,
+Phantom Agents and Provider Adapters are implemented on `main`. Integration CI
+passes; a source merge does not imply that an existing release installer includes
+these changes. See the [validation record](docs/VALIDATION_PHANTOM_PROVIDERS.md)
+for evidence and remaining deployment acceptance.
 
-- Node decommissioning (remove stale nodes from the inventory)
+The next acceptance work covers real Linux Docker/GGUF execution, native desktop
+Phantom behavior and explicitly selected provider accounts/models. Physical GPU
+verification remains a separate Sprint 12 follow-up.
+
 - Async task queue behind `POST /tasks` (202 + polling)
 - Re-embed job when a knowledge collection switches embedding backend
 - mTLS / enrollment handshake for agent exec API hardening
-- Redis-backed rate limiting for horizontal API scaling
-- Kubernetes manifests under `infra/` (the controller is a single-process
-  design today)
+- Distributed load testing and race-safe ingestion recovery
+- Kubernetes deployment manifests
 
 The detailed backlog is maintained in the project vault.
 
@@ -229,11 +319,11 @@ The detailed backlog is maintained in the project vault.
 
 | Directory | Contents |
 |---|---|
-| `backend/` | FastAPI control plane (orchestrator, scheduler, knowledge router, …) |
-| `agent/` | Local Agent runtime installed on each node |
-| `dashboard/` | Flutter Desktop operator dashboard (native macOS/Windows/Linux) |
-| `infra/` | Docker Compose, Prometheus/Grafana config, future k8s manifests |
-| `docs/` | Architecture decision log, backlog, brand assets |
+| `backend/` | FastAPI controller, task/workflow orchestration, RAG, provider adapters and Phantom API |
+| `agent/` | Local Agent runtime, Usage telemetry and optional MCP companion |
+| `dashboard/` | Flutter desktop dashboard, provider controls and separate Phantom dialog |
+| `infra/` | Docker Compose, Prometheus/Grafana configuration and isolated Phantom worker image |
+| `docs/` | Public feature guides, validation notes and brand assets; internal context lives in the project Vault |
 | `scripts/` | Install and release tooling |
 
 ## Development
@@ -243,13 +333,15 @@ Backend (Python 3.11+):
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev,providers]"
 pytest                        # run tests
 ruff check . && ruff format --check .               # lint
 uvicorn app.main:app --reload # run the API locally
 ```
 
-Agent: same commands from `agent/`. Dashboard: `flutter pub get`,
+The `providers` extra enables SDK transport tests; provider requests in those tests
+use intercepted HTTP and synthetic credentials. Agent: install `.[dev]` and run
+the same test/lint commands from `agent/`. Dashboard: `flutter pub get`,
 `flutter test`, `flutter run -d macos|windows|linux` from `dashboard/`.
 
 Releases are cut by tagging `v*` — CI builds the backend image (GHCR) and
@@ -271,26 +363,3 @@ report vulnerabilities.
 ## License
 
 Lycosa is released under the [MIT License](LICENSE).
-
-## Phantom Agents and Provider Adapters
-
-**Phantom Agents** run a single local CPU model in a fresh, network-disabled
-Docker container through `POST /api/v1/phantom/tasks`. They bypass persistent
-task history, RAG and workflows. Output is returned only after container removal
-is confirmed, and the desktop clears it after 60 seconds. Enable this explicitly
-on a Linux controller with a local Docker engine and a preinstalled GGUF model;
-the standard controller image does not grant Docker socket access automatically.
-This is application-level content-retention reduction, not guaranteed RAM erasure.
-See [Phantom setup and privacy boundaries](docs/PHANTOM_AGENTS.md).
-
-**Provider Adapters** add optional controller-side, non-streaming text inference
-through pinned LiteLLM, including OpenAI, Gemini, Azure, Bedrock, Vertex AI and
-administrator-defined aliases. Install `pip install -e ".[providers]"` from
-`backend/`, configure explicit provider/model allowlists in `PROVIDER_PROFILES`,
-and configure credentials in **Admin → Providers** or supported workload identity.
-Native Ollama, trusted-node Anthropic and free-model OpenRouter retain their
-existing routes. Privacy-required tasks reject external providers; ordinary cloud
-tasks remain persistent. See [provider setup](docs/PROVIDER_ADAPTERS.md).
-
-See the [validation record](docs/VALIDATION_PHANTOM_PROVIDERS.md) for automated
-coverage and the live deployment checks required before operational use.
