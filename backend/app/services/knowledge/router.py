@@ -7,6 +7,7 @@ freshness as tiebreak. Real multi-node federation implements this same
 interface later.
 """
 
+import asyncio
 import time
 import uuid
 
@@ -18,6 +19,11 @@ from app.core.metrics import RETRIEVAL_DURATION, RETRIEVALS_TOTAL
 from app.models import KnowledgeCollection, RetrievalRequest
 from app.services.knowledge.embedder import get_embedder
 from app.services.knowledge.store import qdrant_name, search
+
+# Upper bound on a retrieval query (ADR-030). The API rejects longer queries;
+# internal callers (a task prompt reused as the query, rendered workflow
+# queries) are clipped so embedding cost and the persisted row stay bounded.
+MAX_QUERY_CHARS = 8192
 
 
 class RetrievedChunk(BaseModel):
@@ -52,6 +58,7 @@ async def retrieve(
     min_score: float = 0.0,
 ) -> RetrievalResult:
     started = time.perf_counter()
+    query = query[:MAX_QUERY_CHARS]
 
     if collection_name is not None:
         found = (
@@ -77,7 +84,9 @@ async def retrieve(
     for collection in collections:
         backend = collection.embedding_backend
         if backend not in query_vectors:
-            query_vectors[backend] = get_embedder(backend).embed([query])[0]
+            # CPU-bound: keep it off the event loop that serves every client
+            vectors = await asyncio.to_thread(get_embedder(backend).embed, [query])
+            query_vectors[backend] = vectors[0]
         points = await search(qdrant_name(collection.id), query_vectors[backend], top_k)
         for point in points:
             payload = point.payload or {}

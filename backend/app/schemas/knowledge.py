@@ -4,7 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.models.knowledge import DocumentStatus
-from app.services.knowledge.router import RetrievedChunk
+from app.services.knowledge.router import MAX_QUERY_CHARS, RetrievedChunk
 
 
 class CollectionCreate(BaseModel):
@@ -38,7 +38,7 @@ class DocumentOut(BaseModel):
 
 
 class RetrieveRequest(BaseModel):
-    query: str = Field(min_length=1)
+    query: str = Field(min_length=1, max_length=MAX_QUERY_CHARS)
     collection: str | None = None  # omit to let the Knowledge Router choose
     top_k: int = Field(default=5, ge=1, le=20)
 

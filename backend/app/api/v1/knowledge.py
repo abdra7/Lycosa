@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from sqlalchemy import delete, select, update
 
-from app.api.deps import DbDep, Principal, PrincipalDep, require_roles
+from app.api.deps import DbDep, Principal, require_roles
 from app.db.session import get_runtime_sessionmaker
 from app.models import Document, EmbeddingJob, KnowledgeCollection, RetrievalRequest
 from app.models.user import ROLE_ADMIN, ROLE_OPERATOR
@@ -78,7 +78,7 @@ async def create_collection(
 
 
 @router.get("/collections", response_model=list[CollectionOut])
-async def list_collections(db: DbDep, _principal: PrincipalDep) -> list[CollectionOut]:
+async def list_collections(db: DbDep, _principal: OperatorDep) -> list[CollectionOut]:
     collections = (
         (await db.execute(select(KnowledgeCollection).order_by(KnowledgeCollection.name)))
         .scalars()
@@ -175,7 +175,7 @@ def _log_orphaned_ingestion(dispatch: "asyncio.Task[Document]") -> None:
 
 @router.get("/collections/{collection_id}/documents", response_model=list[DocumentOut])
 async def list_documents(
-    collection_id: uuid.UUID, db: DbDep, _principal: PrincipalDep
+    collection_id: uuid.UUID, db: DbDep, _principal: OperatorDep
 ) -> list[DocumentOut]:
     await _get_collection(db, collection_id)
     documents = (
@@ -194,7 +194,7 @@ async def list_documents(
 
 @router.post("/retrieve", response_model=RetrieveResponse)
 async def retrieve_knowledge(
-    body: RetrieveRequest, principal: PrincipalDep, db: DbDep
+    body: RetrieveRequest, principal: OperatorDep, db: DbDep
 ) -> RetrieveResponse:
     """Semantic retrieval via the Knowledge Router. The caller never names a
     node; omit `collection` to search across all collections (federated)."""
