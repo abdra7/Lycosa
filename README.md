@@ -79,7 +79,6 @@ This reduces retained content at the application level. Container cleanup and
 clearing the dialog do not guarantee physical RAM erasure. The controller must
 run on a Linux host with access to its local Docker engine; the standard Compose
 deployment does not enable this access automatically.
-See [Phantom setup and privacy boundaries](docs/PHANTOM_AGENTS.md).
 
 ### Provider Adapters
 
@@ -92,8 +91,8 @@ desktop's available aliases; a displayed name does not establish live access.
 Adapters support non-streaming text requests, including ordinary workflow task
 steps. They do not add tool calls, autonomous loops or automatic provider
 fallbacks. Native Ollama, trusted-node Anthropic and free-model OpenRouter keep
-their existing execution policies. See [provider setup](docs/PROVIDER_ADAPTERS.md)
-and the [Agent capability/MCP guide](agent/CAPABILITIES.md).
+their existing execution policies. See the
+[Agent capability/MCP guide](agent/CAPABILITIES.md).
 
 ## Architecture
 
@@ -300,8 +299,7 @@ controller can actually reach.
 Sprint 12 Usage telemetry and runtime routing, bounded Agent MCP/RAG capabilities,
 Phantom Agents and Provider Adapters are implemented on `main`. Integration CI
 passes; a source merge does not imply that an existing release installer includes
-these changes. See the [validation record](docs/VALIDATION_PHANTOM_PROVIDERS.md)
-for evidence and remaining deployment acceptance.
+these changes.
 
 The next acceptance work covers real Linux Docker/GGUF execution, native desktop
 Phantom behavior and explicitly selected provider accounts/models. Physical GPU
