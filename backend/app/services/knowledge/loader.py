@@ -3,12 +3,40 @@
 import csv
 import io
 import json
+from collections.abc import Iterator
 from io import BytesIO
 from typing import Any
 
 
 class ExtractionError(ValueError):
     """The document's text could not be extracted; message is operator-facing."""
+
+
+# Extracted text may not exceed what a plain-text upload could carry (the raw
+# 20 MB cap). CSV header labels, JSON key paths, shared PDF content streams and
+# compressed DOCX parts otherwise expand a small upload without bound (ADR-030).
+MAX_EXTRACTED_CHARS = 20 * 1024 * 1024
+# A DOCX is a zip: refuse archives that declare a huge inflated size before
+# python-docx decompresses them.
+MAX_DOCX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024
+
+
+class _TextBudget:
+    """Running size of a loader's output, checked as it is produced so an
+    expanding document fails before it is ever fully materialized."""
+
+    def __init__(self, filename: str) -> None:
+        self._filename = filename
+        self._used = 0
+
+    def take(self, text: str) -> str:
+        self._used += len(text) + 1  # + separator
+        if self._used > MAX_EXTRACTED_CHARS:
+            raise ExtractionError(
+                f"{self._filename!r} expands past the {MAX_EXTRACTED_CHARS:,}-character "
+                "extraction limit"
+            )
+        return text
 
 
 def _ocr_pdf(filename: str, reader: Any) -> str | None:
@@ -22,10 +50,11 @@ def _ocr_pdf(filename: str, reader: Any) -> str | None:
     except ImportError:
         return None
     pages: list[str] = []
+    budget = _TextBudget(filename)
     try:
         for page in reader.pages:
             texts = [pytesseract.image_to_string(image.image) for image in page.images]
-            pages.append("\n".join(t.strip() for t in texts if t.strip()))
+            pages.append(budget.take("\n".join(t.strip() for t in texts if t.strip())))
     except pytesseract.TesseractNotFoundError:
         return None
     except Exception as exc:
@@ -48,7 +77,8 @@ def _extract_pdf(filename: str, data: bytes) -> str:
                 raise ExtractionError(
                     f"PDF {filename!r} is password-protected — upload a decrypted copy"
                 )
-        text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        budget = _TextBudget(filename)
+        text = "\n\n".join(budget.take(page.extract_text() or "") for page in reader.pages)
     except ExtractionError:
         raise
     except Exception as exc:
@@ -75,20 +105,32 @@ def _extract_pdf(filename: str, data: bytes) -> str:
 def _extract_docx(filename: str, data: bytes) -> str:
     """Paragraphs become blank-line-separated blocks (so the paragraph chunker
     packs them); each table row becomes a 'cell | cell | ...' block."""
+    import zipfile
+
     import docx
 
     try:
+        with zipfile.ZipFile(BytesIO(data)) as archive:
+            declared = sum(info.file_size for info in archive.infolist())
+        if declared > MAX_DOCX_UNCOMPRESSED_BYTES:
+            raise ExtractionError(
+                f"DOCX {filename!r} declares {declared:,} uncompressed bytes, over the "
+                f"{MAX_DOCX_UNCOMPRESSED_BYTES:,}-byte limit"
+            )
         document = docx.Document(BytesIO(data))
+    except ExtractionError:
+        raise
     except Exception as exc:
         raise ExtractionError(
             f"could not parse DOCX {filename!r} (corrupt or unsupported file): {exc}"
         ) from exc
-    blocks = [p.text.strip() for p in document.paragraphs if p.text.strip()]
+    budget = _TextBudget(filename)
+    blocks = [budget.take(p.text.strip()) for p in document.paragraphs if p.text.strip()]
     for table in document.tables:
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
             if cells:
-                blocks.append(" | ".join(cells))
+                blocks.append(budget.take(" | ".join(cells)))
     if not blocks:
         raise ExtractionError(f"DOCX {filename!r} contained no extractable text")
     return "\n\n".join(blocks)
@@ -106,6 +148,7 @@ def _extract_csv(filename: str, data: bytes) -> str:
     if len(rows) < 2:
         raise ExtractionError(f"CSV {filename!r} has no data rows below the header")
     header = [h.strip() for h in rows[0]]
+    budget = _TextBudget(filename)
     records = []
     for row in rows[1:]:
         fields = []
@@ -116,7 +159,7 @@ def _extract_csv(filename: str, data: bytes) -> str:
             label = header[i] if i < len(header) and header[i] else f"col{i + 1}"
             fields.append(f"{label}: {value}")
         if fields:
-            records.append(" | ".join(fields))
+            records.append(budget.take(" | ".join(fields)))
     if not records:
         raise ExtractionError(f"CSV {filename!r} has no non-empty data rows")
     return "\n\n".join(records)
@@ -132,20 +175,17 @@ def _json_scalar(value: Any) -> str:
     return str(value)
 
 
-def _flatten_json(node: Any, prefix: str = "") -> list[str]:
-    """Flatten to 'a.b[0]: value' leaf lines, keeping structure searchable."""
+def _flatten_json(node: Any, prefix: str = "") -> Iterator[str]:
+    """Yield 'a.b[0]: value' leaf lines, keeping structure searchable."""
     if isinstance(node, dict):
-        lines: list[str] = []
         for key, value in node.items():
-            lines.extend(_flatten_json(value, f"{prefix}.{key}" if prefix else str(key)))
-        return lines
-    if isinstance(node, list):
-        lines = []
+            yield from _flatten_json(value, f"{prefix}.{key}" if prefix else str(key))
+    elif isinstance(node, list):
         for index, value in enumerate(node):
-            lines.extend(_flatten_json(value, f"{prefix}[{index}]"))
-        return lines
-    leaf = _json_scalar(node)
-    return [f"{prefix}: {leaf}" if prefix else leaf]
+            yield from _flatten_json(value, f"{prefix}[{index}]")
+    else:
+        leaf = _json_scalar(node)
+        yield f"{prefix}: {leaf}" if prefix else leaf
 
 
 def _extract_json(filename: str, data: bytes) -> str:
@@ -155,11 +195,9 @@ def _extract_json(filename: str, data: bytes) -> str:
         parsed = json.loads(data.decode("utf-8-sig", errors="replace"))
     except (json.JSONDecodeError, ValueError) as exc:
         raise ExtractionError(f"could not parse JSON {filename!r}: {exc}") from exc
-    if isinstance(parsed, list):
-        records = ["\n".join(_flatten_json(item)) for item in parsed]
-        records = [r for r in records if r.strip()]
-    else:
-        records = ["\n".join(_flatten_json(parsed))]
+    budget = _TextBudget(filename)
+    items = parsed if isinstance(parsed, list) else [parsed]
+    records = ["\n".join(budget.take(line) for line in _flatten_json(item)) for item in items]
     text = "\n\n".join(r for r in records if r.strip())
     if not text.strip():
         raise ExtractionError(f"JSON {filename!r} contained no extractable values")
