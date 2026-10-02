@@ -4,9 +4,11 @@ in ADR-027).
 The global rate limiter (ratelimit.py) caps total request volume per IP, but on
 a production node that budget (120/min) is generous enough to grind password
 guesses against a known account. This adds a much tighter, login-specific
-sliding window keyed on client IP that counts only *failed* attempts: a
-successful login clears the counter, so legitimate users are never locked out
-by their own activity.
+sliding window keyed on client IP. Each attempt reserves a slot atomically
+*before* the password is checked, so concurrent guesses cannot all pass a
+read-only check and record their failures afterwards (ADR-030). A failed
+attempt keeps its slot; a successful login clears the counter, so legitimate
+users are never locked out by their own activity.
 
 Deliberately a throttle, not an account lockout — locking an account by email
 would let an attacker deny service to a known admin. Keyed by IP, so at LAN
@@ -31,15 +33,12 @@ def reset_login_guard() -> None:
         store.clear_prefix(_KEY_PREFIX)
 
 
-async def is_locked_out(ip: str, *, max_failures: int, window_seconds: int) -> int:
-    """Return seconds to wait if `ip` has too many recent failures, else 0."""
-    return await get_window_store().penalty(
+async def admit_attempt(ip: str, *, max_failures: int, window_seconds: int) -> int:
+    """Reserve one login attempt for `ip`: 0 if admitted, else seconds to wait.
+    A rejected attempt consumes no budget."""
+    return await get_window_store().try_hit(
         f"{_KEY_PREFIX}{ip}", limit=max_failures, window_seconds=window_seconds
     )
-
-
-async def record_failure(ip: str, *, window_seconds: int) -> None:
-    await get_window_store().add(f"{_KEY_PREFIX}{ip}", window_seconds=window_seconds)
 
 
 async def clear_failures(ip: str) -> None:

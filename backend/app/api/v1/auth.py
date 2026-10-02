@@ -4,11 +4,7 @@ from sqlalchemy import select
 from app.api.deps import DbDep, PrincipalDep
 from app.core.clientip import client_ip
 from app.core.config import get_settings
-from app.core.loginguard import (
-    clear_failures,
-    is_locked_out,
-    record_failure,
-)
+from app.core.loginguard import admit_attempt, clear_failures
 from app.models import Session
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.services.audit import audit
@@ -29,12 +25,13 @@ async def login(body: LoginRequest, request: Request, db: DbDep) -> TokenRespons
 
     A per-IP brute-force throttle (ADR-023) rejects further attempts once an IP
     accumulates too many recent failures; a successful login clears its counter.
+    Slots are reserved before the password check, so bursts cannot race it (ADR-030).
     """
     settings = get_settings()
     ip = _client_ip(request)
     guard_on = settings.auth_max_failed_logins > 0 and ip is not None
     if guard_on:
-        retry_after = await is_locked_out(
+        retry_after = await admit_attempt(
             ip,
             max_failures=settings.auth_max_failed_logins,
             window_seconds=settings.auth_login_window_seconds,
@@ -55,8 +52,7 @@ async def login(body: LoginRequest, request: Request, db: DbDep) -> TokenRespons
 
     user = await authenticate_user(db, body.email, body.password)
     if user is None:
-        if guard_on:
-            await record_failure(ip, window_seconds=settings.auth_login_window_seconds)
+        # the attempt's slot was reserved by admit_attempt and stays counted
         await audit(
             db,
             action="auth.login.failure",
