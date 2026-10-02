@@ -83,6 +83,15 @@ async def save_provider_credential(
         or any(ord(c) < 33 or ord(c) > 126 for c in key)
     ):
         raise HTTPException(422, "Invalid provider credential")
+    # audit first: a failed audit write must not leave an unaudited credential change
+    await audit(
+        db,
+        action="provider.credential.set",
+        **principal.audit_actor(),
+        resource_type="provider",
+        resource_id=provider,
+        detail={"storage": body.storage},
+    )
     try:
         if body.storage == "session":
             set_session_key(provider, key)
@@ -95,14 +104,6 @@ async def save_provider_credential(
         ) from None
     finally:
         key = None
-    await audit(
-        db,
-        action="provider.credential.set",
-        actor_user_id=principal.id,
-        resource_type="provider",
-        resource_id=provider,
-        detail={"storage": body.storage},
-    )
     await db.commit()
 
 
@@ -114,6 +115,14 @@ async def delete_provider_credential(
     storage: Literal["vault", "session"] = "vault",
 ) -> None:
     _cloud_provider(provider)
+    await audit(
+        db,
+        action="provider.credential.delete",
+        **principal.audit_actor(),
+        resource_type="provider",
+        resource_id=provider,
+        detail={"storage": storage},
+    )
     try:
         if storage == "session":
             set_session_key(provider, None)
@@ -121,14 +130,6 @@ async def delete_provider_credential(
             manage_key(provider, None)
     except SecretStoreUnavailable:
         raise HTTPException(503, "Credential removal failed for the selected storage") from None
-    await audit(
-        db,
-        action="provider.credential.delete",
-        actor_user_id=principal.id,
-        resource_type="provider",
-        resource_id=provider,
-        detail={"storage": storage},
-    )
     await db.commit()
 
 
@@ -181,7 +182,7 @@ async def create_api_key(
     await audit(
         db,
         action="apikey.create",
-        actor_user_id=principal.id,
+        **principal.audit_actor(),
         resource_type="api_key",
         resource_id=str(record.id),
         detail={"name": body.name, "role": body.role},
@@ -214,7 +215,7 @@ async def revoke_api_key(
         await audit(
             db,
             action="apikey.revoke",
-            actor_user_id=principal.id,
+            **principal.audit_actor(),
             resource_type="api_key",
             resource_id=str(record.id),
             detail={"name": record.name},

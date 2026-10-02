@@ -103,6 +103,7 @@ async def patch_node(
     patch: NodePatch,
     actor_user_id: uuid.UUID | None,
     ip_address: str | None,
+    actor_api_key_id: uuid.UUID | None = None,
 ) -> Node:
     changes: dict[str, str] = {}
     if patch.name is not None and patch.name != node.name:
@@ -117,6 +118,7 @@ async def patch_node(
             db,
             action="node.update",
             actor_user_id=actor_user_id,
+            actor_api_key_id=actor_api_key_id,
             resource_type="node",
             resource_id=str(node.id),
             detail=changes,
@@ -132,6 +134,7 @@ async def delete_node(
     node: Node,
     actor_user_id: uuid.UUID | None,
     ip_address: str | None,
+    actor_api_key_id: uuid.UUID | None = None,
 ) -> None:
     """Remove a node from the fabric. Its API keys are unbound (one key = one
     node identity, so the same key can register a fresh node later); nullable
@@ -157,6 +160,7 @@ async def delete_node(
         db,
         action="node.delete",
         actor_user_id=actor_user_id,
+        actor_api_key_id=actor_api_key_id,
         resource_type="node",
         resource_id=str(node_id),
         detail={"name": name},

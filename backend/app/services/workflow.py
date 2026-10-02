@@ -110,6 +110,8 @@ async def resume_run(
     definition_raw: dict,
     approved: bool,
     user_id: uuid.UUID | None,
+    api_key_id: uuid.UUID | None = None,
+    ip_address: str | None = None,
 ) -> WorkflowRun:
     """Resolve the pending approval step, then continue (or fail) the run."""
     definition = WorkflowDefinition.model_validate(definition_raw)
@@ -125,9 +127,11 @@ async def resume_run(
         db,
         action="workflow.run.approved" if approved else "workflow.run.rejected",
         actor_user_id=user_id,
+        actor_api_key_id=api_key_id,
         resource_type="workflow_run",
         resource_id=str(run.id),
         detail={"step": run.current_step},
+        ip_address=ip_address,
     )
 
     if not approved:
@@ -139,7 +143,7 @@ async def resume_run(
     _record_output(run, run.current_step, "approved")
     run.status = RunStatus.RUNNING
     await db.commit()
-    return await _execute_from(db, run, definition, index + 1, user_id, None)
+    return await _execute_from(db, run, definition, index + 1, user_id, api_key_id)
 
 
 async def _execute_from(

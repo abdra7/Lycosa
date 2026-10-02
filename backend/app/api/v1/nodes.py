@@ -211,7 +211,7 @@ async def install_model(
     await audit(
         db,
         action="node.model.install",
-        actor_user_id=principal.id if principal.type == "user" else None,
+        **principal.audit_actor(),
         resource_type="node",
         resource_id=str(node.id),
         detail={"model": body.model},
@@ -233,9 +233,8 @@ async def patch_node(
     node = await node_service.get_node(db, node_id)
     if node is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
-    actor_user_id = principal.id if principal.type == "user" else None
     node = await node_service.patch_node(
-        db, node, patch, actor_user_id=actor_user_id, ip_address=_client_ip(request)
+        db, node, patch, **principal.audit_actor(), ip_address=_client_ip(request)
     )
     return NodeOut.model_validate(node)
 
@@ -252,7 +251,6 @@ async def delete_node(
     node = await node_service.get_node(db, node_id)
     if node is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
-    actor_user_id = principal.id if principal.type == "user" else None
     await node_service.delete_node(
-        db, node, actor_user_id=actor_user_id, ip_address=_client_ip(request)
+        db, node, **principal.audit_actor(), ip_address=_client_ip(request)
     )

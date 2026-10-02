@@ -66,7 +66,7 @@ async def create_collection(
     await audit(
         db,
         action="knowledge.collection.create",
-        actor_user_id=principal.id if principal.type == "user" else None,
+        **principal.audit_actor(),
         resource_type="knowledge_collection",
         resource_id=str(collection.id),
         detail={"name": body.name},
@@ -113,7 +113,7 @@ async def delete_collection(
     await audit(
         db,
         action="knowledge.collection.delete",
-        actor_user_id=principal.id if principal.type == "user" else None,
+        **principal.audit_actor(),
         resource_type="knowledge_collection",
         resource_id=str(collection_id),
         detail={"name": collection.name},

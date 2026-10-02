@@ -56,7 +56,7 @@ async def create_workflow(
     await audit(
         db,
         action="workflow.create",
-        actor_user_id=principal.id if principal.type == "user" else None,
+        **principal.audit_actor(),
         resource_type="workflow",
         resource_id=str(workflow.id),
         detail={"name": body.name},
@@ -117,6 +117,7 @@ async def approve_run(
     run_id: uuid.UUID,
     body: ApproveRequest,
     principal: OperatorDep,
+    request: Request,
     db: DbDep,
 ) -> RunOut:
     """Resolve a paused approval step: approve resumes execution, reject
@@ -142,5 +143,7 @@ async def approve_run(
         workflow.definition,
         approved=body.approved,
         user_id=principal.id if principal.type == "user" else None,
+        api_key_id=principal.id if principal.type == "api_key" else None,
+        ip_address=request.client.host if request.client else None,
     )
     return RunOut.model_validate(run)
