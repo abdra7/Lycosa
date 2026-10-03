@@ -14,6 +14,7 @@ from app.llm.adapters.base import (
     ToolCallAccumulator,
     as_bool,
     as_count,
+    as_dict,
     as_positive,
     parse_arguments,
 )
@@ -302,7 +303,7 @@ class OpenAICompatibleAdapter(LLMAdapter):
             ),
             None,
         )
-        top = item.get("top_provider") if isinstance(item.get("top_provider"), dict) else {}
+        top = as_dict(item.get("top_provider"))
         name = item.get("name") or item.get("display_name")
         return ModelInfo(
             provider=self.provider,
@@ -359,7 +360,7 @@ class XAIAdapter(OpenAICompatibleAdapter):
 
 class MistralAdapter(OpenAICompatibleAdapter):
     def model_capabilities(self, item: dict[str, Any]) -> LLMCapabilities:
-        caps = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
+        caps = as_dict(item.get("capabilities"))
         return LLMCapabilities(
             chat=as_bool(caps.get("completion_chat")),
             tool_calling=as_bool(caps.get("function_calling")),
@@ -380,7 +381,7 @@ class OpenRouterAdapter(OpenAICompatibleAdapter):
 
     def model_capabilities(self, item: dict[str, Any]) -> LLMCapabilities:
         params = item.get("supported_parameters")
-        arch = item.get("architecture") if isinstance(item.get("architecture"), dict) else {}
+        arch = as_dict(item.get("architecture"))
         modalities = arch.get("input_modalities")
         has = (lambda p: p in params) if isinstance(params, list) else (lambda p: None)
         return LLMCapabilities(

@@ -109,7 +109,8 @@ async def set_policy(
     await audit(
         db,
         action="llm.routing.update",
-        **actor.audit_actor(),
+        actor_user_id=actor.user_id,
+        actor_api_key_id=actor.api_key_id,
         resource_type="llm_routing",
         resource_id=purpose,
         detail={"scope": scope, "entries": len(chain)},
@@ -132,7 +133,8 @@ async def delete_policy(
     await audit(
         db,
         action="llm.routing.delete",
-        **actor.audit_actor(),
+        actor_user_id=actor.user_id,
+        actor_api_key_id=actor.api_key_id,
         resource_type="llm_routing",
         resource_id=purpose,
         detail={"scope": scope},

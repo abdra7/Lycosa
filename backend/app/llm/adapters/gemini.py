@@ -156,7 +156,9 @@ class GeminiAdapter(LLMAdapter):
         self, candidate: dict[str, Any], start: int
     ) -> tuple[list[str], list[str], list[ToolCall]]:
         content = candidate.get("content") or {}
-        text, thoughts, calls = [], [], []
+        text: list[str] = []
+        thoughts: list[str] = []
+        calls: list[ToolCall] = []
         for part in content.get("parts") or []:
             if not isinstance(part, dict):
                 continue

@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     # …and accounts owned by non-admin users (empty = public endpoints only)
     llm_user_endpoint_networks: str = ""
     llm_request_timeout_seconds: int = Field(default=120, ge=1, le=600)
+    # wall clock for one call across all retries and fallbacks; stays under
+    # the dashboard's task timeout (7 min)
+    llm_total_timeout_seconds: int = Field(default=300, ge=1, le=3600)
     llm_max_retries: int = Field(default=2, ge=0, le=5)
     llm_models_cache_seconds: int = Field(default=300, ge=0, le=86400)
     llm_pricing_file: str = ""  # empty = config/llm_pricing.yml

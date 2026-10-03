@@ -137,7 +137,7 @@ Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 async def system_resolver(host: str, port: int) -> list[str]:
     infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    return list(dict.fromkeys(info[4][0] for info in infos))
+    return list(dict.fromkeys(str(info[4][0]) for info in infos))
 
 
 async def resolve_checked(

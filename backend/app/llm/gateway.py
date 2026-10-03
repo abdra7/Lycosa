@@ -74,14 +74,34 @@ def backoff_delay(attempt: int, retry_after: float | None) -> float:
     return min(delay, MAX_BACKOFF_SECONDS)
 
 
-async def with_retries(call: Callable[[], Awaitable[T]], *, deadline: float) -> tuple[T, int]:
+class _Budget:
+    """Wall-clock budget for one gateway call across every retry and route
+    entry, so a long chain cannot outlive the caller's own timeout."""
+
+    def __init__(self, seconds: float) -> None:
+        self.ends_at = time.monotonic() + seconds
+
+    def remaining(self) -> float:
+        return self.ends_at - time.monotonic()
+
+    def check(self) -> None:
+        if self.remaining() <= 0:
+            raise LLMTimeoutError("The LLM request ran out of its overall time budget")
+
+
+async def with_retries(
+    call: Callable[[], Awaitable[T]], *, deadline: float, budget: _Budget | None = None
+) -> tuple[T, int]:
     """Run `call`, retrying only retryable errors. Returns (result, attempts)."""
     max_retries = get_settings().llm_max_retries
     attempt = 0
     while True:
         attempt += 1
+        if budget is not None:
+            budget.check()
+        limit = deadline if budget is None else min(deadline, budget.remaining())
         try:
-            async with asyncio.timeout(deadline):
+            async with asyncio.timeout(limit):
                 return await call(), attempt
         except TimeoutError:
             error: LLMError = LLMTimeoutError()
@@ -90,7 +110,10 @@ async def with_retries(call: Callable[[], Awaitable[T]], *, deadline: float) -> 
         error.attempts = attempt  # type: ignore[attr-defined]
         if not error.retryable or attempt > max_retries:
             raise error
-        await sleep(backoff_delay(attempt - 1, error.retry_after))
+        delay = backoff_delay(attempt - 1, error.retry_after)
+        if budget is not None and delay >= budget.remaining():
+            raise error  # waiting would exhaust the budget: give up on this entry
+        await sleep(delay)
 
 
 def _redact_text(text: str | None, secret: str | None) -> str | None:
@@ -180,10 +203,14 @@ async def generate(
 ) -> GatewayResult:
     if not targets:
         raise NoRouteError()
-    deadline = float(get_settings().llm_request_timeout_seconds)
+    settings = get_settings()
+    deadline = float(settings.llm_request_timeout_seconds)
+    budget = _Budget(float(settings.llm_total_timeout_seconds))
     skipped: list[dict[str, str]] = []
     last_error: LLMError = NoRouteError()
     for index, target in enumerate(targets):
+        if budget.remaining() <= 0:
+            break  # out of time: the last error stands, remaining entries untried
         adapter = catalog.get(target.account.provider)
         call_request = request.model_copy(update={"model": target.model})
         started = time.monotonic()
@@ -196,7 +223,9 @@ async def generate(
             conn = await connection_for(db, target.account, private_only=ctx.requires_privacy)
             credential = conn.credential
             response, attempts = await with_retries(
-                functools.partial(adapter.generate, conn, call_request), deadline=deadline
+                functools.partial(adapter.generate, conn, call_request),
+                deadline=deadline,
+                budget=budget,
             )
         except LLMError as exc:
             attempts = getattr(exc, "attempts", attempts)

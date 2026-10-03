@@ -32,6 +32,13 @@ history. Both cloud adapters and Phantom execution require explicit setup.
 
 ## Features
 
+- **Universal LLM layer** — one provider-independent interface for OpenAI,
+  Anthropic (Claude), Google Gemini, DeepSeek, Qwen, xAI (Grok), Mistral,
+  OpenRouter, Ollama, LM Studio, vLLM and any OpenAI-compatible endpoint.
+  Users connect their own provider accounts (several per provider), keys are
+  encrypted on the controller, models are discovered with their documented
+  capabilities, and per-purpose routes give a default model with automatic
+  fallback, retries, streaming and usage/cost tracking.
 - **Phantom Agents** — opt-in local CPU inference in a fresh, network-disabled
   Docker container for each request. Output is returned after container removal
   is confirmed and cleared from the desktop dialog after 60 seconds.
@@ -62,10 +69,45 @@ history. Both cloud adapters and Phantom execution require explicit setup.
 
 | Path | Where inference runs | Task content | Setup |
 |---|---|---|---|
+| **Universal LLM layer** (`llm_account_id` or `route`) | The controller calls the provider account or local runtime you connected | Normal task history is retained; provider retention also applies to cloud accounts | Connect an account under **Providers** in the desktop app, then pick a default model |
 | **Local Agents** (`ollama`) | Registered LAN device | Normal task history is retained | Install an agent and a local model |
 | **Provider Adapters** (for example `openai`, `gemini`, `azure`) | Cloud provider, called by the controller | Normal task history is retained; provider retention also applies | Install the optional adapter extra, allowlist models and configure credentials |
 | **Native cloud routes** (`anthropic`, `openrouter`) | Trusted HTTPS agent for Anthropic; controller for free-model OpenRouter | Normal task history is retained | Configure the native route's credentials and policy |
 | **Phantom Agents** (`phantom_local`) | Fresh local CPU container | No application task-content persistence; one-time result | Linux host controller, local Docker socket and a preinstalled GGUF model |
+
+### Universal LLM layer
+
+Open **Providers** in the desktop app and connect an account: an API key for a
+cloud provider, OpenRouter's official sign-in, or the address of a local
+Ollama, LM Studio or vLLM server (no key needed). Each user can connect
+several accounts per provider; administrators can add shared deployment
+accounts. **Test** makes a real call and shows whether the account has API
+access, **Models** lists what the provider reports, and **Routing & fallback**
+sets the default model and the fallbacks used when it fails. Tasks and
+workflow steps opt in with `route` (`auto`, `default`, `coding`, `reasoning`,
+`vision`, `cheap`, `private`, `offline`) or `llm_account_id` + `model`; the
+REST API is under `/api/v1/llm`.
+
+- **Consumer subscriptions are not API access.** ChatGPT Plus/Pro, Claude
+  Pro/Max and Gemini app plans do not provide API keys, and Lycosa does not use
+  their sign-in. OpenRouter's PKCE sign-in is the only OAuth flow offered,
+  because it is documented and yields a revocable API key.
+- **Credentials** are AES-256-GCM encrypted in PostgreSQL with a key held in
+  `CREDENTIAL_ENCRYPTION_KEY` or generated once in the controller's data volume
+  (back it up with the database), or stored in the OS keyring with
+  `LLM_CREDENTIAL_STORE=keyring`. Keys are never returned, logged or shown.
+- **Endpoints** of cloud providers are fixed to their official URLs. Local and
+  custom endpoints must resolve to networks allowed by `LLM_LOCAL_NETWORKS`
+  (administrators) or `LLM_USER_ENDPOINT_NETWORKS` (other users, empty by
+  default). Every connection is checked again at connect time; cloud metadata
+  addresses are always refused.
+- **Privacy:** `requires_privacy` and the `private`/`offline` routes only ever
+  use local runtimes. Lycosa returns tool calls to the caller and never runs
+  tools itself. Cost is shown only when the provider reports it or you add
+  prices to `backend/config/llm_pricing.yml`; Lycosa ships no prices.
+
+`python backend/scripts/smoke_llm.py --execute --email <admin>` checks a running
+controller's accounts with real calls.
 
 ### Phantom Agents
 

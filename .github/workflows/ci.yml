@@ -32,6 +32,9 @@ jobs:
           ruff check .
           ruff format --check .
 
+      - name: Type check (mypy, universal LLM layer)
+        run: mypy
+
       - name: Test (pytest)
         run: pytest
 

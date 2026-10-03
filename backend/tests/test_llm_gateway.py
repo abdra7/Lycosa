@@ -104,6 +104,27 @@ async def test_retry_limit_and_overall_deadline(monkeypatch):
     assert excinfo.value.attempts == 2
 
 
+async def test_overall_budget_stops_retries_and_fallbacks(db_session, ctx, monkeypatch):
+    monkeypatch.setattr(get_settings(), "llm_total_timeout_seconds", 1)
+    first = await make_account(db_session, "openai")
+    second = await make_account(db_session, "mistral")
+    calls = []
+
+    async def slow_failure(self, conn, req):
+        calls.append(conn.provider)
+        await asyncio.sleep(1.2)  # consumes the whole budget
+        raise errors.ProviderUnavailableError()
+
+    from app.llm.adapters.openai_compat import OpenAICompatibleAdapter
+
+    monkeypatch.setattr(OpenAICompatibleAdapter, "generate", slow_failure)
+    with pytest.raises(errors.LLMTimeoutError):
+        await gateway.generate(
+            db_session, ctx, request(), [routing.Target(first, "a"), routing.Target(second, "b")]
+        )
+    assert calls == ["openai"]  # no retry, no second provider once time is up
+
+
 def test_backoff_is_capped():
     assert gateway.backoff_delay(10, None) == gateway.MAX_BACKOFF_SECONDS
     assert gateway.backoff_delay(0, 999) == gateway.MAX_BACKOFF_SECONDS

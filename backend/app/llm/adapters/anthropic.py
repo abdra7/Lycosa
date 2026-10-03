@@ -3,7 +3,14 @@
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.llm.adapters.base import LLMAdapter, as_bool, as_count, as_positive, parse_arguments
+from app.llm.adapters.base import (
+    LLMAdapter,
+    as_bool,
+    as_count,
+    as_dict,
+    as_positive,
+    parse_arguments,
+)
 from app.llm.errors import MalformedResponseError, from_stream_payload
 from app.llm.http import Connection, iter_sse, loads_event, request_json, stream_lines
 from app.llm.types import (
@@ -292,8 +299,8 @@ class AnthropicAdapter(LLMAdapter):
         yield StreamEvent(type=StreamEventType.FINISH, finish_reason=finish)
 
     def model_info(self, item: dict[str, Any]) -> ModelInfo:
-        caps = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
-        thinking = caps.get("thinking") if isinstance(caps.get("thinking"), dict) else {}
+        caps = as_dict(item.get("capabilities"))
+        thinking = as_dict(caps.get("thinking"))
         return ModelInfo(
             provider=self.provider,
             id=item["id"],

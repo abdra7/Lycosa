@@ -48,9 +48,9 @@ from app.models.user import ROLE_ADMIN
 from app.services.audit import audit
 
 MAX_ACCOUNTS_PER_OWNER = 50
-SCOPE_DEPLOYMENT = "deployment"
-SCOPE_PERSONAL = "personal"
 Scope = Literal["personal", "deployment"]
+SCOPE_DEPLOYMENT: Literal["deployment"] = "deployment"
+SCOPE_PERSONAL: Literal["personal"] = "personal"
 Need = Literal["view", "use", "manage", "remove"]
 
 # overridable in tests; production resolves through the system resolver
@@ -83,9 +83,6 @@ class Actor:
             user_id=principal.id if principal.type == "user" else None,
             api_key_id=principal.id if principal.type == "api_key" else None,
         )
-
-    def audit_actor(self) -> dict[str, uuid.UUID | None]:
-        return {"actor_user_id": self.user_id, "actor_api_key_id": self.api_key_id}
 
 
 # --- rules --------------------------------------------------------------------
@@ -298,7 +295,8 @@ async def create_account(
     await audit(
         db,
         action="llm.account.create",
-        **actor.audit_actor(),
+        actor_user_id=actor.user_id,
+        actor_api_key_id=actor.api_key_id,
         resource_type="llm_account",
         resource_id=str(account.id),
         detail=_audit_detail(account, auth_method=method.value),
@@ -370,7 +368,8 @@ async def update_account(
     await audit(
         db,
         action="llm.account.update",
-        **actor.audit_actor(),
+        actor_user_id=actor.user_id,
+        actor_api_key_id=actor.api_key_id,
         resource_type="llm_account",
         resource_id=str(account.id),
         detail=_audit_detail(account, changed=changed),
@@ -387,7 +386,8 @@ async def delete_account(db: AsyncSession, actor: Actor, account: LLMProviderAcc
     await audit(
         db,
         action="llm.account.delete",
-        **actor.audit_actor(),
+        actor_user_id=actor.user_id,
+        actor_api_key_id=actor.api_key_id,
         resource_type="llm_account",
         resource_id=str(account.id),
         detail=_audit_detail(account),
@@ -472,7 +472,8 @@ async def probe_account(
     await audit(
         db,
         action="llm.account.test",
-        **actor.audit_actor(),
+        actor_user_id=actor.user_id,
+        actor_api_key_id=actor.api_key_id,
         resource_type="llm_account",
         resource_id=str(account.id),
         detail=_audit_detail(account, result=health.status, with_model=bool(model)),

@@ -54,6 +54,11 @@ def as_bool(value: Any) -> bool | None:
     return value if isinstance(value, bool) else None
 
 
+def as_dict(value: Any) -> dict[str, Any]:
+    """A nested JSON object, or {} when the provider sent something else."""
+    return value if isinstance(value, dict) else {}
+
+
 def parse_arguments(raw: Any, provider: str) -> dict[str, Any]:
     """Tool-call arguments as a JSON object; anything else is a malformed call."""
     if isinstance(raw, dict):
