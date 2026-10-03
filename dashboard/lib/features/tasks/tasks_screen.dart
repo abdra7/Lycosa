@@ -12,6 +12,19 @@ import '../../core/provider_catalog.dart';
 
 const _taskTypes = ['auto', 'coding', 'retrieval', 'tool', 'vision', 'general'];
 
+/// Universal LLM layer routes (ADR-031); 'node' keeps the provider choice.
+const _llmRoutes = {
+  'node': 'Provider above (node / legacy route)',
+  'auto': 'LLM route: auto (by task type)',
+  'default': 'LLM route: default model',
+  'coding': 'LLM route: coding',
+  'reasoning': 'LLM route: reasoning',
+  'vision': 'LLM route: vision',
+  'cheap': 'LLM route: cheap',
+  'private': 'LLM route: private (local only)',
+  'offline': 'LLM route: offline (local only)',
+};
+
 Color taskStatusColor(BuildContext context, String status) =>
     LycosaColors.status(status);
 
@@ -29,6 +42,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   final _knowledgeCollection = TextEditingController();
   String _type = 'auto';
   String _provider = 'ollama';
+  String _route = 'node';
   bool _busy = false;
   List<String> _providers = providerLabels.keys.toList();
 
@@ -72,6 +86,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       final task = await client.submitTask(
         prompt: _prompt.text.trim(),
         provider: _provider,
+        route: _route == 'node' ? null : _route,
         knowledgeCollection: _knowledgeCollection.text.trim().isEmpty
             ? null
             : _knowledgeCollection.text.trim(),
@@ -164,7 +179,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                 for (final p in _providers)
                   DropdownMenuItem(value: p, child: Text(providerLabels[p] ?? p)),
               ],
-              onChanged: _busy
+              onChanged: _busy || _route != 'node'
                   ? null
                   : (value) => setState(() {
                       _provider = value!;
@@ -173,7 +188,30 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                           : '';
                     }),
             ),
-            if (_provider != 'ollama')
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: _route,
+              decoration: const InputDecoration(labelText: 'Route'),
+              items: [
+                for (final entry in _llmRoutes.entries)
+                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() {
+                      _route = value!;
+                      if (_route != 'node') _model.clear();
+                    }),
+            ),
+            if (_route != 'node')
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'The route picks the account and model (with fallbacks) '
+                  'configured under AI Providers.',
+                ),
+              ),
+            if (_provider != 'ollama' && _route == 'node')
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(

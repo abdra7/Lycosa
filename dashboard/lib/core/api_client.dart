@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 
 import 'api_exception.dart';
 
+part 'llm_api.dart';
+
 /// The authenticated caller identity returned by GET /api/v1/me.
 class Principal {
   Principal({
@@ -618,7 +620,10 @@ class ApiClient {
     String? knowledgeQuery,
     String? knowledgeCollection,
     String provider = 'ollama',
+    String? route, // universal LLM layer: auto | default | coding | ...
+    String? llmAccountId,
   }) async {
+    final viaLlmLayer = route != null || llmAccountId != null;
     final response = await _send(
       () => _http.post(
         _uri('/api/v1/tasks'),
@@ -629,7 +634,9 @@ class ApiClient {
           'model': ?model,
           'knowledge_query': ?knowledgeQuery,
           'knowledge_collection': ?knowledgeCollection,
-          if (provider != 'ollama') 'provider': provider,
+          if (provider != 'ollama' && !viaLlmLayer) 'provider': provider,
+          'route': ?route,
+          'llm_account_id': ?llmAccountId,
         }),
       ),
       timeout: const Duration(minutes: 7),

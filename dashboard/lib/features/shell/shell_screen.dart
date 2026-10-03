@@ -9,6 +9,7 @@ import '../../core/theme_mode.dart';
 import '../../widgets/lycosa_brand.dart';
 import '../admin/admin_screen.dart';
 import '../knowledge/knowledge_screen.dart';
+import '../llm/ai_providers_screen.dart';
 import '../nodes/nodes_screen.dart';
 import '../nodes/providers.dart';
 import '../tasks/tasks_screen.dart';
@@ -25,6 +26,7 @@ const _sections = [
   _Section('Tasks', Icons.play_circle_outline),
   _Section('Workflows', Icons.account_tree_outlined),
   _Section('Knowledge', Icons.menu_book_outlined),
+  _Section('Providers', Icons.hub_outlined),
   _Section('Admin', Icons.admin_panel_settings_outlined),
 ];
 
@@ -135,6 +137,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                 1 => const TasksScreen(),
                 2 => const WorkflowsScreen(),
                 3 => const KnowledgeScreen(),
+                4 => const AiProvidersScreen(),
                 _ => const AdminScreen(),
               },
             ),
