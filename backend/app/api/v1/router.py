@@ -4,6 +4,7 @@ from app.api.v1 import (
     admin,
     auth,
     knowledge,
+    llm,
     me,
     nodes,
     phantom,
@@ -25,3 +26,4 @@ api_v1_router.include_router(knowledge.router)
 api_v1_router.include_router(workflows.router)
 api_v1_router.include_router(phantom.router)
 api_v1_router.include_router(providers.router)
+api_v1_router.include_router(llm.router)

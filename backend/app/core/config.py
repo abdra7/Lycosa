@@ -10,6 +10,7 @@ from app.core.bootstrap import (
     ensure_runtime_secrets,
     is_placeholder,
 )
+from app.llm.netpolicy import DEFAULT_LOCAL_NETWORKS, parse_networks
 from app.schemas.provider import ProviderProfile
 
 logger = logging.getLogger("lycosa.config")
@@ -82,6 +83,22 @@ class Settings(BaseSettings):
 
     # New cloud adapters are opt-in. Exact provider/model policy is admin-owned.
     provider_profiles: dict[str, ProviderProfile] = {}
+
+    # Universal LLM layer (ADR-031). Account credentials are AES-256-GCM
+    # encrypted in the database with this key (urlsafe base64 of 32 bytes);
+    # empty = generated once under data_dir. "keyring" stores them in the
+    # controller's OS vault instead.
+    credential_encryption_key: str = ""
+    llm_credential_store: str = Field(default="db", pattern=r"^(db|keyring)$")
+    # private networks a local runtime endpoint (Ollama, LM Studio, vLLM,
+    # custom) may use: deployment accounts and admin-owned accounts…
+    llm_local_networks: str = DEFAULT_LOCAL_NETWORKS
+    # …and accounts owned by non-admin users (empty = public endpoints only)
+    llm_user_endpoint_networks: str = ""
+    llm_request_timeout_seconds: int = Field(default=120, ge=1, le=600)
+    llm_max_retries: int = Field(default=2, ge=0, le=5)
+    llm_models_cache_seconds: int = Field(default=300, ge=0, le=86400)
+    llm_pricing_file: str = ""  # empty = config/llm_pricing.yml
 
     # Isolated local-only inference; unavailable unless deliberately provisioned.
     phantom_enabled: bool = False
@@ -157,10 +174,30 @@ def enforce_multiworker_prereqs(settings: Settings) -> None:
         )
 
 
+def enforce_llm_settings(settings: Settings) -> None:
+    """Fail fast on a malformed credential key or network list (ADR-031):
+    discovering it at first use would strand every stored credential."""
+    from app.llm.vault import decode_key
+
+    if settings.credential_encryption_key:
+        try:
+            decode_key(settings.credential_encryption_key)
+        except ValueError:
+            raise RuntimeError(
+                "CREDENTIAL_ENCRYPTION_KEY must be urlsafe base64 of exactly 32 bytes"
+            ) from None
+    for name in ("llm_local_networks", "llm_user_endpoint_networks"):
+        try:
+            parse_networks(getattr(settings, name))
+        except ValueError:
+            raise RuntimeError(f"{name.upper()} must be comma-separated IP networks") from None
+
+
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
     apply_runtime_secrets(settings)
     enforce_production_secrets(settings)
     enforce_multiworker_prereqs(settings)
+    enforce_llm_settings(settings)
     return settings

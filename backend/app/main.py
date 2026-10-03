@@ -17,6 +17,7 @@ from app.core.metrics import HTTP_DURATION, HTTP_REQUESTS
 from app.core.phantom_privacy import PhantomPrivacyMiddleware, is_phantom
 from app.core.ratelimit import RateLimitMiddleware
 from app.db.session import get_runtime_sessionmaker, get_sessionmaker
+from app.llm.vault import get_cipher
 from app.services.knowledge.ingestion import recover_stuck_ingestions
 from app.services.node import sweep_offline_nodes
 from app.services.provider_registry import registry
@@ -26,6 +27,7 @@ logger = logging.getLogger("lycosa.lifespan")
 
 settings = get_settings()
 registry()  # fail startup on invalid deployment-owned provider aliases
+get_cipher()  # load (or create, once, across workers) the LLM credential key
 setup_logging(settings.log_level)
 
 

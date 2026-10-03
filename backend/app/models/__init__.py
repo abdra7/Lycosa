@@ -10,6 +10,7 @@ from app.models.knowledge import (
     KnowledgeCollection,
     RetrievalRequest,
 )
+from app.models.llm import LLMCredential, LLMProviderAccount, LLMRoutingPolicy, LLMUsage
 from app.models.node import Agent, AgentCapability, Node, NodeStatus
 from app.models.task import ExecutionStatus, Task, TaskExecution, TaskStatus, TaskType
 from app.models.user import ApiKey, Role, Session, User
@@ -32,6 +33,10 @@ __all__ = [
     "ExecutionStatus",
     "JobStatus",
     "KnowledgeCollection",
+    "LLMCredential",
+    "LLMProviderAccount",
+    "LLMRoutingPolicy",
+    "LLMUsage",
     "Node",
     "NodeStatus",
     "RetrievalRequest",
