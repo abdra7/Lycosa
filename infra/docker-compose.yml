@@ -112,7 +112,7 @@ services:
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
-      # localhost-only: Grafana proxies queries over the internal network
+      # localhost-only: Grafana proxies queries over the monitoring network
       - "127.0.0.1:9090:9090"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
@@ -120,15 +120,19 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - lycosa
+      - lycosa      # scrapes api:8000
+      - monitoring  # queried by grafana
 
   grafana:
     image: grafana/grafana:13.1.0
-    # without a root .env Grafana uses its stock admin/admin login and forces
-    # a password change on first sign-in; set GF_SECURITY_ADMIN_* to override
-    # (only the operator .env here — Grafana has no use for the DB defaults)
+    # Grafana is published on the LAN, so it is isolated (ADR-030): it sits on
+    # the monitoring network with Prometheus only (no route to postgres,
+    # qdrant, redis or the api) and never receives the root .env, which holds
+    # the controller's secrets. Its own settings (GF_SECURITY_ADMIN_USER /
+    # GF_SECURITY_ADMIN_PASSWORD) go in the optional root .env.grafana; without
+    # it Grafana starts with admin/admin and forces a change on first sign-in.
     env_file:
-      - path: ../.env
+      - path: ../.env.grafana
         required: false
     restart: unless-stopped
     logging: *default-logging
@@ -146,7 +150,7 @@ services:
       timeout: 3s
       retries: 5
     networks:
-      - lycosa
+      - monitoring
 
 volumes:
   postgres_data:
@@ -157,4 +161,6 @@ volumes:
 
 networks:
   lycosa:
+    driver: bridge
+  monitoring:
     driver: bridge

@@ -31,6 +31,14 @@ class Principal(BaseModel):
     name: str | None = None
     session_id: uuid.UUID | None = None  # set for user principals; enables logout
 
+    def audit_actor(self) -> dict[str, uuid.UUID | None]:
+        """AuditLog actor columns for this principal. Users and API keys live in
+        different FK columns; mixing them breaks attribution (ADR-030)."""
+        return {
+            "actor_user_id": self.id if self.type == "user" else None,
+            "actor_api_key_id": self.id if self.type == "api_key" else None,
+        }
+
 
 def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(

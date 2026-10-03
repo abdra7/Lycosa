@@ -192,7 +192,9 @@ On Windows hosts, use PowerShell: `.\scripts\install.ps1`
 The installer checks Docker, generates secrets into `.env`, asks for your
 admin email/password, starts the stack, and prints the **controller URL**
 (e.g. `http://192.168.9.80:8000`) to enter in the desktop app. Every setting
-lives in the root `.env`; committed defaults are in `infra/compose-defaults.env`.
+lives in the root `.env`, except Grafana's own login, which goes in
+`.env.grafana` so the Grafana container never sees the controller's secrets;
+committed defaults are in `infra/compose-defaults.env`.
 
 Prefer plain compose? A fresh clone runs with **zero configuration** — no
 `.env` needed:
@@ -209,7 +211,10 @@ logs api`). The installer-generated root `.env` overrides these defaults.
 Local endpoints once up: API docs at `http://localhost:8000/docs`, Prometheus
 at `:9090` (localhost only), Grafana at `:3001`. Postgres and Qdrant are
 bound to `127.0.0.1` — only the API (`:8000`) and Grafana are reachable from
-the LAN.
+the LAN. Grafana runs on its own `monitoring` network with Prometheus and has
+no route to Postgres, Qdrant or the API. Without `.env.grafana` it starts
+with `admin`/`admin` and forces a new password on first sign-in, so sign in
+once right after the first start.
 
 ### 2. Desktop dashboard (operator's machine)
 

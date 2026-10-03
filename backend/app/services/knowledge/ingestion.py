@@ -70,8 +70,10 @@ async def _extract_embed_store(
 ) -> int:
     """Run the pipeline core; returns the number of chunks embedded."""
     embedder = get_embedder(collection.embedding_backend)
-    text = extract_text(filename, data)
-    chunks = chunk_text(text)
+    # parsing is CPU-bound too: off the event loop, so other clients keep being
+    # served and the ingestion timeout can fire while it runs (ADR-030)
+    text = await asyncio.to_thread(extract_text, filename, data)
+    chunks = await asyncio.to_thread(chunk_text, text)
     if not chunks:
         raise ValueError("no extractable text in document")
 

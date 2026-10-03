@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.deps import DbDep, Principal, PrincipalDep, require_roles
+from app.core.agenturl import InvalidAgentUrl, normalize_agent_url
 from app.core.config import get_settings
 from app.models import ApiKey
 from app.models.node import NodeStatus
@@ -167,7 +168,13 @@ async def install_model(
             detail=f"Node is {node.status.value}; the agent must be online to install a model",
         )
 
-    base = node.agent_url.rstrip("/")
+    try:
+        base = normalize_agent_url(node.agent_url)
+    except InvalidAgentUrl as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Node's registered agent_url is not a valid origin; re-register the agent",
+        ) from exc
     headers = {AGENT_TOKEN_HEADER: node.agent_token}
     try:
         async with httpx.AsyncClient(timeout=MODEL_PULL_TIMEOUT_SECONDS) as client:
@@ -204,7 +211,7 @@ async def install_model(
     await audit(
         db,
         action="node.model.install",
-        actor_user_id=principal.id if principal.type == "user" else None,
+        **principal.audit_actor(),
         resource_type="node",
         resource_id=str(node.id),
         detail={"model": body.model},
@@ -226,9 +233,8 @@ async def patch_node(
     node = await node_service.get_node(db, node_id)
     if node is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
-    actor_user_id = principal.id if principal.type == "user" else None
     node = await node_service.patch_node(
-        db, node, patch, actor_user_id=actor_user_id, ip_address=_client_ip(request)
+        db, node, patch, **principal.audit_actor(), ip_address=_client_ip(request)
     )
     return NodeOut.model_validate(node)
 
@@ -245,7 +251,6 @@ async def delete_node(
     node = await node_service.get_node(db, node_id)
     if node is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
-    actor_user_id = principal.id if principal.type == "user" else None
     await node_service.delete_node(
-        db, node, actor_user_id=actor_user_id, ip_address=_client_ip(request)
+        db, node, **principal.audit_actor(), ip_address=_client_ip(request)
     )

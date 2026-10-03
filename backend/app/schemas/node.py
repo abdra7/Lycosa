@@ -2,8 +2,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from app.core.agenturl import normalize_agent_url
 from app.models.node import NodeRole, NodeStatus
 
 
@@ -43,6 +44,11 @@ class NodeRegisterRequest(BaseModel):
     # exec API contact info (sent by the Local Agent; ADR-011)
     agent_url: str | None = Field(default=None, max_length=255)
     agent_token: str | None = Field(default=None, min_length=16, max_length=128)
+
+    @field_validator("agent_url")
+    @classmethod
+    def _bare_origin(cls, value: str | None) -> str | None:
+        return None if value is None else normalize_agent_url(value)
 
 
 class GpuMetrics(BaseModel):

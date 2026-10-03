@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.agenturl import normalize_agent_url
 from app.core.config import get_settings
 from app.core.events import get_event_bus
 from app.core.logging import task_id_var
@@ -66,7 +67,7 @@ async def _dispatch(node: Node, model: str, prompt: str, options: dict[str, Any]
     timeout = get_settings().task_dispatch_timeout_seconds
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
-            f"{node.agent_url.rstrip('/')}/execute",
+            f"{normalize_agent_url(node.agent_url)}/execute",
             json={"model": model, "prompt": prompt, "options": options},
             headers={AGENT_TOKEN_HEADER: node.agent_token},
         )
@@ -84,7 +85,7 @@ async def _dispatch_cloud(node: Node, body: TaskCreate, prompt: str) -> dict[str
             timeout=get_settings().task_dispatch_timeout_seconds, follow_redirects=False
         ) as client:
             response = await client.post(
-                f"{node.agent_url.rstrip('/')}/execute",
+                f"{normalize_agent_url(node.agent_url)}/execute",
                 json={
                     "provider": body.provider,
                     "model": body.model,

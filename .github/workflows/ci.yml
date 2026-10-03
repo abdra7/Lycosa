@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# CI only reads the repository (ADR-030)
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend lint + test

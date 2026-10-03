@@ -10,7 +10,9 @@ bucket — but honoring X-Forwarded-For unconditionally re-opens the F-2 bypass
 - Peer trusted: the RIGHTMOST X-Forwarded-For entry that is not itself a
   trusted proxy. A conforming proxy appends the real client last, so
   attacker-prepended entries are never reached; trusted intermediate hops in
-  a proxy chain are skipped.
+  a proxy chain are skipped. Repeated X-Forwarded-For field lines are joined
+  in order first (RFC 9110 list semantics): a proxy that appends its own line
+  instead of merging must still win over the line the client sent (ADR-030).
 """
 
 import logging
@@ -52,7 +54,7 @@ def client_ip(request: Request) -> str | None:
     networks = _trusted_networks(raw)
     if not _is_trusted(peer, networks):
         return peer
-    forwarded = request.headers.get("X-Forwarded-For", "")
+    forwarded = ",".join(request.headers.getlist("X-Forwarded-For"))
     hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
     for hop in reversed(hops):
         if not _is_trusted(hop, networks):

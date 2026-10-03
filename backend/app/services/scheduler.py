@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.agenturl import is_valid_agent_url
 from app.core.config import get_settings
 from app.models import Node, NodeStatus
 from app.models.task import TaskType
@@ -72,6 +73,8 @@ async def rank_candidates(
     for node in online:
         if node.id in exclude:
             continue
+        if not is_valid_agent_url(node.agent_url):
+            continue  # rows stored before ADR-030 validation
         role = _effective_role(node)
         if role not in roles:
             continue
