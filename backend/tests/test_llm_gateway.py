@@ -206,6 +206,21 @@ async def test_all_entries_failing_raises_the_last_error(db_session, ctx):
 
 
 @respx.mock
+async def test_malformed_provider_json_falls_back_instead_of_crashing(db_session, ctx):
+    broken = await make_account(db_session, "openai")
+    backup = await make_account(db_session, "anthropic")
+    respx.post(OPENAI).mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": "not-an-object"}]})
+    )
+    respx.post(ANTHROPIC).mock(return_value=httpx.Response(200, json=anthropic_message()))
+    result = await gateway.generate(
+        db_session, ctx, request(), [routing.Target(broken, "a"), routing.Target(backup, "b")]
+    )
+    assert result.fallback_index == 1
+    assert result.skipped[0]["error"] == "provider_malformed_response"
+
+
+@respx.mock
 async def test_known_unsupported_capability_skips_to_a_capable_model(db_session, ctx):
     blind = await make_account(db_session, "openrouter")
     able = await make_account(db_session, "openai")

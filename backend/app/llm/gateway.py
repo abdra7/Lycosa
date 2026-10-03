@@ -25,7 +25,7 @@ from app.core.logging import request_id_var
 from app.core.metrics import LLM_FALLBACKS
 from app.llm import catalog, discovery, usage
 from app.llm.accounts import Actor, connection_for
-from app.llm.errors import LLMError, LLMTimeoutError, NoRouteError
+from app.llm.errors import LLMError, LLMTimeoutError, MalformedResponseError, NoRouteError
 from app.llm.routing import Target
 from app.llm.types import (
     LLMRequest,
@@ -39,6 +39,10 @@ logger = logging.getLogger("lycosa.llm")
 
 MAX_BACKOFF_SECONDS = 20.0
 T = TypeVar("T")
+
+# Provider JSON that does not have the documented shape surfaces in adapter
+# code as one of these; it is a provider fault, normalized like any other.
+_SHAPE_ERRORS = (KeyError, IndexError, TypeError, AttributeError, ValueError)
 
 # seam for tests: retries must not actually wait there
 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
@@ -107,6 +111,8 @@ async def with_retries(
             error: LLMError = LLMTimeoutError()
         except LLMError as exc:
             error = exc
+        except _SHAPE_ERRORS:
+            error = MalformedResponseError()
         error.attempts = attempt  # type: ignore[attr-defined]
         if not error.retryable or attempt > max_retries:
             raise error
@@ -114,6 +120,14 @@ async def with_retries(
         if budget is not None and delay >= budget.remaining():
             raise error  # waiting would exhaust the budget: give up on this entry
         await sleep(delay)
+
+
+async def _guarded(events: AsyncIterator[StreamEvent]) -> AsyncIterator[StreamEvent]:
+    try:
+        async for event in events:
+            yield event
+    except _SHAPE_ERRORS:
+        raise MalformedResponseError() from None
 
 
 def _redact_text(text: str | None, secret: str | None) -> str | None:
@@ -322,7 +336,7 @@ async def stream(
             emitted = False
             final_usage: Usage | None = None
             try:
-                async for event in adapter.stream(conn, call_request):
+                async for event in _guarded(adapter.stream(conn, call_request)):
                     if not emitted:
                         emitted = True
                         yield StreamEvent(
