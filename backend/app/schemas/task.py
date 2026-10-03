@@ -2,10 +2,26 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.task import ExecutionStatus, TaskStatus, TaskType
 from app.services.provider_registry import validate_provider
+
+LLM_ROUTE_PATTERN = r"^(auto|default|coding|reasoning|vision|cheap|private|offline)$"
+
+
+def check_llm_target(model: Any) -> None:
+    """Shared by tasks and workflow task steps: the universal LLM layer is
+    selected with an account (+ model) or a routing purpose, never together
+    with a legacy `provider`."""
+    account, route = model.llm_account_id, model.route
+    if account is not None and route is not None:
+        raise ValueError("llm_account_id and route are mutually exclusive")
+    # the default provider is tolerated: stored workflow definitions carry it
+    if (account is not None or route is not None) and model.provider != "ollama":
+        raise ValueError("provider selects a legacy route; omit it with llm_account_id/route")
+    if account is not None and not model.model:
+        raise ValueError("model is required with llm_account_id")
 
 
 class TaskCreate(BaseModel):
@@ -26,6 +42,18 @@ class TaskCreate(BaseModel):
     allow_cpu_fallback: bool = False
     max_tokens: int = Field(default=4096, ge=1, le=16384)
     temperature: float = Field(default=0.2, ge=0, le=1)
+    # universal LLM layer (ADR-031): a provider account + model, or a purpose
+    llm_account_id: uuid.UUID | None = None
+    route: str | None = Field(default=None, pattern=LLM_ROUTE_PATTERN)
+
+    @model_validator(mode="after")
+    def _llm_target(self) -> "TaskCreate":
+        check_llm_target(self)
+        return self
+
+    @property
+    def uses_llm_layer(self) -> bool:
+        return self.llm_account_id is not None or self.route is not None
 
 
 class TaskExecutionOut(BaseModel):

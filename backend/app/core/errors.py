@@ -30,10 +30,11 @@ def error_response(
     message: str,
     details: list[dict[str, Any]] | None = None,
     headers: dict[str, str] | None = None,
+    code: str | None = None,
 ) -> JSONResponse:
     body: dict[str, Any] = {
         "error": {
-            "code": _STATUS_CODES.get(status_code, "error"),
+            "code": code or _STATUS_CODES.get(status_code, "error"),
             "message": message,
         }
     }
@@ -43,6 +44,16 @@ def error_response(
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    from app.llm.errors import LLMError
+
+    @app.exception_handler(LLMError)
+    async def llm_exception_handler(request: Request, exc: LLMError) -> JSONResponse:
+        # fixed public message + stable code; provider bodies never reach here
+        headers = None
+        if exc.retry_after is not None and exc.http_status in (429, 503):
+            headers = {"Retry-After": str(int(exc.retry_after))}
+        return error_response(exc.http_status, exc.public_message, headers=headers, code=exc.code)
+
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         return error_response(exc.status_code, str(exc.detail), headers=exc.headers)

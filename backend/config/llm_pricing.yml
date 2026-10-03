@@ -1,0 +1,19 @@
+# LLM pricing used for usage cost estimates (ADR-031).
+#
+# Lycosa ships NO prices: provider prices change and differ per account, so an
+# invented number would be worse than none. Leave a model out and its usage is
+# recorded with estimated_cost = null. Providers that report the actual cost of
+# a call (OpenRouter) are recorded with that figure instead (cost_source:
+# provider), whatever this file says.
+#
+# Prices are per one million tokens, in `currency`. Keys are provider:model
+# exactly as used in routing (e.g. "openai:<model-id>", "ollama:<tag>").
+# Point LLM_PRICING_FILE at another file to keep prices outside the image.
+#
+# Example (illustrative values, not real prices):
+#   models:
+#     "provider:model-id":
+#       input_per_mtok: 1.00
+#       output_per_mtok: 2.00
+currency: USD
+models: {}

@@ -6,14 +6,18 @@ strong values once and persist them under the data dir, so restarts — and
 the seed script vs the API process — agree on the same secrets.
 """
 
+import base64
 import json
 import logging
+import os
 import secrets
+import time
 from pathlib import Path
 
 logger = logging.getLogger("lycosa.bootstrap")
 
 RUNTIME_SECRETS_FILENAME = "runtime-secrets.json"
+CREDENTIAL_KEY_FILENAME = "credential-encryption.key"
 
 # every placeholder shipped in .env.example, config.py defaults, or docs
 PLACEHOLDER_SECRETS = frozenset(
@@ -66,3 +70,39 @@ def ensure_runtime_secrets(data_dir: str | Path, *, need_jwt: bool, need_admin: 
             pass
         logger.info("generated first-run secret(s), persisted to %s", path)
     return data
+
+
+def _valid_key(value: str) -> bool:
+    try:
+        return len(base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))) == 32
+    except ValueError:
+        return False
+
+
+def ensure_credential_key(data_dir: str | Path) -> str:
+    """The LLM credential encryption key (ADR-031), generated on first use.
+
+    Created with O_EXCL so that concurrent uvicorn workers converge on the
+    first writer's key instead of each persisting their own; a worker that
+    loses the race waits for the winner's content. Losing this file makes the
+    stored credentials undecryptable: back up the data directory with the
+    database.
+    """
+    path = Path(data_dir) / CREDENTIAL_KEY_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        for _ in range(100):
+            value = path.read_text(encoding="ascii").strip()
+            if _valid_key(value):
+                return value
+            time.sleep(0.05)  # another worker is still writing it
+        raise RuntimeError(f"{path} does not hold a valid credential key") from None
+    value = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii")
+    with os.fdopen(fd, "w", encoding="ascii") as handle:
+        handle.write(value + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    logger.info("generated the LLM credential encryption key at %s", path)
+    return value

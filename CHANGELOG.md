@@ -6,6 +6,60 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Sprint 13: a universal, provider-independent LLM layer with user-owned provider
+accounts (ADR-031). Additive: legacy provider routes, task and workflow
+contracts, and stored data are unchanged.
+
+### Added
+
+- **Universal LLM layer** (`backend/app/llm`) — normalized requests, responses,
+  streaming events, tool calls, structured output, vision and reasoning over
+  plain HTTP adapters for OpenAI, Anthropic, Gemini, DeepSeek, Qwen, xAI,
+  Mistral, OpenRouter, Ollama, LM Studio, vLLM and custom OpenAI-compatible
+  endpoints. Each adapter implements generate, stream, model listing and a real
+  health check; capabilities are reported as supported, unsupported or unknown,
+  never guessed. No provider SDKs were added.
+- **Provider accounts** — personal accounts (owner-only use) and shared
+  deployment accounts (admin-managed), several per provider; real connection
+  tests that record API access; per-account and aggregated model discovery;
+  OpenRouter's official OAuth PKCE sign-in.
+- **Routing, fallback and retries** — per-purpose routes (default, coding,
+  reasoning, vision, cheap, private, offline) with a primary model and up to
+  four fallbacks; exponential backoff honoring `Retry-After`; per-attempt and
+  overall time limits; streams fall back only before their first event.
+- **Usage and cost** — an `llm_usage` row per attempt (tokens, latency,
+  attempts, fallback position; no content); provider-reported cost (OpenRouter)
+  or configured prices in `backend/config/llm_pricing.yml` (shipped empty);
+  Prometheus metrics `lycosa_llm_*`.
+- **API** `/api/v1/llm`: providers, accounts, test, health, models, routing,
+  chat (JSON or server-sent events), test prompt, usage, OpenRouter sign-in.
+  Tasks and workflow task steps accept `route` (incl. `auto`) or
+  `llm_account_id` + `model`.
+- **Desktop app** — a Providers screen to connect, test, browse models, set the
+  default model and edit fallback routes; an LLM route picker on Tasks.
+- Migration `0008` (four new tables). New optional settings:
+  `CREDENTIAL_ENCRYPTION_KEY`, `LLM_CREDENTIAL_STORE`, `LLM_LOCAL_NETWORKS`,
+  `LLM_USER_ENDPOINT_NETWORKS`, `LLM_REQUEST_TIMEOUT_SECONDS`,
+  `LLM_TOTAL_TIMEOUT_SECONDS`, `LLM_MAX_RETRIES`, `LLM_MODELS_CACHE_SECONDS`,
+  `LLM_PRICING_FILE`.
+
+### Security
+
+- Account credentials are AES-256-GCM encrypted with the account id as
+  associated data; the key never touches the database, and a malformed key
+  fails startup. This works in the Docker image and with `WORKERS>1`, where
+  the legacy keyring/session store could not hold keys.
+- Provider calls go through a guarded transport that checks every resolved
+  address at connect time (cloud metadata and link-local always refused, DNS
+  rebinding defeated), follows no redirects, ignores proxy variables and caps
+  response sizes. Upstream errors are normalized to fixed messages and never
+  reported as the caller's 401/403.
+
+### Changed
+
+- CI type-checks `backend/app/llm` with mypy. `cryptography` is now a declared
+  backend dependency (it was already installed through `keyring`).
+
 ## [0.4.0] - 2026-07-12
 
 Knowledge-plane format fixes and a multi-worker controller: `.docx` and

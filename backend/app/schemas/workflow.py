@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.models.task import TaskType
 from app.models.workflow import RunStatus, StepRunStatus
+from app.schemas.task import LLM_ROUTE_PATTERN, check_llm_target
 from app.services.provider_registry import validate_provider
 
 _STEP_ID = r"^[a-z0-9][a-z0-9_-]*$"
@@ -48,6 +49,13 @@ class TaskStepDef(_BaseStep):
     knowledge_query: str | None = None
     knowledge_collection: str | None = None
     retries: int = Field(default=0, ge=0, le=5)
+    llm_account_id: uuid.UUID | None = None
+    route: str | None = Field(default=None, pattern=LLM_ROUTE_PATTERN)
+
+    @model_validator(mode="after")
+    def _llm_target(self) -> "TaskStepDef":
+        check_llm_target(self)
+        return self
 
     def template_refs(self) -> set[str]:
         text = self.prompt + " " + (self.knowledge_query or "")

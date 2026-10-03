@@ -28,6 +28,9 @@ dependencies = [
     "python-multipart>=0.0.9",
     "redis>=5.0",
     "keyring>=25",
+    # AES-GCM for LLM account credentials (ADR-031); already a transitive
+    # dependency of keyring on Linux, now declared directly
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +45,8 @@ dev = [
     "ruff>=0.5",
     "aiosqlite>=0.20",
     "fakeredis>=2.23",
+    "mypy>=1.10",
+    "types-PyYAML>=6.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -61,6 +66,22 @@ select = [
     "B",   # flake8-bugbear
     "ASYNC", # flake8-async
 ]
+
+# Type checking gates the universal LLM layer (ADR-031); the rest of the
+# codebase predates it and is not yet annotated to mypy's standard.
+[tool.mypy]
+python_version = "3.11"
+files = ["app/llm"]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+follow_imports = "silent"
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["keyring.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
