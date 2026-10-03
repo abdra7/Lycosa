@@ -143,6 +143,12 @@ class RoutingPolicyOut(BaseModel):
     updated_at: datetime
 
 
+class RoutingOverviewOut(BaseModel):
+    purposes: list[str]
+    personal: list[RoutingPolicyOut]
+    deployment: list[RoutingPolicyOut]
+
+
 class LLMTarget(BaseModel):
     """Either an explicit account+model, or a routing purpose."""
 

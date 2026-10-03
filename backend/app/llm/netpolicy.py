@@ -141,13 +141,13 @@ async def system_resolver(host: str, port: int) -> list[str]:
 
 
 async def resolve_checked(
-    host: str, port: int, policy: AddressPolicy, resolver: Resolver = system_resolver
+    host: str, port: int, policy: AddressPolicy, resolver: Resolver | None = None
 ) -> list[str]:
     try:
         addresses = [str(_normalize(host))]
     except ValueError:
         try:
-            addresses = await resolver(host, port)
+            addresses = await (resolver or system_resolver)(host, port)
         except OSError:
             raise ProviderUnavailableError("Provider host could not be resolved") from None
     if not addresses or not all(policy.permits(a) for a in addresses):
@@ -158,7 +158,7 @@ async def resolve_checked(
 class GuardedBackend(httpcore.AsyncNetworkBackend):
     """httpcore network backend that only opens sockets to vetted addresses."""
 
-    def __init__(self, policy: AddressPolicy, resolver: Resolver = system_resolver) -> None:
+    def __init__(self, policy: AddressPolicy, resolver: Resolver | None = None) -> None:
         self._policy = policy
         self._resolver = resolver
         self._inner = httpcore.AnyIOBackend()

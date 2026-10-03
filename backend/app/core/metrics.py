@@ -34,6 +34,26 @@ WORKFLOW_STEPS = Counter(
     "lycosa_workflow_steps_total", "Workflow steps by kind and status", ["kind", "status"]
 )
 
+# Universal LLM layer (ADR-031). Provider-level labels only: per-model labels
+# would be unbounded (aggregators list hundreds of models).
+LLM_REQUESTS = Counter(
+    "lycosa_llm_requests_total",
+    "LLM provider calls by provider and outcome",
+    ["provider", "status"],
+)
+LLM_LATENCY = Histogram(
+    "lycosa_llm_request_duration_seconds",
+    "LLM provider call latency including retries",
+    ["provider"],
+    buckets=(0.25, 0.5, 1, 2, 5, 10, 20, 40, 80, 160),
+)
+LLM_TOKENS = Counter(
+    "lycosa_llm_tokens_total", "LLM tokens by provider and kind", ["provider", "kind"]
+)
+LLM_FALLBACKS = Counter(
+    "lycosa_llm_fallbacks_total", "Route fallbacks away from a failing provider", ["from_provider"]
+)
+
 NODES = Gauge("lycosa_nodes", "Nodes by status", ["status"])
 NODE_CPU = Gauge("lycosa_node_cpu_percent", "Node CPU utilization", ["node"])
 NODE_RAM = Gauge("lycosa_node_ram_percent", "Node RAM utilization", ["node"])

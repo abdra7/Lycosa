@@ -49,9 +49,7 @@ class Connection:
 
 def build_client(conn: Connection) -> httpx.AsyncClient:
     transport = httpx.AsyncHTTPTransport()
-    backend = (
-        GuardedBackend(conn.policy, conn.resolver) if conn.resolver else GuardedBackend(conn.policy)
-    )
+    backend = GuardedBackend(conn.policy, conn.resolver)
     # httpx exposes no network-backend option, so swap in a pool built with
     # the guarded backend (fails closed if httpx internals ever change).
     if not isinstance(getattr(transport, "_pool", None), httpcore.AsyncConnectionPool):

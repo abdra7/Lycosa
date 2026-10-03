@@ -285,6 +285,8 @@ async def _run_task(
         knowledge_query=(
             render(step.knowledge_query, run.input, run.context) if step.knowledge_query else None
         ),
+        llm_account_id=step.llm_account_id,
+        route=step.route,
     )
     task = await submit_task(db, body, user_id, api_key_id)
     if task.status == TaskStatus.SUCCEEDED:

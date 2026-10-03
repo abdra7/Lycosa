@@ -18,6 +18,7 @@ from app.core.config import get_settings
 from app.core.events import get_event_bus
 from app.core.logging import task_id_var
 from app.core.metrics import TASK_DURATION, TASK_FAILOVERS, TASKS_TOTAL
+from app.llm.task_bridge import complete_task as complete_llm_task
 from app.models import ExecutionStatus, Node, Task, TaskExecution, TaskStatus
 from app.models.task import TaskType
 from app.schemas.task import TaskCreate
@@ -130,6 +131,14 @@ async def submit_task(
             "knowledge_collection": body.knowledge_collection,
             "provider": body.provider,
             "requires_privacy": body.requires_privacy,
+            **(
+                {
+                    "llm_account_id": str(body.llm_account_id) if body.llm_account_id else None,
+                    "route": body.route,
+                }
+                if body.uses_llm_layer
+                else {}
+            ),
         },
         created_by_user_id=created_by_user_id,
         created_by_api_key_id=created_by_api_key_id,
@@ -176,7 +185,7 @@ async def submit_task(
                 min_score=get_settings().retrieval_min_score,
             )
         except Exception:
-            if body.provider != "ollama":
+            if body.provider != "ollama" or body.uses_llm_layer:
                 return await _finish(
                     db,
                     task,
@@ -207,6 +216,32 @@ async def submit_task(
                         "grounded": False,
                     },
                 )
+
+    if body.uses_llm_layer:
+        # universal LLM layer (ADR-031): provider, account, retries and
+        # fallback are resolved below this call, never here
+        task.status = TaskStatus.RUNNING
+        task.started_at = datetime.now(UTC)
+        await db.commit()
+        outcome = await complete_llm_task(
+            db,
+            body,
+            prompt,
+            task_id=task.id,
+            task_type=task_type,
+            user_id=created_by_user_id,
+            api_key_id=created_by_api_key_id,
+        )
+        if "error" in outcome:
+            return await _finish(db, task, TaskStatus.FAILED, error=outcome["error"])
+        await audit(
+            db,
+            action="task.routing",
+            resource_type="task",
+            resource_id=str(task.id),
+            detail=outcome["routing"],
+        )
+        return await _finish(db, task, TaskStatus.SUCCEEDED, result=outcome)
 
     if body.provider not in {"ollama", "anthropic"}:
         task.status = TaskStatus.RUNNING

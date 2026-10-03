@@ -200,6 +200,7 @@ class LLMResponse(BaseModel):
 
 
 class StreamEventType(enum.StrEnum):
+    START = "start"  # gateway: which provider/account/model is answering
     TEXT = "text"
     REASONING = "reasoning"
     TOOL_CALL_DELTA = "tool_call_delta"  # partial arguments as they arrive

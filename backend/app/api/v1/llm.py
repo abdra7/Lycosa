@@ -3,14 +3,21 @@ routing, chat and usage. The legacy /providers and /admin/providers routes
 are unchanged."""
 
 import asyncio
+import json
+import logging
 import uuid
-from typing import Annotated
+from collections.abc import AsyncIterator
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DbDep, Principal, require_roles
-from app.llm import catalog, discovery, oauth, vault
+from app.db.session import get_runtime_sessionmaker
+from app.llm import catalog, discovery, gateway, oauth, routing, vault
 from app.llm.accounts import (
     AccountError,
     Actor,
@@ -28,7 +35,8 @@ from app.llm.accounts import (
 from app.llm.adapters.base import health_from_error
 from app.llm.errors import LLMError
 from app.llm.spec import AuthMethod
-from app.models.llm import LLMProviderAccount
+from app.llm.types import LLMRequest, Message
+from app.models.llm import LLMProviderAccount, LLMRoutingPolicy, LLMUsage
 from app.models.user import ROLE_ADMIN, ROLE_OPERATOR
 from app.schemas.llm import (
     AccountCreate,
@@ -36,15 +44,26 @@ from app.schemas.llm import (
     AccountProbeOut,
     AccountProbeRequest,
     AccountUpdate,
+    ChatRequest,
+    ChatResponse,
     HealthOut,
+    LLMTarget,
     ModelListOut,
     ModelOut,
     OAuthCompleteIn,
     OAuthStartIn,
     OAuthStartOut,
+    PromptCheckRequest,
     ProviderOut,
+    RouteEntry,
+    RoutingOverviewOut,
+    RoutingPolicyIn,
+    RoutingPolicyOut,
+    UsageOut,
     account_out,
 )
+
+logger = logging.getLogger("lycosa.llm")
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
@@ -302,7 +321,7 @@ async def openrouter_oauth_start(body: OAuthStartIn, principal: OperatorDep) -> 
     try:
         url, flow = oauth.start(principal.id, body.callback_url)
     except oauth.OAuthFlowError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
+        raise HTTPException(422, str(exc)) from None
     return OAuthStartOut(authorization_url=url, flow=flow, expires_in=oauth.FLOW_TTL_SECONDS)
 
 
@@ -323,7 +342,7 @@ async def openrouter_oauth_complete(
     try:
         key = await oauth.exchange(body.flow, body.code, principal.id)
     except oauth.OAuthFlowError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
+        raise HTTPException(422, str(exc)) from None
     try:
         account = await create_account(
             db,
@@ -341,3 +360,201 @@ async def openrouter_oauth_complete(
     await db.commit()
     await db.refresh(account)
     return await _out(db, account, actor)
+
+
+# --- routing (default model, purposes, fallback chains) ----------------------------
+
+
+def _policy_out(policy: LLMRoutingPolicy) -> RoutingPolicyOut:
+    return RoutingPolicyOut(
+        purpose=policy.purpose,
+        scope="deployment" if policy.owner_user_id is None else "personal",
+        chain=[RouteEntry(**entry) for entry in policy.chain],
+        updated_at=policy.updated_at,
+    )
+
+
+@router.get("/routing", response_model=RoutingOverviewOut)
+async def get_routing(principal: OperatorDep, db: DbDep) -> RoutingOverviewOut:
+    """Your routes and the deployment routes. The 'default' purpose is the
+    default provider/account/model; later entries are its fallbacks."""
+    actor = _actor(principal)
+    personal = await routing.policies_for(db, actor.user_id) if actor.user_id else []
+    return RoutingOverviewOut(
+        purposes=list(routing.PURPOSES),
+        personal=[_policy_out(p) for p in personal],
+        deployment=[_policy_out(p) for p in await routing.policies_for(db, None)],
+    )
+
+
+@router.put("/routing/{purpose}", response_model=RoutingPolicyOut)
+async def put_routing(
+    purpose: str, body: RoutingPolicyIn, principal: OperatorDep, db: DbDep
+) -> RoutingPolicyOut:
+    try:
+        policy = await routing.set_policy(
+            db,
+            _actor(principal),
+            scope=body.scope,
+            purpose=purpose,
+            chain=[(entry.account_id, entry.model) for entry in body.chain],
+        )
+    except AccountError as exc:
+        raise _http(exc) from None
+    await db.commit()
+    await db.refresh(policy)
+    return _policy_out(policy)
+
+
+@router.delete("/routing/{purpose}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_routing(
+    purpose: str,
+    principal: OperatorDep,
+    db: DbDep,
+    scope: Literal["personal", "deployment"] = "personal",
+) -> None:
+    try:
+        found = await routing.delete_policy(db, _actor(principal), scope=scope, purpose=purpose)
+    except AccountError as exc:
+        raise _http(exc) from None
+    if not found:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such route")
+    await db.commit()
+
+
+# --- calling models ------------------------------------------------------------------
+
+
+async def _resolve_targets(
+    db: AsyncSession, actor: Actor, body: LLMTarget
+) -> tuple[list[routing.Target], str | None]:
+    if body.account_id is not None and body.model is not None:
+        try:
+            account = await require_account(db, actor, body.account_id, "use")
+        except AccountError as exc:
+            raise _http(exc) from None
+        return [routing.Target(account, body.model)], None
+    purpose = body.purpose or "default"
+    return await routing.resolve(db, actor, purpose), purpose  # NoRouteError -> 409
+
+
+def _chat_response(result: gateway.GatewayResult) -> ChatResponse:
+    response = result.response
+    return ChatResponse(
+        content=response.content,
+        reasoning=response.reasoning,
+        tool_calls=response.tool_calls,
+        finish_reason=response.finish_reason,
+        provider=result.target.account.provider,
+        model=result.target.model,
+        account_id=result.target.account.id,
+        usage=response.usage,
+        latency_ms=result.latency_ms,
+        attempts=result.attempts,
+        fallback_index=result.fallback_index,
+        estimated_cost=result.estimated_cost,
+        cost_source=result.cost_source,
+    )
+
+
+_CHAT_FIELDS = {
+    "messages",
+    "system",
+    "temperature",
+    "max_tokens",
+    "stop",
+    "tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "response_format",
+    "reasoning_effort",
+}
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(body: ChatRequest, principal: OperatorDep, db: DbDep):
+    """Provider-independent chat. Target an account+model or a routing
+    purpose; set `stream` for server-sent events of normalized chunks.
+    Tool calls are returned to the caller; Lycosa does not execute tools."""
+    actor = _actor(principal)
+    targets, purpose = await _resolve_targets(db, actor, body)
+    try:
+        request = LLMRequest(
+            model=targets[0].model,
+            **{name: getattr(body, name) for name in _CHAT_FIELDS},
+        )
+    except ValidationError as exc:
+        raise HTTPException(422, exc.errors()[0]["msg"]) from None
+    ctx = gateway.CallContext(actor=actor, purpose=purpose)
+    if not body.stream:
+        try:
+            result = await gateway.generate(db, ctx, request, targets)
+        finally:
+            await db.commit()  # usage rows, success or failure
+        return _chat_response(result)
+    return StreamingResponse(
+        _sse(ctx, request, targets),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+def _sse_frame(event: str, data: str) -> str:
+    return f"event: {event}\ndata: {data}\n\n"
+
+
+async def _sse(
+    ctx: gateway.CallContext, request: LLMRequest, targets: list[routing.Target]
+) -> AsyncIterator[str]:
+    # own session: the request-scoped one may close before the body is sent
+    async with get_runtime_sessionmaker()() as session:
+        try:
+            async for event in gateway.stream(session, ctx, request, targets):
+                yield _sse_frame(event.type.value, event.model_dump_json(exclude_none=True))
+            yield _sse_frame("done", "{}")
+        except LLMError as exc:
+            yield _sse_frame("error", json.dumps({"code": exc.code, "message": exc.public_message}))
+        finally:
+            try:
+                await session.commit()
+            except Exception:  # noqa: BLE001 — never mask the stream outcome
+                logger.exception("could not persist LLM stream usage")
+
+
+@router.post("/test", response_model=ChatResponse)
+async def test_prompt(body: PromptCheckRequest, principal: OperatorDep, db: DbDep) -> ChatResponse:
+    """Send one prompt through an account or route and return the normalized
+    answer, with the provider, fallback position, usage and cost."""
+    actor = _actor(principal)
+    targets, purpose = await _resolve_targets(db, actor, body)
+    request = LLMRequest(
+        model=targets[0].model,
+        messages=[Message(role="user", content=body.prompt)],
+        max_tokens=body.max_tokens,
+    )
+    try:
+        result = await gateway.generate(
+            db, gateway.CallContext(actor=actor, purpose=purpose), request, targets
+        )
+    finally:
+        await db.commit()
+    return _chat_response(result)
+
+
+@router.get("/usage", response_model=list[UsageOut])
+async def list_usage(
+    principal: OperatorDep,
+    db: DbDep,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    all_users: bool = False,
+) -> list[LLMUsage]:
+    """Your recent LLM usage (administrators: everyone's, with all_users)."""
+    actor = _actor(principal)
+    query = select(LLMUsage).order_by(LLMUsage.created_at.desc()).limit(limit)
+    if not (all_users and actor.is_admin):
+        query = query.where(
+            LLMUsage.user_id == actor.user_id
+            if actor.user_id
+            else LLMUsage.api_key_id == actor.api_key_id
+        )
+    return list((await db.execute(query)).scalars())
