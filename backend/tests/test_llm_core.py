@@ -306,3 +306,32 @@ def test_tool_call_accumulator_assembles_fragments_by_index():
     broken.add(0, "c", "f", '{"x":')
     with pytest.raises(errors.ToolCallingError):
         broken.complete()
+
+
+# --- found in live QA against the real providers (2026-10-04) -------------------
+
+
+def test_gemini_invalid_key_400_is_an_authentication_error():
+    # verbatim shape of Google's response to a bad key
+    body = {
+        "error": {
+            "code": 400,
+            "message": "API key not valid. Please pass a valid API key.",
+            "status": "INVALID_ARGUMENT",
+            "details": [{"reason": "API_KEY_INVALID", "domain": "googleapis.com"}],
+        }
+    }
+    assert type(errors.from_http(400, body, provider="gemini")) is errors.AuthenticationError
+
+
+def test_xai_invalid_key_400_is_an_authentication_error():
+    body = {
+        "code": "invalid-argument",
+        "error": "Incorrect API key provided. You can obtain an API key from https://console.x.ai.",
+    }
+    assert type(errors.from_http(400, body, provider="xai")) is errors.AuthenticationError
+
+
+def test_ordinary_400s_stay_invalid_request():
+    body = {"error": {"message": "temperature: must be between 0 and 2"}}
+    assert type(errors.from_http(400, body, provider="p")) is errors.InvalidRequestError

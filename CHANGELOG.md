@@ -55,6 +55,15 @@ contracts, and stored data are unchanged.
   response sizes. Upstream errors are normalized to fixed messages and never
   reported as the caller's 401/403.
 
+### Fixed
+
+- Found in live QA against the real providers: Gemini and xAI report an
+  invalid key as HTTP 400 ("API key not valid" / "Incorrect API key
+  provided"); these now count as authentication failures, not bad
+  parameters. OpenRouter's model list is public, so its health check now
+  validates the key on the authenticated `GET /key` first; a fake key no
+  longer showed as ready.
+
 ### Changed
 
 - CI type-checks `backend/app/llm` with mypy. `cryptography` is now a declared

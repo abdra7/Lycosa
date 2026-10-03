@@ -6,6 +6,7 @@ subclasses; nothing provider-specific leaks out of this module.
 """
 
 import json
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -16,12 +17,14 @@ from app.llm.adapters.base import (
     as_count,
     as_dict,
     as_positive,
+    health_from_error,
     parse_arguments,
 )
-from app.llm.errors import MalformedResponseError, from_stream_payload
+from app.llm.errors import LLMError, MalformedResponseError, from_stream_payload
 from app.llm.http import Connection, iter_sse, loads_event, request_json, stream_lines
 from app.llm.types import (
     FinishReason,
+    HealthStatus,
     ImagePart,
     LLMCapabilities,
     LLMRequest,
@@ -371,6 +374,23 @@ class MistralAdapter(OpenAICompatibleAdapter):
 class OpenRouterAdapter(OpenAICompatibleAdapter):
     send_stream_usage = True
     reasoning_effort_param = True
+
+    async def health_check(self, conn: Connection) -> HealthStatus:
+        """OpenRouter's /models is public (a bad key still gets 200, verified
+        live 2026-10-04), so first validate the key on the authenticated
+        GET /key, then count models."""
+        started = time.monotonic()
+        try:
+            self.require_credential(conn)
+            await request_json(conn, "GET", "/key", headers=self.headers(conn))
+            models = await self.list_models(conn)
+        except LLMError as exc:
+            return health_from_error(exc)
+        return HealthStatus(
+            status="ready",
+            latency_ms=int((time.monotonic() - started) * 1000),
+            models_available=len(models),
+        )
 
     def parse_usage(self, raw: Any) -> Usage:
         usage = super().parse_usage(raw)
