@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-providers = ["litellm==1.101.0"]
+providers = ["litellm==1.103.2"]
 embeddings = ["fastembed>=0.3"]
 # OCR for scanned/image-only PDFs; also needs the tesseract binary on the host
 ocr = ["pytesseract>=0.3.10", "pillow>=10"]
