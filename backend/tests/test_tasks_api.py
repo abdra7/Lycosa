@@ -195,3 +195,17 @@ async def test_list_tasks_with_status_filter(
     assert listed.status_code == 200
     assert len(listed.json()) == 1
     assert listed.json()[0]["status"] == "failed"
+
+
+async def test_whitespace_only_prompt_is_rejected_not_persisted(
+    client: AsyncClient, db_session: AsyncSession, users: dict
+) -> None:
+    # Sprint 14 QA: "   " passed min_length=1, so a task row was created,
+    # routed and failed instead of the request being refused
+    token = await login(client, ADMIN_EMAIL)
+    for prompt in ("   ", "\n\t "):
+        response = await client.post(
+            "/api/v1/tasks", json={"prompt": prompt}, headers=bearer(token)
+        )
+        assert response.status_code == 422, response.text
+    assert (await db_session.execute(select(Task))).first() is None

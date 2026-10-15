@@ -242,3 +242,16 @@ async def test_parallel_substeps_both_recorded(
     outputs = {sid: s["output"] for sid, s in run["context"]["steps"].items()}
     assert set(outputs) >= {"alpha", "beta", "fan", "join"}
     assert sorted([outputs["alpha"], outputs["beta"]]) == ["alpha done", "beta done"]
+
+
+async def test_whitespace_only_run_input_is_rejected(client: AsyncClient, users: dict) -> None:
+    token = await login(client, ADMIN_EMAIL)
+    workflow = await create_workflow(
+        client, token, "blank-input-wf", [{"id": "only", "kind": "task", "prompt": "{{input}}"}]
+    )
+    response = await client.post(
+        f"/api/v1/workflows/{workflow['id']}/run",
+        json={"input": "  \n "},
+        headers=bearer(token),
+    )
+    assert response.status_code == 422, response.text

@@ -1,13 +1,31 @@
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.models.task import ExecutionStatus, TaskStatus, TaskType
 from app.services.provider_registry import validate_provider
 
 LLM_ROUTE_PATTERN = r"^(auto|default|coding|reasoning|vision|cheap|private|offline)$"
+
+
+def _not_blank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("must contain text, not only whitespace")
+    return value
+
+
+# prompts and run inputs: whitespace alone would create a task (or run) that
+# can only fail, so it is refused up front
+NonBlankText = Annotated[str, Field(min_length=1), AfterValidator(_not_blank)]
 
 
 def check_llm_target(model: Any) -> None:
@@ -26,7 +44,7 @@ def check_llm_target(model: Any) -> None:
 
 class TaskCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    prompt: str = Field(min_length=1)
+    prompt: NonBlankText
     type: TaskType | None = None  # omit to let the classifier decide
     model: str | None = None  # omit to use the chosen node's first available model
     options: dict[str, Any] = {}
