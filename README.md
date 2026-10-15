@@ -89,9 +89,10 @@ workflow steps opt in with `route` (`auto`, `default`, `coding`, `reasoning`,
 REST API is under `/api/v1/llm`.
 
 - **Consumer subscriptions are not API access.** ChatGPT Plus/Pro, Claude
-  Pro/Max and Gemini app plans do not provide API keys, and Lycosa does not use
+  Pro/Max and Gemini app plans do not provide API keys, and Lycosa never runs
   their sign-in. OpenRouter's PKCE sign-in is the only OAuth flow offered,
-  because it is documented and yields a revocable API key.
+  because it is documented and yields a revocable API key. To use a Claude
+  plan, see *Claude subscription* below.
 - **Credentials** are AES-256-GCM encrypted in PostgreSQL with a key held in
   `CREDENTIAL_ENCRYPTION_KEY` or generated once in the controller's data volume
   (back it up with the database), or stored in the OS keyring with
@@ -108,6 +109,25 @@ REST API is under `/api/v1/llm`.
 
 `python backend/scripts/smoke_llm.py --execute --email <admin>` checks a running
 controller's accounts with real calls.
+
+### Claude subscription
+
+Use your own Claude Pro/Max plan inside Lycosa through a node that runs
+Claude Code:
+
+1. On that machine, install Claude Code and sign in with `claude auth login`
+   (Anthropic's own sign-in; Lycosa is not involved).
+2. Start its agent with `LYCOSA_CLAUDE_SUBSCRIPTION=true` and
+   `LYCOSA_CLAUDE_SUBSCRIPTION_OWNER=<your Lycosa email>`.
+3. In the desktop app, open **Providers → Claude subscription → Connect**,
+   pick the node and connect. Then use it from **Chat**, Tasks, workflows or
+   a personal route.
+
+Lycosa never sees your Claude credentials; the node runs the unmodified
+Claude Code and serves only the user named on it. The connection is personal
+and is never used for shared routes or private/offline work, because the
+model runs at Anthropic. Calls count toward your plan's usage limits.
+See ADR-032.
 
 ### Phantom Agents
 

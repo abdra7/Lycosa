@@ -10,7 +10,28 @@ Sprint 13: a universal, provider-independent LLM layer with user-owned provider
 accounts (ADR-031). Additive: legacy provider routes, task and workflow
 contracts, and stored data are unchanged.
 
+Sprint 14: use your own Claude plan through a node's Claude Code (ADR-032), a
+desktop Chat screen, and fixes from a live end-to-end QA run.
+
 ### Added
+
+- **Claude subscription** (ADR-032) — a node can run its owner's own,
+  unmodified Claude Code, signed in with their Claude plan (`claude auth
+  login`, Anthropic's own flow). Lycosa never signs in to Claude and never
+  holds a Claude credential. The agent runtime is off by default
+  (`LYCOSA_CLAUDE_SUBSCRIPTION=true` + `LYCOSA_CLAUDE_SUBSCRIPTION_OWNER`)
+  and serves only that Lycosa user; each call runs in safe mode with no
+  tools, MCP servers or saved session. The controller adds the
+  `claude_subscription` provider: personal accounts bound to a node
+  (migration `0009`), never shared, never a private/offline route, with live
+  node status at `GET /api/v1/llm/claude-subscription/nodes`.
+- **Chat** (desktop) — talk to any connected model or your default route;
+  answers stream in, with stop, new chat and a model picker. The Providers
+  screen gains a Claude connect flow (node status, plan usage, sign-in help)
+  and Tasks can target a specific connected account.
+- **Live desktop acceptance harness** (`dashboard/integration_test/`) —
+  drives the real Windows app against a throwaway controller, with
+  screenshots.
 
 - **Universal LLM layer** (`backend/app/llm`) — normalized requests, responses,
   streaming events, tool calls, structured output, vision and reasoning over
@@ -57,6 +78,20 @@ contracts, and stored data are unchanged.
 
 ### Fixed
 
+- Found in the Sprint 14 live QA run:
+  - `/metrics` showed only the worker that served each scrape when
+    `WORKERS>1`, so counters jumped and Prometheus saw resets. Metrics now
+    use prometheus_client's multiprocess mode (`PROMETHEUS_MULTIPROC_DIR`,
+    set in the image and emptied at launch) and are aggregated across
+    workers.
+  - A whitespace-only task prompt or workflow run input was accepted and
+    produced a task or run that could only fail; it is now refused with 422.
+  - Desktop: leaving Tasks while a task ran made the answer update a closed
+    screen (an error in release builds, an assertion in debug); the same
+    guard now covers dialogs that can be closed mid-request.
+  - Desktop: node detail lists the Claude runtime a node offers, and a node
+    without Ollama explains that instead of offering Install buttons that
+    could only fail.
 - Found in live QA against the real providers: Gemini and xAI report an
   invalid key as HTTP 400 ("API key not valid" / "Incorrect API key
   provided"); these now count as authentication failures, not bad
