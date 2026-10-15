@@ -133,10 +133,12 @@ class _ApiKeysCard extends ConsumerWidget {
   ) async {
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
+    // the screen may be gone when the call returns; the container is not
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await client.revokeApiKey(key.id);
-      ref.invalidate(apiKeysProvider);
-      ref.invalidate(auditLogsProvider);
+      container.invalidate(apiKeysProvider);
+      container.invalidate(auditLogsProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,

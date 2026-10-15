@@ -40,9 +40,11 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
+    // the screen may be gone when the call returns; the container is not
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await client.deleteCollection(id);
       if (_selectedId == id && mounted) {
@@ -64,7 +66,7 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
         ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } finally {
-      ref.invalidate(collectionsProvider);
+      container.invalidate(collectionsProvider);
     }
   }
 
@@ -172,6 +174,7 @@ class _CreateCollectionDialogState
   Future<void> _create() async {
     final client = ref.read(activeApiClientProvider);
     if (client == null || _name.text.trim().isEmpty) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await client.createCollection(
         _name.text.trim(),
@@ -179,10 +182,10 @@ class _CreateCollectionDialogState
             ? null
             : _description.text.trim(),
       );
-      ref.invalidate(collectionsProvider);
+      container.invalidate(collectionsProvider);
       if (mounted) Navigator.of(context).pop();
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) setState(() => _error = e.friendly);
     }
   }
 

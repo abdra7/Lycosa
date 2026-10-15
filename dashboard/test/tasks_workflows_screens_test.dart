@@ -194,4 +194,55 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('approval that returns after the bar is gone does not throw', (
+    tester,
+  ) async {
+    // Sprint 14 live QA: approving runs the next step before the reply, so
+    // the bar can be gone (run resumed, user went back) when it returns;
+    // ref.invalidate on the unmounted bar threw a StateError
+    final release = Completer<void>();
+    final controller = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/approve')) {
+        await release.future;
+        return http.Response(jsonEncode(runJson(status: 'succeeded')), 200);
+      }
+      if (path == '/api/v1/workflows/w1/runs/r1') {
+        return http.Response(jsonEncode(runJson()), 200);
+      }
+      if (path == '/api/v1/me') {
+        return http.Response(
+          jsonEncode({'type': 'user', 'id': 'u1', 'role': 'operator'}),
+          200,
+        );
+      }
+      return http.Response(jsonEncode([]), 200);
+    });
+    final showRun = ValueNotifier(true);
+    await tester.pumpWidget(
+      appWith(
+        controller,
+        home: Scaffold(
+          body: ValueListenableBuilder<bool>(
+            valueListenable: showRun,
+            builder: (_, show, _) => show
+                ? const RunScreen(
+                    workflowName: 'release',
+                    workflowId: 'w1',
+                    runId: 'r1',
+                  )
+                : const Text('elsewhere'),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Approve'));
+    await tester.pump();
+    showRun.value = false; // the user goes back while the step runs
+    await settle(tester);
+    release.complete();
+    await settle(tester);
+    expect(tester.takeException(), isNull);
+  });
 }

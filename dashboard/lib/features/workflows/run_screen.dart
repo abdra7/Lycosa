@@ -160,14 +160,14 @@ class _ApprovalBarState extends ConsumerState<_ApprovalBar> {
   Future<void> _resolve(bool approved) async {
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
+    // approving runs the next step before replying, so this bar may be gone
+    // (run resumed, user went back) by then; the container outlives it
+    final container = ProviderScope.containerOf(context, listen: false);
+    final runKey = widget.runKey;
     setState(() => _busy = true);
     try {
-      await client.approveRun(
-        widget.runKey.workflowId,
-        widget.runKey.runId,
-        approved,
-      );
-      ref.invalidate(runProvider(widget.runKey));
+      await client.approveRun(runKey.workflowId, runKey.runId, approved);
+      container.invalidate(runProvider(runKey));
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
