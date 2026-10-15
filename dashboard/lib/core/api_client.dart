@@ -70,6 +70,22 @@ class NodeInfo {
   final double? storageGb;
   final String? osName;
   final Map<String, dynamic>? hardwareProfile;
+
+  List<Map<String, dynamic>> get _runtimes => [
+    for (final r in (hardwareProfile?['runtimes'] as List?) ?? const [])
+      if (r is Map<String, dynamic>) r,
+  ];
+
+  /// A local model runtime (Ollama) answered when the agent registered.
+  bool get hasOllama => _runtimes.any((r) => r['name'] == 'ollama');
+
+  /// The agent runs its owner's Claude Code (ADR-032).
+  bool get offersClaude {
+    final extra = hardwareProfile?['extra'];
+    final caps = extra is Map ? extra['agent_capabilities'] : null;
+    return caps is Map && caps['claude_subscription'] == true;
+  }
+
   final DateTime? lastHeartbeatAt;
   final Map<String, dynamic>? metrics;
   final String? agentUrl;
@@ -665,7 +681,9 @@ class ApiClient {
     final uri = _uri('/api/v1/phantom/tasks');
     if (uri.scheme != 'https' &&
         !['localhost', '127.0.0.1', '::1'].contains(uri.host)) {
-      throw StateError('Phantom input requires HTTPS or a loopback controller.');
+      throw StateError(
+        'Phantom input requires HTTPS or a loopback controller.',
+      );
     }
     final request = http.Request('POST', uri)
       ..followRedirects = false
@@ -675,16 +693,13 @@ class ApiClient {
         'model': model,
         'provider': 'phantom_local',
       });
-    final response = await _send(
-      () async {
-        final result = await http.Response.fromStream(await _http.send(request));
-        if (result.statusCode >= 300 && result.statusCode < 400) {
-          throw StateError('Phantom redirects are forbidden.');
-        }
-        return result;
-      },
-      timeout: const Duration(minutes: 11),
-    );
+    final response = await _send(() async {
+      final result = await http.Response.fromStream(await _http.send(request));
+      if (result.statusCode >= 300 && result.statusCode < 400) {
+        throw StateError('Phantom redirects are forbidden.');
+      }
+      return result;
+    }, timeout: const Duration(minutes: 11));
     return _decode(response);
   }
 

@@ -185,7 +185,9 @@ class _IdentityCardState extends ConsumerState<_IdentityCard> {
 
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
-    setState(() => _deleting = true);
+    if (mounted) {
+      setState(() => _deleting = true);
+    }
     try {
       await client.deleteNode(node.id);
       ref.invalidate(nodesProvider);
@@ -528,6 +530,15 @@ class _LlmCardState extends ConsumerState<_LlmCard> {
                   'Node is offline — bring the agent online to install models.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+              )
+            else if (!widget.node.hasOllama)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Ollama is not detected on this node. Install it from '
+                  'ollama.com and restart the agent to run local models.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
             for (final rec in list)
               Padding(
@@ -573,7 +584,10 @@ class _LlmCardState extends ConsumerState<_LlmCard> {
                       const Text('installed')
                     else if (rec.runnable)
                       OutlinedButton(
-                        onPressed: online && _installing == null
+                        onPressed:
+                            online &&
+                                widget.node.hasOllama &&
+                                _installing == null
                             ? () => _install(rec.model)
                             : null,
                         child: _installing == rec.model
@@ -633,17 +647,18 @@ class _ProfileCard extends StatelessWidget {
           _KeyValue('OS', node.osName ?? '—'),
           _KeyValue(
             'Runtimes',
-            runtimes.isEmpty
-                ? 'none detected'
-                : runtimes
-                      .map(
-                        (r) =>
-                            '${r['name']}${(r['models'] as List?)?.isNotEmpty == true ? ' (${(r['models'] as List).length} models)' : ''}',
-                      )
-                      .join(', '),
+            [
+              for (final r in runtimes)
+                '${r['name']}${(r['models'] as List?)?.isNotEmpty == true ? ' (${(r['models'] as List).length} models)' : ''}',
+              if (node.offersClaude) "Claude Code (owner's plan)",
+            ].join(', ').ifEmpty('none detected'),
           ),
         ],
       ),
     );
   }
+}
+
+extension on String {
+  String ifEmpty(String fallback) => isEmpty ? fallback : this;
 }
