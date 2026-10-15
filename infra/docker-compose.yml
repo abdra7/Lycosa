@@ -80,9 +80,12 @@ services:
     logging: *default-logging
     # WORKERS>1 requires REDIS_URL + the redis profile (ADR-028); the app
     # fails fast otherwise ($$ defers expansion to the container shell)
+    # the metric files directory (PROMETHEUS_MULTIPROC_DIR, set in the image)
+    # is emptied before the workers start so /metrics never adds stale values
     command: >
       sh -c "alembic upgrade head
       && python scripts/seed_admin.py
+      && rm -rf $${PROMETHEUS_MULTIPROC_DIR:?} && mkdir -p $${PROMETHEUS_MULTIPROC_DIR}
       && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers $${WORKERS:-1}"
     volumes:
       # first-run generated secrets (data/runtime-secrets.json) survive restarts

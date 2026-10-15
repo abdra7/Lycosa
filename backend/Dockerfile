@@ -18,6 +18,10 @@ RUN if [ -n "$LYCOSA_EXTRAS" ]; then pip install --no-cache-dir ".[${LYCOSA_EXTR
 
 EXPOSE 8000
 
+# shared metric files so /metrics covers every uvicorn worker; emptied at each
+# launch, before the workers start (stale files would add old values)
+ENV PROMETHEUS_MULTIPROC_DIR=/tmp/lycosa-prometheus
+
 # migrations + admin bootstrap run before serving (see infra/docker-compose.yml).
 # WORKERS>1 requires REDIS_URL (ADR-028) — the app fails fast otherwise.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-1}"]
+CMD ["sh", "-c", "rm -rf \"$PROMETHEUS_MULTIPROC_DIR\" && mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\" && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-1}"]
