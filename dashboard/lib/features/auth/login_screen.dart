@@ -36,9 +36,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .read(sessionProvider.notifier)
           .login(_email.text.trim(), _password.text);
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } on ControllerUnreachableException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

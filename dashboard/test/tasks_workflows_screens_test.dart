@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -145,4 +146,52 @@ void main() {
     expect(find.textContaining('Status: succeeded'), findsOneWidget);
     expect(find.text('Approve'), findsNothing); // bar gone once resumed
   });
+  testWidgets(
+    'leaving Tasks while a task runs does not touch the disposed screen',
+    (tester) async {
+      // Sprint 14 live QA: switching sections during a long task called
+      // setState() on the disposed TasksScreen when the answer arrived
+      final release = Completer<void>();
+      final controller = MockClient((request) async {
+        final path = request.url.path;
+        if (path == '/api/v1/tasks' && request.method == 'POST') {
+          await release.future;
+          return http.Response(jsonEncode(taskJson()), 201);
+        }
+        if (path == '/api/v1/me') {
+          return http.Response(
+            jsonEncode({'type': 'user', 'id': 'u1', 'role': 'operator'}),
+            200,
+          );
+        }
+        return http.Response(jsonEncode([]), 200);
+      });
+      final showTasks = ValueNotifier(true);
+      await tester.pumpWidget(
+        appWith(
+          controller,
+          home: Scaffold(
+            body: ValueListenableBuilder<bool>(
+              valueListenable: showTasks,
+              builder: (_, show, _) =>
+                  show ? const TasksScreen() : const Text('elsewhere'),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Prompt'),
+        'a long task',
+      );
+      await tester.tap(find.text('Run task'));
+      await tester.pump();
+      showTasks.value = false; // the user opens another section
+      await settle(tester);
+      release.complete(); // the answer arrives afterwards
+      await settle(tester);
+      expect(find.text('elsewhere'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

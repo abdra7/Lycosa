@@ -130,9 +130,13 @@ class _RunInputDialogState extends ConsumerState<_RunInputDialog> {
         );
       }
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } on ControllerUnreachableException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -234,9 +238,13 @@ class _CreateWorkflowDialogState extends ConsumerState<CreateWorkflowDialog> {
     } on FormatException catch (e) {
       setState(() => _error = 'Definition is not valid JSON: ${e.message}');
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } on ControllerUnreachableException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

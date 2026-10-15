@@ -116,9 +116,13 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
     });
     try {
       final minted = await client.createNodeApiKey(_name.text.trim());
-      setState(() => _minted = minted);
+      if (mounted) {
+        setState(() => _minted = minted);
+      }
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -141,7 +145,8 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
 
   /// The URL to show agents on OTHER machines: the configured one, but with a
   /// localhost host swapped for this controller's detected LAN IP.
-  String get _baseUrl => controllerUrlForOtherDevices(_configuredBaseUrl, _lanIp);
+  String get _baseUrl =>
+      controllerUrlForOtherDevices(_configuredBaseUrl, _lanIp);
 
   // PowerShell: each var on its own line, no line continuations.
   String get _runPowershell =>
@@ -289,7 +294,11 @@ class _AddNodeDialogState extends ConsumerState<AddNodeDialog> {
     );
   }
 
-  Widget _codeBlock(BuildContext context, String text, {bool copyable = false}) {
+  Widget _codeBlock(
+    BuildContext context,
+    String text, {
+    bool copyable = false,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -102,9 +102,13 @@ class _ModelsDialogState extends ConsumerState<ModelsDialog> {
         ),
       ].take(5).toList();
       await client.setLlmRoute('default', chain);
-      setState(() => _message = '${model.ref} is now your default model.');
+      if (mounted) {
+        setState(() => _message = '${model.ref} is now your default model.');
+      }
     } catch (e) {
-      setState(() => _message = _errorText(e));
+      if (mounted) {
+        setState(() => _message = _errorText(e));
+      }
     }
   }
 
@@ -475,9 +479,13 @@ class _PromptTestDialogState extends ConsumerState<PromptTestDialog> {
         model: widget.account != null ? _model.text.trim() : null,
         purpose: widget.account == null ? _purpose : null,
       );
-      setState(() => _answer = answer);
+      if (mounted) {
+        setState(() => _answer = answer);
+      }
     } catch (e) {
-      setState(() => _error = _errorText(e));
+      if (mounted) {
+        setState(() => _error = _errorText(e));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

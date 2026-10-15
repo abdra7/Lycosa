@@ -265,7 +265,9 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
     final file = picked?.files.singleOrNull;
     if (file == null || file.bytes == null) return;
 
-    setState(() => _uploading = true);
+    if (mounted) {
+      setState(() => _uploading = true);
+    }
     try {
       final document = await client.uploadDocument(
         widget.collectionId,
@@ -415,9 +417,13 @@ class _PlaygroundState extends ConsumerState<_Playground> {
         _query.text.trim(),
         collection: _scopeToCollection ? widget.collectionName : null,
       );
-      setState(() => _chunks = chunks);
+      if (mounted) {
+        setState(() => _chunks = chunks);
+      }
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

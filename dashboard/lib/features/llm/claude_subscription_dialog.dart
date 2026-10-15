@@ -67,9 +67,13 @@ class _ClaudeSubscriptionDialogState
                   ?.nodeId;
       });
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } on ControllerUnreachableException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -93,7 +97,9 @@ class _ClaudeSubscriptionDialogState
     } on ApiException catch (e) {
       setState(() => _error = e.friendly);
     } on ControllerUnreachableException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

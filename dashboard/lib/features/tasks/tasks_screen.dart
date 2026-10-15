@@ -115,17 +115,21 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
             ? null
             : _knowledgeQuery.text.trim(),
       );
+      // the user may have left Tasks while it ran; the task is in Recent
+      if (!mounted) return;
       setState(() => _lastResult = task);
       ref.invalidate(tasksProvider);
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) setState(() => _error = e.friendly);
     } on ControllerUnreachableException catch (e) {
       // the controller records the outcome even if we drop the connection,
       // so the task will surface in Recent once it finishes
-      setState(
-        () => _error =
-            '${e.friendly} — the task may still be running; watch Recent below.',
-      );
+      if (mounted) {
+        setState(
+          () => _error =
+              '${e.friendly} — the task may still be running; watch Recent below.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
