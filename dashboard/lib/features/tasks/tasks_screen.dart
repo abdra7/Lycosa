@@ -6,11 +6,15 @@ import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
+import '../llm/providers.dart';
 import 'providers.dart';
 import 'phantom_dialog.dart';
 import '../../core/provider_catalog.dart';
 
 const _taskTypes = ['auto', 'coding', 'retrieval', 'tool', 'vision', 'general'];
+
+/// Route values for one connected account (ADR-031/032).
+const _accountPrefix = 'account:';
 
 /// Universal LLM layer routes (ADR-031); 'node' keeps the provider choice.
 const _llmRoutes = {
@@ -56,7 +60,9 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     try {
       final items = await ref.read(activeApiClientProvider)?.providerCatalog();
       if (mounted && items != null && items.isNotEmpty) {
-        setState(() => _providers = items.map((p) => p['name'] as String).toList());
+        setState(
+          () => _providers = items.map((p) => p['name'] as String).toList(),
+        );
       }
     } catch (_) {
       // Older controllers retain the built-in selections; server policy wins.
@@ -82,16 +88,29 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
       _error = null;
       _lastResult = null;
     });
+    final account = _selectedAccount;
+    var model = _model.text.trim().isEmpty ? null : _model.text.trim();
+    if (account != null && model == null) {
+      if (!account.isNodeRun) {
+        setState(() {
+          _busy = false;
+          _error = 'Enter the model to use with ${account.label}.';
+        });
+        return;
+      }
+      model = 'default'; // the plan's default model
+    }
     try {
       final task = await client.submitTask(
         prompt: _prompt.text.trim(),
         provider: _provider,
-        route: _route == 'node' ? null : _route,
+        route: _route == 'node' || account != null ? null : _route,
+        llmAccountId: account?.id,
         knowledgeCollection: _knowledgeCollection.text.trim().isEmpty
             ? null
             : _knowledgeCollection.text.trim(),
         type: _type == 'auto' ? null : _type,
-        model: _model.text.trim().isEmpty ? null : _model.text.trim(),
+        model: model,
         knowledgeQuery: _knowledgeQuery.text.trim().isEmpty
             ? null
             : _knowledgeQuery.text.trim(),
@@ -164,7 +183,29 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     );
   }
 
+  LlmAccount? get _selectedAccount {
+    if (!_route.startsWith(_accountPrefix)) return null;
+    final id = _route.substring(_accountPrefix.length);
+    return ref
+        .read(llmAccountsProvider)
+        .value
+        ?.where((a) => a.id == id)
+        .firstOrNull;
+  }
+
   Widget _submitCard(BuildContext context) {
+    final accounts = [
+      for (final a
+          in ref.watch(llmAccountsProvider).value ?? const <LlmAccount>[])
+        if (a.usable && a.isActive) a,
+    ];
+    if (_route.startsWith(_accountPrefix) &&
+        !accounts.any((a) => '$_accountPrefix${a.id}' == _route)) {
+      _route = 'node'; // the account went away
+    }
+    final account = accounts
+        .where((a) => '$_accountPrefix${a.id}' == _route)
+        .firstOrNull;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -177,7 +218,10 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
               decoration: const InputDecoration(labelText: 'Provider'),
               items: [
                 for (final p in _providers)
-                  DropdownMenuItem(value: p, child: Text(providerLabels[p] ?? p)),
+                  DropdownMenuItem(
+                    value: p,
+                    child: Text(providerLabels[p] ?? p),
+                  ),
               ],
               onChanged: _busy || _route != 'node'
                   ? null
@@ -195,15 +239,32 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
               items: [
                 for (final entry in _llmRoutes.entries)
                   DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+                for (final a in accounts)
+                  DropdownMenuItem(
+                    value: '$_accountPrefix${a.id}',
+                    child: Text('Account: ${a.providerName} · ${a.label}'),
+                  ),
               ],
               onChanged: _busy
                   ? null
                   : (value) => setState(() {
                       _route = value!;
-                      if (_route != 'node') _model.clear();
+                      _model.clear();
                     }),
             ),
-            if (_route != 'node')
+            if (account != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  account.isNodeRun
+                      ? 'Runs Claude Code on ${account.nodeName ?? 'your node'} '
+                            'with your own Claude plan. Model: sonnet, opus, '
+                            'haiku, or blank for the plan default.'
+                      : 'Runs on this account only (no fallback). Enter the '
+                            'model to use.',
+                ),
+              )
+            else if (_route != 'node')
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(

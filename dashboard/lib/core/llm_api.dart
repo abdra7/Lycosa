@@ -46,7 +46,7 @@ class LlmProvider {
 
   final String id;
   final String displayName;
-  final String kind; // cloud | aggregator | local | compatible
+  final String kind; // cloud | aggregator | local | compatible | node
   final List<String> authMethods;
   final bool credentialRequired;
   final String baseUrlMode; // fixed | official_choice | user
@@ -58,9 +58,13 @@ class LlmProvider {
   final List<String> notes;
 
   bool get isLocal => kind == 'local';
+
+  /// Runs on a Lycosa node under the node owner's own sign-in (ADR-032):
+  /// no key, no endpoint, personal only.
+  bool get isNodeRun => kind == 'node';
   bool get supportsOAuth => authMethods.contains('oauth_pkce');
   bool get acceptsKeylessAccount => authMethods.contains('none');
-  bool get takesBaseUrl => baseUrlMode != 'fixed';
+  bool get takesBaseUrl => baseUrlMode != 'fixed' && !isNodeRun;
 
   factory LlmProvider.fromJson(Map<String, dynamic> json) => LlmProvider(
     id: json['id'] as String,
@@ -100,6 +104,8 @@ class LlmAccount {
     this.lastTestStatus,
     this.lastTestDetail,
     this.lastTestedAt,
+    this.nodeId,
+    this.nodeName,
   });
 
   final String id;
@@ -119,9 +125,12 @@ class LlmAccount {
   final String? lastTestStatus;
   final String? lastTestDetail;
   final DateTime? lastTestedAt;
+  final String? nodeId;
+  final String? nodeName;
 
   bool get isShared => scope == 'deployment';
   bool get isActive => status == 'active';
+  bool get isNodeRun => authMethod == 'node_sign_in';
 
   factory LlmAccount.fromJson(Map<String, dynamic> json) => LlmAccount(
     id: json['id'] as String,
@@ -143,7 +152,136 @@ class LlmAccount {
     lastTestedAt: json['last_tested_at'] != null
         ? DateTime.parse(json['last_tested_at'] as String)
         : null,
+    nodeId: json['node_id'] as String?,
+    nodeName: json['node_name'] as String?,
   );
+}
+
+/// One usage window of a Claude plan (e.g. five_hour, seven_day).
+class PlanWindow {
+  const PlanWindow({required this.name, this.utilization, this.resetsAt});
+
+  final String name;
+  final double? utilization; // 0..1
+  final DateTime? resetsAt;
+
+  String get label => switch (name) {
+    'five_hour' => '5-hour',
+    'seven_day' => '7-day',
+    _ => name.replaceAll('_', ' '),
+  };
+}
+
+/// A node offering the Claude subscription runtime, as its agent reports it
+/// for the signed-in user. Never carries the Claude account's identity.
+class ClaudeNode {
+  ClaudeNode({
+    required this.nodeId,
+    required this.nodeName,
+    required this.nodeStatus,
+    required this.reachable,
+    required this.installed,
+    required this.signedIn,
+    required this.authMethod,
+    required this.ownerMatches,
+    required this.detail,
+    this.version,
+    this.plan,
+    this.planUsage = const [],
+  });
+
+  final String nodeId;
+  final String nodeName;
+  final String nodeStatus;
+  final bool reachable;
+  final bool installed;
+  final bool signedIn;
+  final String authMethod; // subscription | api_key | other | none
+  final bool ownerMatches;
+  final String detail;
+  final String? version;
+  final String? plan;
+  final List<PlanWindow> planUsage;
+
+  /// Ready to connect: reachable, installed, signed in and serving you.
+  bool get ready => reachable && installed && signedIn && ownerMatches;
+
+  factory ClaudeNode.fromJson(Map<String, dynamic> json) => ClaudeNode(
+    nodeId: json['node_id'] as String,
+    nodeName: json['node_name'] as String,
+    nodeStatus: json['node_status'] as String? ?? 'unknown',
+    reachable: json['reachable'] as bool? ?? false,
+    installed: json['installed'] as bool? ?? false,
+    signedIn: json['signed_in'] as bool? ?? false,
+    authMethod: json['auth_method'] as String? ?? 'none',
+    ownerMatches: json['owner_matches'] as bool? ?? false,
+    detail: json['detail'] as String? ?? '',
+    version: json['version'] as String?,
+    plan: json['plan'] as String?,
+    planUsage: [
+      for (final entry
+          in ((json['plan_usage'] as Map<String, dynamic>?) ?? const {})
+              .entries)
+        PlanWindow(
+          name: entry.key,
+          utilization: ((entry.value as Map)['utilization'] as num?)
+              ?.toDouble(),
+          resetsAt: (entry.value as Map)['resets_at'] is int
+              ? DateTime.fromMillisecondsSinceEpoch(
+                  ((entry.value as Map)['resets_at'] as int) * 1000,
+                )
+              : null,
+        ),
+    ],
+  );
+}
+
+class LlmChatMessage {
+  const LlmChatMessage({required this.role, required this.content});
+
+  final String role; // user | assistant
+  final String content;
+
+  Map<String, dynamic> toJson() => {'role': role, 'content': content};
+}
+
+/// One server-sent event of a streamed chat (ADR-031 normalized chunks).
+class LlmChatEvent {
+  const LlmChatEvent({
+    required this.type,
+    this.text,
+    this.provider,
+    this.model,
+    this.totalTokens,
+    this.finishReason,
+    this.errorCode,
+    this.errorMessage,
+  });
+
+  /// start | text | reasoning | usage | finish | done | error (others ignored)
+  final String type;
+  final String? text;
+  final String? provider;
+  final String? model;
+  final int? totalTokens;
+  final String? finishReason;
+  final String? errorCode;
+  final String? errorMessage;
+
+  factory LlmChatEvent.fromSse(String type, Map<String, dynamic> data) {
+    final metadata = (data['metadata'] as Map<String, dynamic>?) ?? const {};
+    final usage = data['usage'] as Map<String, dynamic>?;
+    return LlmChatEvent(
+      type: type,
+      text: data['text'] as String?,
+      provider: metadata['provider'] as String?,
+      model: metadata['model'] as String?,
+      totalTokens: usage?['total_tokens'] as int?,
+      finishReason: data['finish_reason'] as String?,
+      errorCode: type == 'error' ? data['code'] as String? : null,
+      errorMessage: type == 'error' ? data['message'] as String? : null,
+    );
+  }
 }
 
 class LlmProbeResult {
@@ -367,6 +505,7 @@ extension LlmApi on ApiClient {
     String scope = 'personal',
     String? baseUrl,
     String? apiKey,
+    String? nodeId,
   }) async {
     final body = {
       'provider': provider,
@@ -374,6 +513,7 @@ extension LlmApi on ApiClient {
       'scope': scope,
       'base_url': ?baseUrl,
       'api_key': ?apiKey,
+      'node_id': ?nodeId,
     };
     final uri = _uri('/api/v1/llm/accounts');
     final response = apiKey != null
@@ -504,6 +644,85 @@ extension LlmApi on ApiClient {
       timeout: const Duration(minutes: 7),
     );
     return LlmAnswer.fromJson(_decode(response));
+  }
+
+  /// Nodes offering the Claude subscription runtime, each asked live
+  /// whether Claude Code is installed, signed in and serving you (ADR-032).
+  Future<List<ClaudeNode>> listClaudeSubscriptionNodes() async {
+    final response = await _send(
+      () => _http.get(
+        _uri('/api/v1/llm/claude-subscription/nodes'),
+        headers: _headers,
+      ),
+      timeout: const Duration(seconds: 45),
+    );
+    return [
+      for (final n in _decodeList(response))
+        ClaudeNode.fromJson(n as Map<String, dynamic>),
+    ];
+  }
+
+  /// A streamed chat through an account (+model) or a routing purpose:
+  /// normalized server-sent events, ending with `done` or `error`.
+  Stream<LlmChatEvent> llmChatStream({
+    required List<LlmChatMessage> messages,
+    String? accountId,
+    String? model,
+    String? purpose,
+    String? system,
+  }) async* {
+    final request = http.Request('POST', _uri('/api/v1/llm/chat'))
+      ..followRedirects = false
+      ..headers.addAll(_headers)
+      ..headers['Accept'] = 'text/event-stream'
+      ..body = jsonEncode({
+        'messages': [for (final m in messages) m.toJson()],
+        'account_id': ?accountId,
+        'model': ?model,
+        'purpose': ?purpose,
+        'system': ?system,
+        'stream': true,
+      });
+    final http.StreamedResponse response;
+    try {
+      response = await _http.send(request).timeout(const Duration(minutes: 2));
+    } on SocketException catch (e) {
+      throw ControllerUnreachableException(baseUrl, e);
+    } on http.ClientException catch (e) {
+      throw ControllerUnreachableException(baseUrl, e);
+    } on Exception catch (e) {
+      throw ControllerUnreachableException(baseUrl, e);
+    }
+    if (response.statusCode >= 400) {
+      final body = await response.stream.bytesToString();
+      _decode(http.Response(body, response.statusCode)); // throws ApiException
+    }
+    String event = 'message';
+    final data = <String>[];
+    await for (final line
+        in response.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
+      if (line.isEmpty) {
+        if (data.isNotEmpty) {
+          final decoded = jsonDecode(data.join('\n'));
+          yield LlmChatEvent.fromSse(
+            event,
+            decoded is Map<String, dynamic> ? decoded : const {},
+          );
+        }
+        event = 'message';
+        data.clear();
+        continue;
+      }
+      if (line.startsWith(':')) continue;
+      final colon = line.indexOf(':');
+      final name = colon < 0 ? line : line.substring(0, colon);
+      var value = colon < 0 ? '' : line.substring(colon + 1);
+      if (value.startsWith(' ')) value = value.substring(1);
+      if (name == 'event') event = value;
+      if (name == 'data') data.add(value);
+    }
   }
 
   Future<OpenRouterSignIn> startOpenRouterSignIn({String? callbackUrl}) async {

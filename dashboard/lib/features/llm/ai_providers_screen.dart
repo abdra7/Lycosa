@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
+import 'claude_subscription_dialog.dart';
 import 'connect_account_dialog.dart';
 import 'llm_dialogs.dart';
 import 'providers.dart';
@@ -179,14 +180,16 @@ class _ProviderCard extends StatelessWidget {
     'local' => 'Local',
     'aggregator' => 'Aggregator',
     'compatible' => 'Compatible',
+    'node' => 'Your plan, on your node',
     _ => 'Cloud',
   };
 
   Future<void> _connect(BuildContext context) async {
     final added = await showDialog<bool>(
       context: context,
-      builder: (_) =>
-          ConnectAccountDialog(provider: provider, isAdmin: isAdmin),
+      builder: (_) => provider.isNodeRun
+          ? ClaudeSubscriptionDialog(provider: provider)
+          : ConnectAccountDialog(provider: provider, isAdmin: isAdmin),
     );
     if (added == true) onChanged();
   }
@@ -217,6 +220,11 @@ class _ProviderCard extends StatelessWidget {
               ],
             ),
             CapabilityChips(provider.capabilities),
+            if (provider.isNodeRun && provider.notes.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(provider.notes.first, style: muted),
+              ),
             const SizedBox(height: 4),
             if (accounts.isEmpty)
               Row(
@@ -276,11 +284,17 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
     };
   }
 
-  String get _accessText => switch (_a.apiAccess) {
-    'available' => 'API access: available',
-    'unavailable' => 'API access: unavailable',
-    _ => 'API access: not tested yet',
-  };
+  String get _accessText => _a.isNodeRun
+      ? switch (_a.apiAccess) {
+          'available' => 'Claude plan: ready',
+          'unavailable' => 'Claude plan: needs attention on the node',
+          _ => 'Claude plan: not tested yet',
+        }
+      : switch (_a.apiAccess) {
+          'available' => 'API access: available',
+          'unavailable' => 'API access: unavailable',
+          _ => 'API access: not tested yet',
+        };
 
   Future<void> _test() async {
     final client = ref.read(activeApiClientProvider);
@@ -294,9 +308,12 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
         builder: (_) => AlertDialog(
           title: Text('Test · ${_a.label}'),
           content: Text(switch (result.status) {
+            'ready' when _a.isNodeRun =>
+              result.detail.isEmpty ? 'Ready.' : '${result.detail}.',
             'ready' =>
               'Connected. ${result.modelsAvailable ?? 0} model(s) available'
                   '${result.latencyMs != null ? ' (${result.latencyMs} ms)' : ''}.',
+            'unauthorized' when _a.isNodeRun => result.detail,
             'unauthorized' =>
               '$apiAccessUnavailableMessage'
                   '${result.subscriptionNote != null ? '\n\n${result.subscriptionNote}' : ''}'
@@ -342,9 +359,13 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Disconnect ${_a.label}?'),
-        content: const Text(
-          'The stored credential is deleted and the account is removed from '
-          'every route. Revoke the key at the provider as well.',
+        content: Text(
+          _a.isNodeRun
+              ? 'The connection is removed from every route. Claude Code on '
+                    'the node stays signed in; run `claude auth logout` there '
+                    'to sign it out.'
+              : 'The stored credential is deleted and the account is removed '
+                    'from every route. Revoke the key at the provider as well.',
         ),
         actions: [
           TextButton(
@@ -380,6 +401,7 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
       _a.isShared ? 'Shared' : (_a.mine ? 'Personal' : 'Another user\'s'),
       if (_a.isLocal) 'Local',
       if (_a.authMethod == 'oauth_pkce') 'Signed in',
+      if (_a.isNodeRun) 'Runs on ${_a.nodeName ?? 'a removed node'}',
       if (!_a.isActive) 'Disabled',
       _accessText,
     ];
