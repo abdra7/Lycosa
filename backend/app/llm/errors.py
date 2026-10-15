@@ -121,6 +121,12 @@ class CredentialUnavailableError(LLMError):
     http_status = 409
 
 
+class NodeUnavailableError(LLMError):
+    code = "node_unavailable"
+    message = "The node that runs this account is not available; check that its agent is running"
+    http_status = 503
+
+
 class NoRouteError(LLMError):
     code = "no_llm_route"
     message = "No usable provider account/model is configured for this request"

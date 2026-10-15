@@ -45,6 +45,8 @@ class AccountCreate(BaseModel):
     scope: Literal["personal", "deployment"] = "personal"
     base_url: str | None = Field(default=None, max_length=255)
     api_key: SecretStr | None = None
+    # node-run providers (claude_subscription): the node whose sign-in runs it
+    node_id: uuid.UUID | None = None
 
 
 class AccountUpdate(BaseModel):
@@ -75,8 +77,33 @@ class AccountOut(BaseModel):
     last_tested_at: datetime | None
     last_test_status: str | None
     last_test_detail: str | None
+    node_id: uuid.UUID | None = None
+    node_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class PlanWindowOut(BaseModel):
+    utilization: float | None
+    resets_at: int | None
+
+
+class ClaudeNodeOut(BaseModel):
+    """A node offering the Claude subscription runtime, as its agent reports
+    it for the calling user. Never carries the Claude account's identity."""
+
+    node_id: uuid.UUID
+    node_name: str
+    node_status: str
+    reachable: bool
+    installed: bool = False
+    version: str | None = None
+    signed_in: bool = False
+    auth_method: Literal["subscription", "api_key", "other", "none"] = "none"
+    plan: str | None = None
+    owner_matches: bool = False
+    plan_usage: dict[str, PlanWindowOut] = {}
+    detail: str = ""
 
 
 class AccountProbeRequest(BaseModel):
@@ -252,7 +279,13 @@ class OAuthCompleteIn(BaseModel):
 
 
 def account_out(
-    account: Any, *, mine: bool, usable: bool, manageable: bool, has_key: bool
+    account: Any,
+    *,
+    mine: bool,
+    usable: bool,
+    manageable: bool,
+    has_key: bool,
+    node_name: str | None = None,
 ) -> AccountOut:
     from app.llm import catalog
 
@@ -277,6 +310,8 @@ def account_out(
         last_tested_at=account.last_tested_at,
         last_test_status=account.last_test_status,
         last_test_detail=account.last_test_detail,
+        node_id=account.node_id,
+        node_name=node_name,
         created_at=account.created_at,
         updated_at=account.updated_at,
     )

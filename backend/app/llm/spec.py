@@ -12,12 +12,16 @@ class ProviderKind(enum.StrEnum):
     AGGREGATOR = "aggregator"
     LOCAL = "local"
     COMPATIBLE = "compatible"  # any OpenAI-compatible endpoint the user points at
+    # runs on a Lycosa node under the node owner's own sign-in (ADR-032)
+    NODE = "node"
 
 
 class AuthMethod(enum.StrEnum):
     API_KEY = "api_key"
     OAUTH_PKCE = "oauth_pkce"  # official OAuth flow that yields an API key
     NONE = "none"  # local runtimes without authentication
+    # the node's own sign-in (e.g. Claude Code's); Lycosa holds no credential
+    NODE_SIGN_IN = "node_sign_in"
 
 
 class BaseUrlMode(enum.StrEnum):
@@ -43,12 +47,17 @@ class ProviderSpec:
 
     @property
     def credential_required(self) -> bool:
-        return AuthMethod.NONE not in self.auth_methods
+        return not {AuthMethod.NONE, AuthMethod.NODE_SIGN_IN} & set(self.auth_methods)
+
+    @property
+    def node_bound(self) -> bool:
+        """Runs on a Lycosa node; accounts are personal and bound to one node."""
+        return self.kind == ProviderKind.NODE
 
     @property
     def allow_http(self) -> bool:
         """Plain HTTP only for runtimes that typically live on the LAN."""
-        return self.kind in (ProviderKind.LOCAL, ProviderKind.COMPATIBLE)
+        return self.kind in (ProviderKind.LOCAL, ProviderKind.COMPATIBLE, ProviderKind.NODE)
 
     def accepts_official_base_url(self, url: str) -> bool:
         return any(re.fullmatch(p, url) for p in self.official_base_url_patterns)
