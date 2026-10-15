@@ -6,17 +6,23 @@ Every request must carry the agent token this agent registered with
 
 import asyncio
 import hmac
+import json
+from collections.abc import AsyncIterator
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from lycosa_agent.knowledge import GroundedRequest, GroundedResponse, answer, capabilities
 from lycosa_agent.runtimes.base import LocalRuntimeAdapter
 from lycosa_agent.runtimes.chat import ChatMessage, RuntimeRequest
+from lycosa_agent.runtimes.claude_code import ClaudeCodeRuntime
 from lycosa_agent.runtimes.registry import provider_registry
 
 AGENT_TOKEN_HEADER = "X-Agent-Token"
+# the Lycosa user a Claude subscription call is made for (ADR-032)
+OWNER_HEADER = "X-Lycosa-Owner"
 
 
 class ExecuteRequest(BaseModel):
@@ -38,6 +44,20 @@ class ExecuteResponse(BaseModel):
     error: str | None = None
 
 
+class ClaudeCompleteRequest(BaseModel):
+    # an alias (sonnet, opus, haiku, default) or a full model id; never a flag
+    model: str = Field(default="default", pattern=r"^[a-z0-9][a-z0-9.\-]{0,63}$")
+    messages: list[ChatMessage] = Field(min_length=1, max_length=200)
+
+
+def owner_matches(configured: str, presented: str | None) -> bool:
+    if not configured or not presented:
+        return False
+    return hmac.compare_digest(
+        presented.strip().casefold().encode(), configured.strip().casefold().encode()
+    )
+
+
 class PullRequest(BaseModel):
     model: str = Field(min_length=1)
 
@@ -48,7 +68,14 @@ class PullResponse(BaseModel):
     error: str | None = None
 
 
-def create_app(adapter: LocalRuntimeAdapter, token: str, *, cloud_enabled: bool = False) -> FastAPI:
+def create_app(
+    adapter: LocalRuntimeAdapter,
+    token: str,
+    *,
+    cloud_enabled: bool = False,
+    claude: ClaudeCodeRuntime | None = None,
+    claude_owner: str = "",
+) -> FastAPI:
     app = FastAPI(title="Lycosa Local Agent", docs_url=None, redoc_url=None)
     app.state.running_tasks = 0
     registry = provider_registry(adapter)
@@ -90,6 +117,41 @@ def create_app(adapter: LocalRuntimeAdapter, token: str, *, cloud_enabled: bool 
                 ) from None
             finally:
                 app.state.running_tasks -= 1
+
+    @app.get("/claude/status", dependencies=[Depends(check_token)])
+    async def claude_status(
+        x_lycosa_owner: Annotated[str | None, Header()] = None,
+    ) -> dict[str, Any]:
+        """Claude subscription runtime state; never the Claude account's
+        identity. owner_matches says whether the presented Lycosa user is the
+        one this machine serves."""
+        if claude is None:
+            return {"enabled": False, "owner_matches": False}
+        return {
+            **await claude.status(),
+            "owner_matches": owner_matches(claude_owner, x_lycosa_owner),
+        }
+
+    @app.post("/claude/complete", dependencies=[Depends(check_token)])
+    async def claude_complete(
+        body: ClaudeCompleteRequest,
+        x_lycosa_owner: Annotated[str | None, Header()] = None,
+    ) -> StreamingResponse:
+        """Run one call on this machine's Claude Code; NDJSON events."""
+        if claude is None:
+            raise HTTPException(404, "The Claude subscription runtime is not enabled on this node")
+        if not owner_matches(claude_owner, x_lycosa_owner):
+            raise HTTPException(403, "This node's Claude subscription serves a different user")
+
+        async def events() -> AsyncIterator[bytes]:
+            app.state.running_tasks += 1
+            try:
+                async for event in claude.stream(body.messages, body.model):
+                    yield (json.dumps(event) + "\n").encode()
+            finally:
+                app.state.running_tasks -= 1
+
+        return StreamingResponse(events(), media_type="application/x-ndjson")
 
     @app.post("/models/pull", response_model=PullResponse, dependencies=[Depends(check_token)])
     async def pull_model(body: PullRequest) -> PullResponse:
