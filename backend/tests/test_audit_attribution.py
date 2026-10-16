@@ -14,7 +14,7 @@ from app.core.security import API_KEY_HEADER, generate_api_key
 from app.models import ApiKey, AuditLog
 from app.models.user import ROLE_ADMIN, ROLE_OPERATOR
 from app.services import provider_secrets
-from tests.conftest import ADMIN_EMAIL, login, make_node
+from tests.conftest import ADMIN_EMAIL, bearer, login, make_node
 from tests.test_knowledge_ingest import create_collection
 from tests.test_workflow_run import agent_reply, create_workflow, run_workflow
 
@@ -173,3 +173,27 @@ async def test_create_collection_fixture_still_attributes_users(
     row = await _row(db_session, "knowledge.collection.create")
     assert row.actor_user_id == users["admin"].id
     assert row.actor_api_key_id is None
+
+
+async def test_audit_log_listing_names_the_actor(
+    client: AsyncClient, db_session: AsyncSession, users: dict, admin_key
+) -> None:
+    # the desktop Admin screen shows who acted, not just "user" (ADR-033)
+    headers, record = admin_key
+    token = await login(client, ADMIN_EMAIL)
+    await client.post(
+        "/api/v1/admin/api-keys", json={"name": "minted", "role": "node"}, headers=headers
+    )
+    await client.post("/api/v1/auth/login", json={"email": "ghost@test.local", "password": "x"})
+
+    response = await client.get("/api/v1/admin/audit-logs", headers=bearer(token))
+    assert response.status_code == 200
+    entries = {e["action"]: e for e in response.json()}
+    login_row = entries["auth.login.success"]
+    assert login_row["actor_email"] == ADMIN_EMAIL
+    assert login_row["actor_api_key_name"] is None
+    key_row = entries["apikey.create"]
+    assert key_row["actor_api_key_name"] == record.name
+    assert key_row["actor_email"] is None
+    anonymous = entries["auth.login.failure"]
+    assert anonymous["actor_email"] is None and anonymous["actor_api_key_name"] is None
