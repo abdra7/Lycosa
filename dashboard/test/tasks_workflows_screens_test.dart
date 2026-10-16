@@ -133,8 +133,10 @@ void main() {
 
     expect(find.textContaining('paused'), findsWidgets);
     expect(find.text('draft'), findsOneWidget);
+    // statuses read as words, not identifiers
+    expect(find.text('approval · pending approval'), findsOneWidget);
+    expect(find.textContaining('pending_approval'), findsNothing);
     expect(find.text('gate'), findsOneWidget);
-    expect(find.textContaining('pending_approval'), findsOneWidget);
 
     await tester.tap(find.text('Approve'));
     await settle(tester);

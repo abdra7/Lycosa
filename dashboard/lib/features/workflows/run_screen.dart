@@ -75,7 +75,7 @@ class _StatusBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Status: ${run.status}'
+                    'Status: ${humanize(run.status)}'
                     '${run.currentStep != null && !run.isFinished ? ' (at ${run.currentStep})' : ''}',
                   ),
                   Text(
@@ -120,7 +120,7 @@ class _StepTile extends StatelessWidget {
               leading: Icon(icon, color: color),
               title: Text(step.stepId),
               subtitle: Text(
-                '${step.kind} · ${step.status}'
+                '${step.kind} · ${humanize(step.status)}'
                 '${step.attempt > 1 ? ' · attempt ${step.attempt}' : ''}',
               ),
               childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -139,7 +139,7 @@ class _StepTile extends StatelessWidget {
           : ListTile(
               leading: Icon(icon, color: color),
               title: Text(step.stepId),
-              subtitle: Text('${step.kind} · ${step.status}'),
+              subtitle: Text('${step.kind} · ${humanize(step.status)}'),
             ),
     );
   }
@@ -207,3 +207,6 @@ class _ApprovalBarState extends ConsumerState<_ApprovalBar> {
     );
   }
 }
+
+/// API identifiers (pending_approval) as words (pending approval).
+String humanize(String value) => value.replaceAll('_', ' ');

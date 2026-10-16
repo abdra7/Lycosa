@@ -131,6 +131,27 @@ class _ApiKeysCard extends ConsumerWidget {
     WidgetRef ref,
     ApiKeyInfo key,
   ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Revoke ${key.name}?'),
+        content: const Text(
+          'Anything using this key stops working at once; a node using it is '
+          'cut off until it gets a new key. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
     // the screen may be gone when the call returns; the container is not

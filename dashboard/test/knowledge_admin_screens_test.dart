@@ -367,16 +367,23 @@ void main() {
     expect(find.text('192.168.1.9'), findsOneWidget);
     expect(find.textContaining('garage-box'), findsOneWidget);
 
+    bool revoked() => captured.any(
+      (r) => r.method == 'DELETE' && r.url.path == '/api/v1/admin/api-keys/k1',
+    );
+
+    // Sprint 14 live QA: Revoke cut a node off at once, with no confirmation
     await tester.tap(find.text('Revoke'));
     await settle(tester);
+    expect(find.textContaining('Revoke garage-box'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await settle(tester);
+    expect(revoked(), isFalse);
 
-    expect(
-      captured.any(
-        (r) =>
-            r.method == 'DELETE' && r.url.path == '/api/v1/admin/api-keys/k1',
-      ),
-      isTrue,
-    );
+    await tester.tap(find.text('Revoke'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Revoke'));
+    await settle(tester);
+    expect(revoked(), isTrue);
   });
 
   testWidgets('operator sees a requires-admin note instead of admin data', (

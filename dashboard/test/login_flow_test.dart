@@ -214,6 +214,10 @@ void main() {
     await tester.tap(find.text('Use a different controller'));
     await tester.pumpAndSettle();
     expect(find.text('Connect to a controller'), findsOneWidget);
+    final url = tester.widget<TextField>(
+      find.widgetWithText(TextField, 'Controller URL'),
+    );
+    expect(url.controller!.text, isEmpty);
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Controller URL'),

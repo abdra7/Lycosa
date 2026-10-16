@@ -231,8 +231,18 @@ abstract final class LycosaTheme {
                 ? p.backgroundSecondary
                 : p.background,
           ),
-          foregroundColor: WidgetStatePropertyAll(p.textPrimary),
-          side: WidgetStatePropertyAll(BorderSide(color: p.border)),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.disabled)
+                ? p.textSecondary.withValues(alpha: 0.6)
+                : p.textPrimary,
+          ),
+          side: WidgetStateProperty.resolveWith(
+            (states) => BorderSide(
+              color: states.contains(WidgetState.disabled)
+                  ? p.border.withValues(alpha: 0.5)
+                  : p.border,
+            ),
+          ),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -247,7 +257,11 @@ abstract final class LycosaTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: ButtonStyle(
-          foregroundColor: WidgetStatePropertyAll(p.textPrimary),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.disabled)
+                ? p.textSecondary.withValues(alpha: 0.6)
+                : p.textPrimary,
+          ),
           overlayColor: WidgetStatePropertyAll(
             p.primaryLight.withValues(alpha: 0.5),
           ),

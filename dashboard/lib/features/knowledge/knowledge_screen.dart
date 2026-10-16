@@ -282,7 +282,7 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
           SnackBar(
             content: Text(
               document.status == 'embedded'
-                  ? '${document.filename}: embedded as ${document.chunkCount} chunks'
+                  ? '${document.filename}: embedded as ${chunksLabel(document.chunkCount)}'
                   : '${document.filename}: ${document.status} — ${document.error}',
             ),
           ),
@@ -368,7 +368,7 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
                           title: Text(d.filename),
                           subtitle: Text(
                             d.status == 'embedded'
-                                ? '${d.chunkCount} chunks · ${(d.sizeBytes / 1024).toStringAsFixed(1)} KB'
+                                ? '${chunksLabel(d.chunkCount)} · ${(d.sizeBytes / 1024).toStringAsFixed(1)} KB'
                                 : d.error ?? d.status,
                           ),
                         ),
@@ -508,3 +508,5 @@ class _PlaygroundState extends ConsumerState<_Playground> {
     );
   }
 }
+
+String chunksLabel(int count) => count == 1 ? '1 chunk' : '$count chunks';

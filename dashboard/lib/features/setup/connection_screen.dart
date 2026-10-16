@@ -20,7 +20,11 @@ class ConnectionScreen extends ConsumerStatefulWidget {
 class _ConnectionScreenState extends ConsumerState<ConnectionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
-  final _url = TextEditingController(text: 'http://localhost:8000');
+  // first run suggests the local default; adding another controller starts
+  // empty, so it cannot silently reuse the existing controller's address
+  late final _url = TextEditingController(
+    text: widget.adding ? '' : 'http://localhost:8000',
+  );
   final _email = TextEditingController();
   final _password = TextEditingController();
   String? _error;
