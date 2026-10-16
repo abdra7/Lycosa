@@ -100,6 +100,102 @@ void main() {
     expect(find.textContaining('succeeded'), findsWidgets);
   });
 
+  group('default route', () {
+    // Sprint 14 computer-use walkthrough: Tasks opened on the node/Ollama
+    // route even when no node had Ollama and a default model was set
+    MockClient routedController({
+      required bool withDefault,
+      List<http.Request>? captured,
+    }) => MockClient((request) async {
+      captured?.add(request);
+      switch (request.url.path) {
+        case '/api/v1/me':
+          return http.Response(
+            jsonEncode({'type': 'user', 'id': 'u1', 'role': 'operator'}),
+            200,
+          );
+        case '/api/v1/tasks' when request.method == 'POST':
+          return http.Response(jsonEncode(taskJson()), 201);
+        case '/api/v1/llm/routing':
+          return http.Response(
+            jsonEncode({
+              'purposes': ['default', 'coding'],
+              'personal': [],
+              'deployment': [
+                if (withDefault)
+                  {
+                    'purpose': 'default',
+                    'scope': 'deployment',
+                    'chain': [
+                      {'account_id': 'a1', 'model': 'gpt-x'},
+                    ],
+                    'updated_at': '2026-10-16T10:00:00Z',
+                  },
+              ],
+            }),
+            200,
+          );
+      }
+      return http.Response(jsonEncode([]), 200);
+    });
+
+    String? routeValue(WidgetTester tester) => tester
+        .widget<DropdownButton<String>>(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text('Route'),
+              matching: find.byType(DropdownButtonFormField<String>),
+            ),
+            matching: find.byType(DropdownButton<String>),
+          ),
+        )
+        .value;
+
+    testWidgets('a configured default model becomes the default route', (
+      tester,
+    ) async {
+      final captured = <http.Request>[];
+      await tester.pumpWidget(
+        appWith(
+          routedController(withDefault: true, captured: captured),
+          home: const Scaffold(body: TasksScreen()),
+        ),
+      );
+      await settle(tester);
+      expect(routeValue(tester), 'default');
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Prompt'),
+        'say hi',
+      );
+      await tester.tap(find.text('Run task'));
+      await settle(tester);
+      final body =
+          jsonDecode(
+                captured
+                    .lastWhere(
+                      (r) =>
+                          r.method == 'POST' && r.url.path == '/api/v1/tasks',
+                    )
+                    .body,
+              )
+              as Map<String, dynamic>;
+      expect(body['route'], 'default');
+      expect(body.containsKey('provider'), isFalse);
+    });
+
+    testWidgets('without a default model the node route stays', (tester) async {
+      await tester.pumpWidget(
+        appWith(
+          routedController(withDefault: false),
+          home: const Scaffold(body: TasksScreen()),
+        ),
+      );
+      await settle(tester);
+      expect(routeValue(tester), 'node');
+    });
+  });
+
   testWidgets('task list shows the execution trace when expanded', (
     tester,
   ) async {

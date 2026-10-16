@@ -15,7 +15,9 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
   String _storage = 'session';
   String _message = '';
   bool _busy = false;
-  List<String> _providers = providerLabels.keys.where((p) => p != 'ollama').toList();
+  List<String> _providers = providerLabels.keys
+      .where((p) => p != 'ollama')
+      .toList();
 
   @override
   void initState() {
@@ -27,10 +29,12 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
     try {
       final items = await ref.read(activeApiClientProvider)?.providerCatalog();
       if (mounted && items != null && items.isNotEmpty) {
-        setState(() => _providers = items
-            .where((p) => p['execution_mode'] == 'cloud')
-            .map((p) => p['name'] as String)
-            .toList());
+        setState(
+          () => _providers = items
+              .where((p) => p['execution_mode'] == 'cloud')
+              .map((p) => p['name'] as String)
+              .toList(),
+        );
       }
     } catch (_) {
       // Preserve the default catalogue on a disconnected controller.
@@ -82,7 +86,7 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Providers'),
+    title: const Text('Legacy provider keys'),
     content: SizedBox(
       width: 560,
       child: SingleChildScrollView(
@@ -90,6 +94,12 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text(
+              'Controller-wide keys for the older provider route (Tasks → '
+              'Route: "Provider above"). To connect accounts, pick models and '
+              'set routing, use the Providers section instead.',
+            ),
+            const SizedBox(height: 12),
             const Text(
               'Cloud providers require administrator-enabled model policies and credentials. New adapters run on the controller; Anthropic retains its trusted-agent route. Bedrock and Vertex AI may instead use configured workload identity. Phantom never uses cloud providers.',
             ),
@@ -100,7 +110,10 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
               decoration: const InputDecoration(labelText: 'Provider'),
               items: [
                 for (final p in _providers)
-                  DropdownMenuItem(value: p, child: Text(providerLabels[p] ?? p)),
+                  DropdownMenuItem(
+                    value: p,
+                    child: Text(providerLabels[p] ?? p),
+                  ),
               ],
               onChanged: _busy
                   ? null
@@ -143,7 +156,7 @@ class _ProvidersDialogState extends ConsumerState<ProvidersDialog> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Chat subscription login is not implemented here. API keys are separate from Claude Pro / ChatGPT Plus sign-in; no subscription access is claimed.',
+              'These are API keys, not subscriptions: Claude Pro / ChatGPT Plus sign-in does not work here. To use a Claude Pro or Max plan, connect it under Providers → Claude subscription.',
             ),
             if (_busy) const LinearProgressIndicator(),
             if (_message.isNotEmpty)

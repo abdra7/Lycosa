@@ -407,6 +407,8 @@ class AuditLogEntry {
     this.resourceId,
     this.actorUserId,
     this.actorApiKeyId,
+    this.actorEmail,
+    this.actorApiKeyName,
     this.ipAddress,
   });
 
@@ -416,9 +418,15 @@ class AuditLogEntry {
   final String? resourceId;
   final String? actorUserId;
   final String? actorApiKeyId;
+  final String? actorEmail; // ADR-033; absent on older controllers
+  final String? actorApiKeyName;
   final String? ipAddress;
 
-  String get actor => actorUserId != null
+  String get actor => actorEmail != null
+      ? actorEmail!
+      : actorApiKeyName != null
+      ? '$actorApiKeyName (API key)'
+      : actorUserId != null
       ? 'user'
       : actorApiKeyId != null
       ? 'api key'
@@ -431,6 +439,8 @@ class AuditLogEntry {
     resourceId: json['resource_id'] as String?,
     actorUserId: json['actor_user_id'] as String?,
     actorApiKeyId: json['actor_api_key_id'] as String?,
+    actorEmail: json['actor_email'] as String?,
+    actorApiKeyName: json['actor_api_key_name'] as String?,
     ipAddress: json['ip_address'] as String?,
   );
 }

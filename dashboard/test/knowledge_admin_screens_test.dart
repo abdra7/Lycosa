@@ -94,6 +94,33 @@ MockClient fakeController({
             'resource_id': 's1',
             'detail': null,
             'ip_address': '192.168.1.9',
+            'actor_email': 'op@lycosa.local',
+            'actor_api_key_name': null,
+          },
+          {
+            'id': 'a2',
+            'created_at': '2026-07-05T09:00:00Z',
+            'actor_user_id': null,
+            'actor_api_key_id': 'k9',
+            'action': 'node.heartbeat.bind',
+            'resource_type': 'node',
+            'resource_id': 'n1',
+            'detail': null,
+            'ip_address': null,
+            'actor_email': null,
+            'actor_api_key_name': 'ci-runner',
+          },
+          {
+            // an older controller without actor names
+            'id': 'a3',
+            'created_at': '2026-07-05T08:00:00Z',
+            'actor_user_id': 'u7',
+            'actor_api_key_id': null,
+            'action': 'workflow.create',
+            'resource_type': 'workflow',
+            'resource_id': 'w1',
+            'detail': null,
+            'ip_address': null,
           },
         ]),
         200,
@@ -384,6 +411,83 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Revoke'));
     await settle(tester);
     expect(revoked(), isTrue);
+  });
+
+  // Sprint 14 computer-use walkthrough: the panels hugged their content and
+  // every actor read "user"
+  testWidgets('audit log names who acted', (tester) async {
+    await tester.pumpWidget(
+      appWith(fakeController(), home: const Scaffold(body: AdminScreen())),
+    );
+    await settle(tester);
+
+    expect(find.text('op@lycosa.local'), findsOneWidget);
+    expect(find.text('ci-runner (API key)'), findsOneWidget);
+    expect(find.text('user'), findsOneWidget); // only the older row
+  });
+
+  testWidgets('admin panels use the window width', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      appWith(fakeController(), home: const Scaffold(body: AdminScreen())),
+    );
+    await settle(tester);
+
+    for (final title in ['API keys', 'Audit log']) {
+      final card = find.ancestor(
+        of: find.text(title),
+        matching: find.byType(Card),
+      );
+      expect(tester.getSize(card).width, greaterThan(1500), reason: title);
+    }
+    expect(tester.getSize(find.byType(DataTable)).width, greaterThan(1450));
+  });
+
+  testWidgets('the legacy key dialog is not a second "Providers"', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      appWith(fakeController(), home: const Scaffold(body: AdminScreen())),
+    );
+    await settle(tester);
+
+    expect(find.text('Providers'), findsNothing);
+    await tester.tap(find.text('Legacy provider keys'));
+    await settle(tester);
+    final dialog = find.byType(AlertDialog);
+    expect(
+      find.descendant(of: dialog, matching: find.text('Legacy provider keys')),
+      findsOneWidget,
+    );
+    // points to the real place for accounts and the Claude plan
+    expect(
+      find.descendant(
+        of: dialog,
+        matching: find.textContaining('Providers section'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: dialog,
+        matching: find.textContaining('Claude subscription'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('collections show a readable search type, not the embedder', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      appWith(fakeController(), home: const Scaffold(body: KnowledgeScreen())),
+    );
+    await settle(tester);
+
+    expect(find.text('hashing'), findsNothing);
+    expect(find.text('arachnids · keyword search'), findsOneWidget);
   });
 
   testWidgets('operator sees a requires-admin note instead of admin data', (

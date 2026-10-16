@@ -8,6 +8,14 @@ import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'providers.dart';
 
+/// What a collection's embedder means for search, in words (ADR-013):
+/// `hashing` matches words, `fastembed` matches meaning.
+String searchKind(String embeddingBackend) => switch (embeddingBackend) {
+  'hashing' => 'keyword search',
+  'fastembed' => 'semantic search',
+  _ => '$embeddingBackend search',
+};
+
 class KnowledgeScreen extends ConsumerStatefulWidget {
   const KnowledgeScreen({super.key});
 
@@ -114,7 +122,13 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
                                   selected: c.id == _selectedId,
                                   leading: const Icon(Icons.folder_outlined),
                                   title: Text(c.name),
-                                  subtitle: Text(c.embeddingBackend),
+                                  subtitle: Text(
+                                    [
+                                      if (c.description?.isNotEmpty ?? false)
+                                        c.description!,
+                                      searchKind(c.embeddingBackend),
+                                    ].join(' · '),
+                                  ),
                                   trailing: IconButton(
                                     tooltip: 'Delete collection',
                                     icon: const Icon(Icons.delete_outline),

@@ -47,6 +47,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   String _type = 'auto';
   String _provider = 'ollama';
   String _route = 'node';
+  bool _routeChosen = false; // the user picked a route; never override it
   bool _busy = false;
   List<String> _providers = providerLabels.keys.toList();
 
@@ -207,6 +208,16 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
         !accounts.any((a) => '$_accountPrefix${a.id}' == _route)) {
       _route = 'node'; // the account went away
     }
+    // a configured default model beats the node/Ollama route, which needs a
+    // node with Ollama (ADR-031 routing: personal, then deployment)
+    final routing = ref.watch(llmRoutingProvider).value;
+    final hasDefaultModel = [
+      routing?.routeFor('default', 'personal'),
+      routing?.routeFor('default', 'deployment'),
+    ].any((r) => r != null && r.chain.isNotEmpty);
+    if (!_routeChosen && _route == 'node' && hasDefaultModel) {
+      _route = 'default';
+    }
     final account = accounts
         .where((a) => '$_accountPrefix${a.id}' == _route)
         .firstOrNull;
@@ -237,6 +248,8 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                     }),
             ),
             DropdownButtonFormField<String>(
+              // initialValue is read once; rebuild when the route is reset
+              key: ValueKey('route-$_route'),
               isExpanded: true,
               initialValue: _route,
               decoration: const InputDecoration(labelText: 'Route'),
@@ -253,6 +266,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                   ? null
                   : (value) => setState(() {
                       _route = value!;
+                      _routeChosen = true;
                       _model.clear();
                     }),
             ),
@@ -280,7 +294,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
-                  'External provider: prompt and retrieved context leave your machine. Configure the API key in Admin > Providers.',
+                  'External provider: prompt and retrieved context leave your machine. Configure the API key in Admin > Legacy provider keys.',
                 ),
               ),
             TextField(

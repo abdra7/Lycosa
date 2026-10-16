@@ -100,6 +100,10 @@ class AiProvidersScreen extends ConsumerWidget {
                 accounts: accs.where((a) => a.provider == p.id).toList(),
                 isAdmin: isAdmin,
                 onChanged: () => _refresh(ref),
+                // Pro/Max plans have no API access; point to the plan card
+                planHint:
+                    p.id == 'anthropic' &&
+                    ps.any((other) => other.id == 'claude_subscription'),
               ),
           ],
           _ => const [
@@ -169,12 +173,14 @@ class _ProviderCard extends StatelessWidget {
     required this.accounts,
     required this.isAdmin,
     required this.onChanged,
+    this.planHint = false,
   });
 
   final LlmProvider provider;
   final List<LlmAccount> accounts;
   final bool isAdmin;
   final VoidCallback onChanged;
+  final bool planHint;
 
   String get _kind => switch (provider.kind) {
     'local' => 'Local',
@@ -224,6 +230,24 @@ class _ProviderCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(provider.notes.first, style: muted),
+              ),
+            if (planHint)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: muted?.color),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Have Claude Pro or Max? Those plans include no API '
+                        'access. Use the Claude subscription card instead: it '
+                        'runs Claude Code on your own node with your plan.',
+                        style: muted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             const SizedBox(height: 4),
             if (accounts.isEmpty)
