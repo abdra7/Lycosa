@@ -33,6 +33,13 @@ logger = logging.getLogger("lycosa.agent.claude")
 
 MODEL_ALIASES = ("default", "sonnet", "opus", "haiku")
 DEFAULT_SYSTEM_PROMPT = "You are a helpful assistant."
+# Claude Code still tells the model about its (empty, temporary) working
+# directory; without this the model talks about it (Sprint 14 live QA)
+SCOPE_NOTE = (
+    "You are answering through Lycosa as a plain chat model: you have no tools "
+    "and no files. Ignore the working directory and environment details and do "
+    "not mention them."
+)
 # an API key in the environment would make Claude Code bill the API instead
 # of the user's plan; the user's own sign-in is what this runtime runs on
 STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
@@ -83,17 +90,18 @@ def classify_failure(text: str, status: Any = None) -> str:
 def render_prompt(messages: list[ChatMessage]) -> tuple[str, str]:
     """(system prompt, stdin prompt). Claude Code takes one prompt per run, so
     a multi-turn conversation is passed as a transcript."""
-    system = "\n\n".join(m.content for m in messages if m.role == "system").strip()
+    given = "\n\n".join(m.content for m in messages if m.role == "system").strip()
+    system = f"{given or DEFAULT_SYSTEM_PROMPT}\n\n{SCOPE_NOTE}"
     turns = [m for m in messages if m.role != "system"]
     if len(turns) == 1 and turns[0].role == "user":
-        return system or DEFAULT_SYSTEM_PROMPT, turns[0].content
+        return system, turns[0].content
     parts = [
         "Below is the conversation so far. Reply to the last user message as the assistant.",
         "",
     ]
     for message in turns:
         parts.append(f"<{message.role}>\n{message.content}\n</{message.role}>")
-    return system or DEFAULT_SYSTEM_PROMPT, "\n".join(parts)
+    return system, "\n".join(parts)
 
 
 def _count(value: Any) -> int:
@@ -224,9 +232,7 @@ class ClaudeCodeRuntime:
             yield _error(exc.code)
             return
         async with self._slots:
-            with tempfile.TemporaryDirectory(
-                prefix="lycosa-claude-", ignore_cleanup_errors=True
-            ) as workdir:
+            with tempfile.TemporaryDirectory(prefix="chat-", ignore_cleanup_errors=True) as workdir:
                 async for event in self._run(command, workdir, messages, model):
                     yield event
 

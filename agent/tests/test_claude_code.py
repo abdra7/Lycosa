@@ -70,6 +70,10 @@ async def test_call_runs_locked_down_in_an_empty_directory(record, monkeypatch) 
     assert seen["cwd_entries"] == ["system-prompt.txt"]
     assert seen["api_key_in_env"] is False  # the plan is used, not an API key
     assert not _exists(seen["cwd"])  # temporary directory removed
+    # Claude Code tells the model its working directory; the name must not
+    # suggest a project (Sprint 14 live QA: "the directory is lycosa-claude…")
+    name = Path(seen["cwd"]).name.lower()
+    assert "lycosa" not in name and "claude" not in name
 
 
 async def test_default_model_passes_no_model_flag(record) -> None:
@@ -144,7 +148,9 @@ async def test_status_signed_out(record, monkeypatch) -> None:
 
 def test_render_prompt_single_and_multi_turn() -> None:
     system, prompt = render_prompt([ChatMessage(role="system", content="Be brief."), *user("Hi")])
-    assert (system, prompt) == ("Be brief.", "Hi")
+    assert prompt == "Hi"
+    assert system.startswith("Be brief.")
+    assert "no tools" in system and "working directory" in system
     system, prompt = render_prompt(
         [
             ChatMessage(role="user", content="Hi"),
@@ -152,7 +158,7 @@ def test_render_prompt_single_and_multi_turn() -> None:
             ChatMessage(role="user", content="And now?"),
         ]
     )
-    assert system == "You are a helpful assistant."
+    assert system.startswith("You are a helpful assistant.")
     assert (
         prompt.index("<user>\nHi")
         < prompt.index("<assistant>\nHello!")
