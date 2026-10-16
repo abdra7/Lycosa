@@ -741,6 +741,18 @@ class ApiClient {
     return WorkflowInfo.fromJson(_decode(response));
   }
 
+  /// Deletes the workflow and its run history; 409 while a run is still
+  /// running or waiting for approval (ADR-033).
+  Future<void> deleteWorkflow(String workflowId) async {
+    final response = await _send(
+      () => _http.delete(
+        _uri('/api/v1/workflows/$workflowId'),
+        headers: _headers,
+      ),
+    );
+    if (response.statusCode >= 400) _decode(response);
+  }
+
   /// Runs synchronously until finished or paused at an approval step.
   Future<WorkflowRunInfo> runWorkflow(String workflowId, String input) async {
     final response = await _send(

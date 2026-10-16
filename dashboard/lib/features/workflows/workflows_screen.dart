@@ -60,11 +60,33 @@ class WorkflowsScreen extends ConsumerWidget {
                                 workflow.description ??
                                     '${(workflow.definition['steps'] as List?)?.length ?? 0} steps',
                               ),
-                              trailing: FilledButton.tonalIcon(
-                                icon: const Icon(Icons.play_arrow),
-                                label: const Text('Run'),
-                                onPressed: () =>
-                                    _promptAndRun(context, workflow),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextButton.icon(
+                                    icon: const Icon(Icons.visibility_outlined),
+                                    label: const Text('View'),
+                                    onPressed: () => showDialog<void>(
+                                      context: context,
+                                      builder: (_) =>
+                                          _DefinitionDialog(workflow: workflow),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  FilledButton.tonalIcon(
+                                    icon: const Icon(Icons.play_arrow),
+                                    label: const Text('Run'),
+                                    onPressed: () =>
+                                        _promptAndRun(context, workflow),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    tooltip: 'Delete workflow',
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: () =>
+                                        _delete(context, ref, workflow),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -81,6 +103,116 @@ class WorkflowsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => _RunInputDialog(workflow: workflow),
+    );
+  }
+
+  Future<void> _delete(
+    BuildContext context,
+    WidgetRef ref,
+    WorkflowInfo workflow,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete workflow?'),
+        content: Text(
+          '"${workflow.name}" and its run history will be permanently '
+          'deleted. Tasks its steps ran stay under Tasks. This cannot be '
+          'undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final client = ref.read(activeApiClientProvider);
+    if (client == null) return;
+    // the screen may be gone when the call returns; the container is not
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await client.deleteWorkflow(workflow.id);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Deleted ${workflow.name}')),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.friendly)));
+    } on ControllerUnreachableException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.friendly)));
+    } finally {
+      container.invalidate(workflowsProvider);
+    }
+  }
+}
+
+/// Read-only view of a workflow's definition: the steps in order, then the
+/// exact JSON the controller stores.
+class _DefinitionDialog extends StatelessWidget {
+  const _DefinitionDialog({required this.workflow});
+
+  final WorkflowInfo workflow;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = (workflow.definition['steps'] as List?) ?? const [];
+    final scheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: Text(workflow.name),
+      content: SizedBox(
+        width: 640,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (workflow.description != null) ...[
+                Text(workflow.description!),
+                const SizedBox(height: 8),
+              ],
+              Text(
+                '${steps.length} steps',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              for (final (i, step) in steps.indexed)
+                if (step is Map)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('${i + 1}. ${step['id']} · ${step['kind']}'),
+                  ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  border: Border.all(color: scheme.outline),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: SelectableText(
+                  const JsonEncoder.withIndent(
+                    '  ',
+                  ).convert(workflow.definition),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }
