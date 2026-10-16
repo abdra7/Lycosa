@@ -199,4 +199,91 @@ void main() {
     expect(find.text('Sign in'), findsWidgets);
     expect(store.profiles.single.token, isNull);
   });
+  // Sprint 14 live QA: after the first connection there was no way to add
+  // or pick another controller; the sign-in screen only offered the saved one
+  testWidgets('the sign-in screen can add another controller', (tester) async {
+    final store = InMemoryProfileStore()
+      ..profiles = [
+        ControllerProfile(id: 'p1', name: 'home lab', baseUrl: 'http://c:8000'),
+      ]
+      ..activeId = 'p1';
+    await tester.pumpWidget(appWith(store, fakeController()));
+    await tester.pumpAndSettle();
+    expect(find.text('home lab — http://c:8000'), findsOneWidget);
+
+    await tester.tap(find.text('Use a different controller'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect to a controller'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Controller URL'),
+      'http://qa:18000',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Profile name (optional)'),
+      'QA',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Email'),
+      'admin@lycosa.local',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Password'),
+      'change-me',
+    );
+    await tester.tap(find.text('Connect'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('admin@lycosa.local'), findsOneWidget);
+    expect(find.text('Connect to a controller'), findsNothing);
+    expect(store.profiles.map((p) => p.name), ['home lab', 'QA']);
+    expect(store.activeId, store.profiles.last.id);
+  });
+
+  testWidgets('the sign-in screen switches between saved controllers', (
+    tester,
+  ) async {
+    final store = InMemoryProfileStore()
+      ..profiles = [
+        ControllerProfile(id: 'p1', name: 'home lab', baseUrl: 'http://c:8000'),
+        ControllerProfile(id: 'p2', name: 'QA', baseUrl: 'http://qa:18000'),
+      ]
+      ..activeId = 'p1';
+    await tester.pumpWidget(appWith(store, fakeController()));
+    await tester.pumpAndSettle();
+    expect(find.text('home lab — http://c:8000'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Switch controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('QA — http://qa:18000').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('QA — http://qa:18000'), findsOneWidget);
+    expect(store.activeId, 'p2');
+  });
+
+  testWidgets('the shell can add a controller and cancel back', (tester) async {
+    final store = InMemoryProfileStore()
+      ..profiles = [
+        ControllerProfile(
+          id: 'p1',
+          name: 'lab',
+          baseUrl: 'http://c:8000',
+          token: 'tok-abc',
+        ),
+      ]
+      ..activeId = 'p1';
+    await tester.pumpWidget(appWith(store, fakeController()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Account and controllers'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add controller…'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect to a controller'), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connect to a controller'), findsNothing);
+    expect(find.textContaining('admin@lycosa.local'), findsOneWidget);
+  });
 }

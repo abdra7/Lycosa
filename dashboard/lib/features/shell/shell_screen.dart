@@ -13,6 +13,7 @@ import '../knowledge/knowledge_screen.dart';
 import '../llm/ai_providers_screen.dart';
 import '../nodes/nodes_screen.dart';
 import '../nodes/providers.dart';
+import '../setup/connection_screen.dart';
 import '../tasks/tasks_screen.dart';
 import '../workflows/workflows_screen.dart';
 
@@ -73,7 +74,12 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const LycosaBrand(),
+        // narrow windows with several controllers: shrink, never overflow
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: LycosaBrand(),
+        ),
         actions: [
           if (session.profiles.length > 1)
             DropdownButton<String>(
@@ -90,9 +96,38 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               },
             ),
           const SizedBox(width: 12),
-          Chip(
-            avatar: const Icon(Icons.person_outline, size: 18),
-            label: Text('${principal.displayName} · ${principal.role}'),
+          PopupMenuButton<String>(
+            tooltip: 'Account and controllers',
+            onSelected: (value) {
+              if (value == 'add-controller') {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ConnectionScreen(adding: true),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'add-controller',
+                child: ListTile(
+                  leading: Icon(Icons.add_link),
+                  title: Text('Add controller…'),
+                ),
+              ),
+            ],
+            child: IgnorePointer(
+              child: Chip(
+                avatar: const Icon(Icons.person_outline, size: 18),
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Text(
+                    '${principal.displayName} · ${principal.role}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
           ),
           IconButton(
             tooltip: ref.watch(themeModeProvider) == ThemeMode.dark
