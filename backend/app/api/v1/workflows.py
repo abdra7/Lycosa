@@ -2,10 +2,10 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 
 from app.api.deps import DbDep, Principal, require_roles
-from app.models import RunStatus, Workflow, WorkflowRun
+from app.models import RunStatus, Workflow, WorkflowRun, WorkflowStepRun
 from app.models.user import ROLE_ADMIN, ROLE_OPERATOR
 from app.schemas.workflow import (
     ApproveRequest,
@@ -76,6 +76,52 @@ async def list_workflows(db: DbDep, _principal: OperatorDep) -> list[WorkflowOut
 @router.get("/{workflow_id}", response_model=WorkflowOut)
 async def get_workflow(workflow_id: uuid.UUID, db: DbDep, _principal: OperatorDep) -> WorkflowOut:
     return WorkflowOut.model_validate(await _get_workflow(db, workflow_id))
+
+
+@router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_workflow(
+    workflow_id: uuid.UUID, principal: OperatorDep, request: Request, db: DbDep
+) -> None:
+    """Delete a workflow and its run history (ADR-033). A run that is still
+    executing or waiting on an approval blocks the delete (409), so nobody's
+    pending decision disappears. Tasks the steps ran are kept: they are the
+    task history, and usage rows keep their run id."""
+    workflow = await _get_workflow(db, workflow_id)
+    run_ids = select(WorkflowRun.id).where(WorkflowRun.workflow_id == workflow_id)
+    open_runs = (
+        await db.execute(
+            select(func.count())
+            .select_from(WorkflowRun)
+            .where(
+                WorkflowRun.workflow_id == workflow_id,
+                WorkflowRun.status.in_((RunStatus.RUNNING, RunStatus.PAUSED)),
+            )
+        )
+    ).scalar_one()
+    if open_runs:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Workflow {workflow.name!r} has {open_runs} run(s) still running or "
+                "waiting for approval; approve or reject them first"
+            ),
+        )
+    run_count = (
+        await db.execute(select(func.count()).select_from(run_ids.subquery()))
+    ).scalar_one()
+    await db.execute(delete(WorkflowStepRun).where(WorkflowStepRun.run_id.in_(run_ids)))
+    await db.execute(delete(WorkflowRun).where(WorkflowRun.workflow_id == workflow_id))
+    await db.delete(workflow)
+    await audit(
+        db,
+        action="workflow.delete",
+        **principal.audit_actor(),
+        resource_type="workflow",
+        resource_id=str(workflow_id),
+        detail={"name": workflow.name, "runs": run_count},
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
 
 
 @router.post("/{workflow_id}/run", response_model=RunOut, status_code=status.HTTP_201_CREATED)
