@@ -11,7 +11,9 @@ accounts (ADR-031). Additive: legacy provider routes, task and workflow
 contracts, and stored data are unchanged.
 
 Sprint 14: use your own Claude plan through a node's Claude Code (ADR-032), a
-desktop Chat screen, and fixes from a live end-to-end QA run.
+desktop Chat screen, fixes from a live end-to-end QA run and a desktop
+walkthrough (ADR-033), and leases that clean up work a controller crash
+orphaned (ADR-034…036).
 
 ### Added
 
@@ -32,6 +34,25 @@ desktop Chat screen, and fixes from a live end-to-end QA run.
 - **Live desktop acceptance harness** (`dashboard/integration_test/`) —
   drives the real Windows app against a throwaway controller, with
   screenshots.
+- **Workflow view and delete** (ADR-033) — `DELETE /api/v1/workflows/{id}`
+  (admin or operator) removes a workflow and its run history and keeps the
+  tasks its steps ran. It returns 409 while a run is still running or
+  waiting for approval, and is audited as `workflow.delete`. The desktop
+  Workflows list gains View (the definition, read-only) and Delete (with a
+  confirmation).
+- **Audit actors** (ADR-033) — `GET /api/v1/admin/audit-logs` entries carry
+  `actor_email` and `actor_api_key_name`, so the Admin audit log shows who
+  acted instead of "user".
+- **Crash-orphan leases** (ADR-034…036) — workflow runs, tasks and document
+  ingestions carry a `heartbeat_at` lease. The worker running each one
+  renews it, and the leader fails the ones whose lease lapsed: a crash or
+  restart no longer leaves them `running` forever. Workflow and task reaps
+  are audited (`workflow.run.reaped`, `task.reaped`); ingestion reaps are
+  logged. Migrations `0010`–`0012`. New settings:
+  `WORKFLOW_HEARTBEAT_INTERVAL_SECONDS` (15) and
+  `WORKFLOW_STALE_AFTER_SECONDS` (120), which cover runs and tasks, and
+  `INGEST_HEARTBEAT_INTERVAL_SECONDS` (15) and `INGEST_STALE_AFTER_SECONDS`
+  (120). Startup refuses a stale threshold under 3× its interval.
 
 - **Universal LLM layer** (`backend/app/llm`) — normalized requests, responses,
   streaming events, tool calls, structured output, vision and reasoning over
@@ -92,6 +113,23 @@ desktop Chat screen, and fixes from a live end-to-end QA run.
   - Desktop: node detail lists the Claude runtime a node offers, and a node
     without Ollama explains that instead of offering Install buttons that
     could only fail.
+- Found by driving the desktop app (computer use):
+  - The app could not add or switch controllers after the first one. Sign-in
+    now offers "Use a different controller" and a switch menu, and the
+    account chip has "Add controller…".
+  - Chat answers could mention Claude Code's temporary working folder.
+  - Disabled outlined and text buttons looked enabled.
+  - Revoking an API key needed no confirmation, and could cut a node off with
+    one click.
+  - Admin's "Providers" button is now "Legacy provider keys", so it no longer
+    shares a name with the Providers section. The Admin panels use the full
+    window width.
+  - Tasks starts on the default model route when one is configured.
+  - The Anthropic card points Claude Pro/Max users to Claude subscription.
+  - Knowledge shows "keyword search" or "semantic search" instead of the
+    embedder name.
+- A uvicorn worker respawned more than 600 s after boot could fail document
+  ingestions that other workers were still running (ADR-036).
 - Found in live QA against the real providers: Gemini and xAI report an
   invalid key as HTTP 400 ("API key not valid" / "Incorrect API key
   provided"); these now count as authentication failures, not bad
@@ -103,6 +141,8 @@ desktop Chat screen, and fixes from a live end-to-end QA run.
 
 - CI type-checks `backend/app/llm` with mypy. `cryptography` is now a declared
   backend dependency (it was already installed through `keyring`).
+- The one-shot startup ingest recovery and its `ingest-recovery` lock are
+  replaced by the ingestion lease (ADR-036).
 
 ## [0.4.0] - 2026-07-12
 
