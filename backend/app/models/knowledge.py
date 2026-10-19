@@ -75,6 +75,11 @@ class EmbeddingJob(UUIDPkMixin, Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # lease (ADR-036): renewed while a worker ingests the document; a `running`
+    # job whose lease lapsed was orphaned by a crash and gets reaped
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
 
 class RetrievalRequest(UUIDPkMixin, Base):

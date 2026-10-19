@@ -17,7 +17,7 @@ from app.core.phantom_privacy import PhantomPrivacyMiddleware, is_phantom
 from app.core.ratelimit import RateLimitMiddleware
 from app.db.session import get_runtime_sessionmaker, get_sessionmaker
 from app.llm.vault import get_cipher
-from app.services.knowledge.ingestion import recover_stuck_ingestions
+from app.services.knowledge.ingestion import heartbeat_live_ingestions, reap_stale_ingestions
 from app.services.node import sweep_offline_nodes
 from app.services.orchestrator import heartbeat_live_tasks, reap_stale_tasks
 from app.services.provider_registry import registry
@@ -81,23 +81,39 @@ async def _lease_loop() -> None:
             logger.exception("lease tick failed; will retry next interval")
 
 
+async def _ingest_lease_tick() -> None:
+    """Every worker renews the lease on the ingestions it is running; only the
+    leader reaps `running` embedding jobs whose lease lapsed (ADR-036). This
+    replaces the one-shot startup recovery (E2E-02), which a worker respawned
+    after its lock expired ran against ingestions other workers still had in
+    flight."""
+    interval = get_settings().ingest_heartbeat_interval_seconds
+    async with get_runtime_sessionmaker()() as db:
+        await heartbeat_live_ingestions(db)
+    if not await get_leader_gate().try_lead("ingest-reaper", ttl_seconds=max(15, interval * 3)):
+        return
+    async with get_runtime_sessionmaker()() as db:
+        reaped = await reap_stale_ingestions(db)
+        if reaped:
+            logger.warning("marked %d orphaned document ingestion(s) failed", reaped)
+
+
+async def _ingest_lease_loop() -> None:
+    while True:
+        await asyncio.sleep(get_settings().ingest_heartbeat_interval_seconds)
+        try:
+            await _ingest_lease_tick()
+        except Exception:
+            logger.exception("ingest lease tick failed; will retry next interval")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # a crash mid-ingest strands documents in 'uploaded' / jobs in 'running';
-    # recover them before serving traffic (E2E-02). One worker is enough — at
-    # boot no pipeline is live anywhere, so the first worker to take the lock
-    # recovers for all of them. The TTL exceeds INGEST_TIMEOUT so a worker
-    # respawned mid-flight skips recovery instead of false-flagging documents
-    # other workers are still ingesting (ADR-028).
-    try:
-        if await get_leader_gate().try_lead("ingest-recovery", ttl_seconds=600):
-            async with get_runtime_sessionmaker()() as db:
-                recovered = await recover_stuck_ingestions(db)
-                if recovered:
-                    logger.info("recovered %d document(s) stuck by a mid-ingest restart", recovered)
-    except Exception:
-        logger.exception("stuck-ingestion recovery failed; continuing startup")
-    tasks = [asyncio.create_task(_offline_sweeper()), asyncio.create_task(_lease_loop())]
+    tasks = [
+        asyncio.create_task(_offline_sweeper()),
+        asyncio.create_task(_lease_loop()),
+        asyncio.create_task(_ingest_lease_loop()),
+    ]
     yield
     for task in tasks:
         task.cancel()

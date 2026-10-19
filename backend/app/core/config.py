@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     workflow_heartbeat_interval_seconds: int = Field(default=15, ge=1, le=300)
     workflow_stale_after_seconds: int = Field(default=120, ge=3, le=86400)
 
+    # ingestion lease (ADR-036): every worker renews `heartbeat_at` on the
+    # embedding jobs it is running; the leader fails `running` jobs (and their
+    # `uploaded` documents) whose lease is older than the stale threshold
+    ingest_heartbeat_interval_seconds: int = Field(default=15, ge=1, le=300)
+    ingest_stale_after_seconds: int = Field(default=120, ge=3, le=86400)
+
     # Nonsecret policy. Keys live only in the controller account's OS vault.
     cloud_allowed_node_ids: list[str] = []
     cloud_node_origins: dict[str, str] = {}
@@ -198,6 +204,19 @@ def enforce_workflow_lease(settings: Settings) -> None:
         )
 
 
+def enforce_ingest_lease(settings: Settings) -> None:
+    """Fail fast when the stale threshold allows fewer than three missed
+    heartbeats (ADR-036): one slow tick would then fail documents that are
+    still being ingested."""
+    interval = settings.ingest_heartbeat_interval_seconds
+    if settings.ingest_stale_after_seconds < 3 * interval:
+        raise RuntimeError(
+            f"INGEST_STALE_AFTER_SECONDS must be at least 3x "
+            f"INGEST_HEARTBEAT_INTERVAL_SECONDS ({3 * interval}s), or live "
+            "ingestions can be marked failed"
+        )
+
+
 def enforce_llm_settings(settings: Settings) -> None:
     """Fail fast on a malformed credential key or network list (ADR-031):
     discovering it at first use would strand every stored credential."""
@@ -224,5 +243,6 @@ def get_settings() -> Settings:
     enforce_production_secrets(settings)
     enforce_multiworker_prereqs(settings)
     enforce_workflow_lease(settings)
+    enforce_ingest_lease(settings)
     enforce_llm_settings(settings)
     return settings
