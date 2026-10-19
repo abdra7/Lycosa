@@ -22,7 +22,7 @@ from app.core.config import Settings, enforce_workflow_lease
 from app.core.leader import LeaderGate, set_leader_gate
 from app.core.metrics import WORKFLOW_RUNS, WORKFLOW_STEPS
 from app.db.session import set_sessionmaker_override
-from app.main import _workflow_lease_tick
+from app.main import _lease_tick
 from app.models import AuditLog, RunStatus, StepRunStatus, Workflow, WorkflowRun, WorkflowStepRun
 from app.services import workflow as workflow_service
 from app.services.workflow import (
@@ -312,15 +312,15 @@ async def test_every_worker_renews_but_only_the_leader_reaps(
     server = fakeredis.FakeServer()
     leader = LeaderGate(fakeredis.FakeAsyncRedis(server=server), instance_id="worker-a")
     follower = LeaderGate(fakeredis.FakeAsyncRedis(server=server), instance_id="worker-b")
-    assert await leader.try_lead("workflow-reaper", ttl_seconds=60)
+    assert await leader.try_lead("lease-reaper", ttl_seconds=60)
 
     with workflow_service._executing(mine.id):  # this worker executes `mine`
         set_leader_gate(follower)
-        await _workflow_lease_tick()
+        await _lease_tick()
     assert (await _reload(sessionmaker_, orphan.id)).status == RunStatus.RUNNING
 
     set_leader_gate(leader)
-    await _workflow_lease_tick()
+    await _lease_tick()
 
     assert (await _reload(sessionmaker_, orphan.id)).status == RunStatus.FAILED
     # still running only because the follower's tick renewed its lease

@@ -61,6 +61,11 @@ class Task(UUIDPkMixin, TimestampMixin, Base):
     assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # lease (ADR-035): renewed while a worker executes the task; an unfinished
+    # task whose lease lapsed was orphaned by a crash and gets reaped
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     executions: Mapped[list["TaskExecution"]] = relationship(
         back_populates="task", lazy="selectin", order_by="TaskExecution.attempt"

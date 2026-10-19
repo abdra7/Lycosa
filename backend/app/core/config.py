@@ -76,9 +76,10 @@ class Settings(BaseSettings):
     task_dispatch_timeout_seconds: int = 120
     task_max_attempts: int = 3
 
-    # workflow run lease (ADR-034): every worker renews `heartbeat_at` on the
-    # runs it is executing; the leader fails `running` runs whose lease is
-    # older than the stale threshold (a crash or restart orphaned them)
+    # request-scoped leases (ADR-034 workflow runs, ADR-035 tasks): every
+    # worker renews `heartbeat_at` on the runs and tasks it is executing; the
+    # leader fails unfinished ones whose lease is older than the stale
+    # threshold (a crash or restart orphaned them)
     workflow_heartbeat_interval_seconds: int = Field(default=15, ge=1, le=300)
     workflow_stale_after_seconds: int = Field(default=120, ge=3, le=86400)
 
@@ -186,14 +187,14 @@ def enforce_multiworker_prereqs(settings: Settings) -> None:
 
 def enforce_workflow_lease(settings: Settings) -> None:
     """Fail fast when the stale threshold allows fewer than three missed
-    heartbeats (ADR-034): one slow tick would then reap runs that are still
-    executing."""
+    heartbeats (ADR-034, ADR-035): one slow tick would then reap runs and
+    tasks that are still executing."""
     interval = settings.workflow_heartbeat_interval_seconds
     if settings.workflow_stale_after_seconds < 3 * interval:
         raise RuntimeError(
             f"WORKFLOW_STALE_AFTER_SECONDS must be at least 3x "
             f"WORKFLOW_HEARTBEAT_INTERVAL_SECONDS ({3 * interval}s), or live "
-            "workflow runs can be marked failed"
+            "workflow runs and tasks can be marked failed"
         )
 
 

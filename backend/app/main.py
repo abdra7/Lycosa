@@ -19,6 +19,7 @@ from app.db.session import get_runtime_sessionmaker, get_sessionmaker
 from app.llm.vault import get_cipher
 from app.services.knowledge.ingestion import recover_stuck_ingestions
 from app.services.node import sweep_offline_nodes
+from app.services.orchestrator import heartbeat_live_tasks, reap_stale_tasks
 from app.services.provider_registry import registry
 from app.services.workflow import heartbeat_live_runs, reap_stale_runs
 from app.version import APP_VERSION
@@ -51,27 +52,33 @@ async def _offline_sweeper() -> None:
             logger.exception("offline sweep failed; will retry next interval")
 
 
-async def _workflow_lease_tick() -> None:
-    """Every worker renews the lease on the workflow runs it is executing;
-    only the leader reaps `running` runs whose lease lapsed (ADR-034)."""
+async def _lease_tick() -> None:
+    """Every worker renews the lease on the workflow runs and tasks it is
+    executing; only the leader reaps the ones whose lease lapsed (ADR-034,
+    ADR-035)."""
     interval = get_settings().workflow_heartbeat_interval_seconds
     async with get_runtime_sessionmaker()() as db:
         await heartbeat_live_runs(db)
-    if not await get_leader_gate().try_lead("workflow-reaper", ttl_seconds=max(15, interval * 3)):
+        await heartbeat_live_tasks(db)
+    if not await get_leader_gate().try_lead("lease-reaper", ttl_seconds=max(15, interval * 3)):
         return
     async with get_runtime_sessionmaker()() as db:
         reaped = await reap_stale_runs(db)
         if reaped:
             logger.warning("marked %d orphaned workflow run(s) failed", reaped)
+    async with get_runtime_sessionmaker()() as db:
+        reaped = await reap_stale_tasks(db)
+        if reaped:
+            logger.warning("marked %d orphaned task(s) failed", reaped)
 
 
-async def _workflow_lease_loop() -> None:
+async def _lease_loop() -> None:
     while True:
         await asyncio.sleep(get_settings().workflow_heartbeat_interval_seconds)
         try:
-            await _workflow_lease_tick()
+            await _lease_tick()
         except Exception:
-            logger.exception("workflow lease tick failed; will retry next interval")
+            logger.exception("lease tick failed; will retry next interval")
 
 
 @asynccontextmanager
@@ -90,7 +97,7 @@ async def lifespan(app: FastAPI):
                     logger.info("recovered %d document(s) stuck by a mid-ingest restart", recovered)
     except Exception:
         logger.exception("stuck-ingestion recovery failed; continuing startup")
-    tasks = [asyncio.create_task(_offline_sweeper()), asyncio.create_task(_workflow_lease_loop())]
+    tasks = [asyncio.create_task(_offline_sweeper()), asyncio.create_task(_lease_loop())]
     yield
     for task in tasks:
         task.cancel()
