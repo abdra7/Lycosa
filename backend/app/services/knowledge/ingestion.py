@@ -2,16 +2,25 @@
 
 Synchronous within the request (consistent with ADR-012); every run leaves an
 EmbeddingJob trace, and failures land on the document row instead of a 500.
+
+Because an ingestion lives inside its request, a controller crash orphans its
+document in `uploaded` and its job in `running`. Each worker holds a lease on
+the jobs it is running and renews it on a timer; the leader reaps `running`
+jobs whose lease lapsed (ADR-036).
 """
 
 import asyncio
 import hashlib
-from datetime import UTC, datetime
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
+from app.core.config import get_settings
 from app.models import Document, DocumentStatus, EmbeddingJob, JobStatus, KnowledgeCollection
 from app.services.knowledge.embedder import get_embedder
 from app.services.knowledge.loader import chunk_text, extract_text
@@ -32,37 +41,76 @@ class CollectionDeletedError(RuntimeError):
     """The knowledge collection was deleted while its document was ingesting."""
 
 
-RESTART_RECOVERY_ERROR = (
-    "ingestion was interrupted by a controller restart — re-upload the document"
+ORPHANED_INGEST_ERROR = (
+    "ingestion was interrupted: no controller worker is ingesting this document "
+    "any more (a crash or restart) — re-upload the document"
 )
 
+# Embedding jobs this process is running right now (ADR-036). An ingestion
+# only runs inside its upload request, so this set is exactly this worker's
+# share of the live ingestions.
+_live_jobs: set[uuid.UUID] = set()
 
-async def recover_stuck_ingestions(db: AsyncSession) -> int:
-    """Startup recovery (E2E-02): a process crash mid-ingest leaves documents
-    'uploaded' with their job 'running' forever — the in-request timeout dies
-    with the process. At startup no pipeline can be live in this process, so
-    anything still in those states is orphaned: mark it failed with a
-    re-upload hint. Returns how many documents were recovered."""
-    stuck_documents = list(
-        (
-            await db.execute(select(Document).where(Document.status == DocumentStatus.UPLOADED))
-        ).scalars()
+
+@contextmanager
+def _ingesting(job_id: uuid.UUID) -> Iterator[None]:
+    """Hold the job's lease while this request ingests its document."""
+    _live_jobs.add(job_id)
+    try:
+        yield
+    finally:
+        _live_jobs.discard(job_id)
+
+
+async def heartbeat_live_ingestions(db: AsyncSession) -> int:
+    """Renew the lease on every embedding job this worker is running
+    (ADR-036). Returns how many leases were renewed."""
+    if not _live_jobs:
+        return 0
+    result = await db.execute(
+        update(EmbeddingJob)
+        .where(EmbeddingJob.id.in_(list(_live_jobs)), EmbeddingJob.status == JobStatus.RUNNING)
+        .values(heartbeat_at=datetime.now(UTC))
+        .execution_options(synchronize_session=False)
     )
-    for document in stuck_documents:
-        document.status = DocumentStatus.FAILED
-        document.error = RESTART_RECOVERY_ERROR
-    stuck_jobs = list(
-        (
-            await db.execute(select(EmbeddingJob).where(EmbeddingJob.status == JobStatus.RUNNING))
-        ).scalars()
-    )
-    for job in stuck_jobs:
-        job.status = JobStatus.FAILED
-        job.error = RESTART_RECOVERY_ERROR
-        job.finished_at = datetime.now(UTC)
-    if stuck_documents or stuck_jobs:
+    await db.commit()
+    return result.rowcount
+
+
+async def reap_stale_ingestions(db: AsyncSession) -> int:
+    """Fail `running` embedding jobs whose lease lapsed, and their `uploaded`
+    documents (ADR-036). The worker ingesting them crashed or restarted, and
+    the in-request timeout died with it, so they would otherwise hang
+    forever. A job some worker is still running renews its lease every
+    heartbeat interval and is never picked, however long it runs. Rows from
+    before the lease fall back to `started_at`. Returns how many ingestions
+    were reaped."""
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(seconds=get_settings().ingest_stale_after_seconds)
+    last_beat = func.coalesce(EmbeddingJob.heartbeat_at, EmbeddingJob.started_at)
+    stale = (EmbeddingJob.status == JobStatus.RUNNING, last_beat < cutoff)
+
+    reaped = 0
+    for job in (await db.execute(select(EmbeddingJob).where(*stale))).scalars().all():
+        # compare-and-set: a heartbeat that lands after the select keeps the job
+        claimed = await db.execute(
+            update(EmbeddingJob)
+            .where(EmbeddingJob.id == job.id, *stale)
+            .values(status=JobStatus.FAILED, error=ORPHANED_INGEST_ERROR, finished_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            continue
+        await db.execute(
+            update(Document)
+            .where(Document.id == job.document_id, Document.status == DocumentStatus.UPLOADED)
+            .values(status=DocumentStatus.FAILED, error=ORPHANED_INGEST_ERROR)
+            .execution_options(synchronize_session=False)
+        )
+        reaped += 1
+    if reaped:
         await db.commit()
-    return len(stuck_documents)
+    return reaped
 
 
 async def _extract_embed_store(
@@ -118,7 +166,19 @@ async def ingest_document(
     job = EmbeddingJob(document_id=document.id, status=JobStatus.RUNNING)
     db.add(job)
     await db.commit()
+    with _ingesting(job.id):
+        return await _run_pipeline(db, collection, document, job, filename, data)
 
+
+async def _run_pipeline(
+    db: AsyncSession,
+    collection: KnowledgeCollection,
+    document: Document,
+    job: EmbeddingJob,
+    filename: str,
+    data: bytes,
+) -> Document:
+    """Run the pipeline under its timeout and record the terminal state."""
     try:
         chunk_count = await asyncio.wait_for(
             _extract_embed_store(document, collection, filename, data),

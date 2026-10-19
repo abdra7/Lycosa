@@ -49,6 +49,22 @@ serves its execution API on port `8010`.
 | `LYCOSA_ADVERTISE_URL` | autodetected LAN IP | URL the controller uses to reach this agent |
 | `LYCOSA_DISCOVERY_ENABLED` | `true` | Announce this agent over mDNS for the dashboard LAN scan |
 | `LYCOSA_OLLAMA_URL` | `http://localhost:11434` | Local Ollama instance |
+| `LYCOSA_CLAUDE_SUBSCRIPTION` | `false` | Run this machine's own Claude Code for its owner (see below) |
+| `LYCOSA_CLAUDE_SUBSCRIPTION_OWNER` | — | The Lycosa user email this machine's Claude plan serves (required when enabled) |
+| `LYCOSA_CLAUDE_BINARY` | `claude` | Claude Code executable |
+| `LYCOSA_CLAUDE_TIMEOUT_SECONDS` | `300` | Per-call limit; keep the controller's `LLM_REQUEST_TIMEOUT_SECONDS` at least this high |
+| `LYCOSA_CLAUDE_MAX_CONCURRENCY` | `1` | Calls run at once (plans assume individual use) |
+
+### Claude subscription runtime
+
+With `LYCOSA_CLAUDE_SUBSCRIPTION=true` the agent runs the machine's own,
+unmodified Claude Code for one Lycosa user, so they can use their Claude plan
+in Lycosa. Sign in first with `claude auth login` on this machine; the agent
+only reads `claude auth status` and never handles a Claude credential. Each
+call runs `claude -p` in safe mode with no tools, no MCP servers and no
+saved session, in an empty temporary directory, with `ANTHROPIC_API_KEY`
+removed so the plan is used. The agent refuses requests for any other
+Lycosa user.
 
 ## Run as a service (systemd)
 

@@ -3,14 +3,22 @@
 v1 dispatch is synchronous within the request (ADR-012): the caller gets the
 finished task back. Each attempt is persisted as a TaskExecution before the
 network call, so the trace survives even a controller crash mid-dispatch.
+
+Because a task lives inside a request, a controller crash or restart orphans
+it unfinished. Each worker holds a lease on the tasks it is executing and
+renews it on a timer; the leader reaps unfinished tasks whose lease lapsed
+(ADR-035, the ADR-034 pattern).
 """
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.agenturl import normalize_agent_url
@@ -45,6 +53,31 @@ _GROUNDING_INSTRUCTION = (
     "Do not use any outside or prior knowledge. If the context does not "
     f'contain the answer, reply with exactly this sentence: "{GROUNDED_REFUSAL}"\n\n'
 )
+
+
+STALE_TASK_ERROR = (
+    "orphaned: no controller worker is executing this task any more (a crash or "
+    "restart, or an unhandled error mid-dispatch); marked failed by the stale-task reaper"
+)
+
+# tasks have no queue: one in these states is either inside a submit_task
+# call right now or orphaned
+_UNFINISHED = (TaskStatus.QUEUED, TaskStatus.ASSIGNED, TaskStatus.RUNNING)
+
+# Tasks this process is executing right now (ADR-035). A task only executes
+# inside the submit_task call that created it, so this set is exactly this
+# worker's share of the unfinished tasks.
+_live_tasks: set[uuid.UUID] = set()
+
+
+@contextmanager
+def _executing(task_id: uuid.UUID) -> Iterator[None]:
+    """Hold the task's lease while this request executes it."""
+    _live_tasks.add(task_id)
+    try:
+        yield
+    finally:
+        _live_tasks.discard(task_id)
 
 
 def _grounded_prompt(context_text: str, task_prompt: str) -> str:
@@ -157,7 +190,18 @@ async def submit_task(
         detail={"type": task_type.value},
     )
     await db.commit()
+    with _executing(task.id):
+        return await _execute(db, task, body, task_type, created_by_user_id, created_by_api_key_id)
 
+
+async def _execute(
+    db: AsyncSession,
+    task: Task,
+    body: TaskCreate,
+    task_type: TaskType,
+    created_by_user_id: uuid.UUID | None,
+    created_by_api_key_id: uuid.UUID | None,
+) -> Task:
     if body.provider != "ollama" and body.requires_privacy:
         return await _finish(
             db,
@@ -387,6 +431,7 @@ async def _finish(
     status: TaskStatus,
     result: dict[str, Any] | None = None,
     error: str | None = None,
+    observe_duration: bool = True,
 ) -> Task:
     task.status = status
     task.result = result
@@ -406,12 +451,75 @@ async def _finish(
         return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
     TASKS_TOTAL.labels(task.type.value, status.value).inc()
-    TASK_DURATION.labels(task.type.value).observe(
-        (as_utc(task.finished_at) - as_utc(task.queued_at)).total_seconds()
-    )
+    if observe_duration:
+        TASK_DURATION.labels(task.type.value).observe(
+            (as_utc(task.finished_at) - as_utc(task.queued_at)).total_seconds()
+        )
     get_event_bus().publish(
         "task.finished",
         {"task_id": str(task.id), "status": status.value, "error": error},
     )
     task_id_var.set(None)
     return task
+
+
+async def heartbeat_live_tasks(db: AsyncSession) -> int:
+    """Renew the lease on every task this worker is executing (ADR-035).
+    Returns how many leases were renewed."""
+    if not _live_tasks:
+        return 0
+    result = await db.execute(
+        update(Task)
+        .where(Task.id.in_(list(_live_tasks)), Task.status.in_(_UNFINISHED))
+        .values(heartbeat_at=datetime.now(UTC))
+        .execution_options(synchronize_session=False)
+    )
+    await db.commit()
+    return result.rowcount
+
+
+async def reap_stale_tasks(db: AsyncSession) -> int:
+    """Fail unfinished tasks whose lease lapsed (ADR-035). The worker
+    executing them crashed or restarted, so they would otherwise stay
+    `queued` or `running` forever. A task that a worker is still executing
+    renews its lease every heartbeat interval and is never picked, however
+    long its dispatch takes. Rows from before the lease fall back to
+    `queued_at`. Returns how many tasks were reaped."""
+    stale_after = get_settings().workflow_stale_after_seconds
+    cutoff = datetime.now(UTC) - timedelta(seconds=stale_after)
+    last_beat = func.coalesce(Task.heartbeat_at, Task.queued_at)
+    stale = (Task.status.in_(_UNFINISHED), last_beat < cutoff)
+
+    reaped = 0
+    for task in (await db.execute(select(Task).where(*stale))).scalars().all():
+        stuck_in = task.status
+        # compare-and-set: a heartbeat that lands after the select keeps the task
+        claimed = await db.execute(
+            update(Task)
+            .where(Task.id == task.id, *stale)
+            .values(status=TaskStatus.FAILED)
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            continue
+        for execution in task.executions:
+            if execution.status == ExecutionStatus.RUNNING:
+                execution.status = ExecutionStatus.FAILED
+                execution.error = STALE_TASK_ERROR
+                execution.finished_at = datetime.now(UTC)
+        await audit(
+            db,
+            action="task.reaped",
+            resource_type="task",
+            resource_id=str(task.id),
+            detail={
+                "status": stuck_in.value,
+                "node_id": str(task.node_id) if task.node_id else None,
+                "last_heartbeat": (task.heartbeat_at or task.queued_at).isoformat(),
+                "stale_after_seconds": stale_after,
+            },
+        )
+        # its wall time would be the downtime, so it stays out of the histogram
+        await _finish(db, task, TaskStatus.FAILED, error=STALE_TASK_ERROR, observe_duration=False)
+        reaped += 1
+    return reaped

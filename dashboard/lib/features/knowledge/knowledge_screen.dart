@@ -8,6 +8,14 @@ import '../../core/brand.dart';
 import '../../core/session.dart';
 import 'providers.dart';
 
+/// What a collection's embedder means for search, in words (ADR-013):
+/// `hashing` matches words, `fastembed` matches meaning.
+String searchKind(String embeddingBackend) => switch (embeddingBackend) {
+  'hashing' => 'keyword search',
+  'fastembed' => 'semantic search',
+  _ => '$embeddingBackend search',
+};
+
 class KnowledgeScreen extends ConsumerStatefulWidget {
   const KnowledgeScreen({super.key});
 
@@ -40,9 +48,11 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
+    // the screen may be gone when the call returns; the container is not
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await client.deleteCollection(id);
       if (_selectedId == id && mounted) {
@@ -64,7 +74,7 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
         ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } finally {
-      ref.invalidate(collectionsProvider);
+      container.invalidate(collectionsProvider);
     }
   }
 
@@ -112,7 +122,13 @@ class _KnowledgeScreenState extends ConsumerState<KnowledgeScreen> {
                                   selected: c.id == _selectedId,
                                   leading: const Icon(Icons.folder_outlined),
                                   title: Text(c.name),
-                                  subtitle: Text(c.embeddingBackend),
+                                  subtitle: Text(
+                                    [
+                                      if (c.description?.isNotEmpty ?? false)
+                                        c.description!,
+                                      searchKind(c.embeddingBackend),
+                                    ].join(' · '),
+                                  ),
                                   trailing: IconButton(
                                     tooltip: 'Delete collection',
                                     icon: const Icon(Icons.delete_outline),
@@ -172,6 +188,7 @@ class _CreateCollectionDialogState
   Future<void> _create() async {
     final client = ref.read(activeApiClientProvider);
     if (client == null || _name.text.trim().isEmpty) return;
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await client.createCollection(
         _name.text.trim(),
@@ -179,10 +196,10 @@ class _CreateCollectionDialogState
             ? null
             : _description.text.trim(),
       );
-      ref.invalidate(collectionsProvider);
+      container.invalidate(collectionsProvider);
       if (mounted) Navigator.of(context).pop();
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) setState(() => _error = e.friendly);
     }
   }
 
@@ -265,7 +282,9 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
     final file = picked?.files.singleOrNull;
     if (file == null || file.bytes == null) return;
 
-    setState(() => _uploading = true);
+    if (mounted) {
+      setState(() => _uploading = true);
+    }
     try {
       final document = await client.uploadDocument(
         widget.collectionId,
@@ -277,7 +296,7 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
           SnackBar(
             content: Text(
               document.status == 'embedded'
-                  ? '${document.filename}: embedded as ${document.chunkCount} chunks'
+                  ? '${document.filename}: embedded as ${chunksLabel(document.chunkCount)}'
                   : '${document.filename}: ${document.status} — ${document.error}',
             ),
           ),
@@ -363,7 +382,7 @@ class _CollectionDetailState extends ConsumerState<_CollectionDetail> {
                           title: Text(d.filename),
                           subtitle: Text(
                             d.status == 'embedded'
-                                ? '${d.chunkCount} chunks · ${(d.sizeBytes / 1024).toStringAsFixed(1)} KB'
+                                ? '${chunksLabel(d.chunkCount)} · ${(d.sizeBytes / 1024).toStringAsFixed(1)} KB'
                                 : d.error ?? d.status,
                           ),
                         ),
@@ -415,9 +434,13 @@ class _PlaygroundState extends ConsumerState<_Playground> {
         _query.text.trim(),
         collection: _scopeToCollection ? widget.collectionName : null,
       );
-      setState(() => _chunks = chunks);
+      if (mounted) {
+        setState(() => _chunks = chunks);
+      }
     } on ApiException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -499,3 +522,5 @@ class _PlaygroundState extends ConsumerState<_Playground> {
     );
   }
 }
+
+String chunksLabel(int count) => count == 1 ? '1 chunk' : '$count chunks';

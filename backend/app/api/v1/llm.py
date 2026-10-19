@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DbDep, Principal, require_roles
 from app.db.session import get_runtime_sessionmaker
-from app.llm import catalog, discovery, gateway, oauth, routing, vault
+from app.llm import catalog, discovery, gateway, node_runtime, oauth, routing, vault
 from app.llm.accounts import (
     AccountError,
     Actor,
@@ -33,10 +33,12 @@ from app.llm.accounts import (
     visible_accounts,
 )
 from app.llm.adapters.base import health_from_error
+from app.llm.adapters.claude_subscription import ClaudeSubscriptionAdapter
 from app.llm.errors import LLMError
 from app.llm.spec import AuthMethod
 from app.llm.types import LLMRequest, Message
 from app.models.llm import LLMProviderAccount, LLMRoutingPolicy, LLMUsage
+from app.models.node import Node
 from app.models.user import ROLE_ADMIN, ROLE_OPERATOR
 from app.schemas.llm import (
     AccountCreate,
@@ -46,6 +48,7 @@ from app.schemas.llm import (
     AccountUpdate,
     ChatRequest,
     ChatResponse,
+    ClaudeNodeOut,
     HealthOut,
     LLMTarget,
     ModelListOut,
@@ -79,12 +82,14 @@ def _http(exc: AccountError) -> HTTPException:
 
 
 async def _out(db: AsyncSession, account: LLMProviderAccount, actor: Actor) -> AccountOut:
+    node = await db.get(Node, account.node_id) if account.node_id else None
     return account_out(
         account,
         mine=actor.user_id is not None and account.owner_user_id == actor.user_id,
         usable=can_use(account, actor),
         manageable=can_manage(account, actor),
         has_key=await vault.has_credential(db, account.id),
+        node_name=node.name if node is not None else None,
     )
 
 
@@ -122,6 +127,60 @@ async def get_provider(provider: str, _principal: OperatorDep) -> ProviderOut:
     return _provider_out(provider)
 
 
+# --- Claude subscription nodes (ADR-032) -------------------------------------------
+
+CLAUDE_STATUS_TIMEOUT_SECONDS = 30.0
+
+
+async def _claude_node(node: Node, email: str) -> ClaudeNodeOut:
+    base = ClaudeNodeOut(
+        node_id=node.id, node_name=node.name, node_status=str(node.status), reachable=False
+    )
+    adapter = catalog.get("claude_subscription")
+    assert isinstance(adapter, ClaudeSubscriptionAdapter)
+    try:
+        conn = node_runtime.node_connection(
+            node,
+            provider="claude_subscription",
+            owner_email=email,
+            timeout=CLAUDE_STATUS_TIMEOUT_SECONDS,
+        )
+        status_ = await asyncio.wait_for(adapter.node_status(conn), CLAUDE_STATUS_TIMEOUT_SECONDS)
+    except LLMError as exc:
+        return base.model_copy(update={"detail": exc.public_message})
+    except TimeoutError:
+        return base.model_copy(update={"detail": "The node did not answer in time"})
+    try:
+        return ClaudeNodeOut.model_validate(
+            {
+                **{k: v for k, v in status_.items() if k in ClaudeNodeOut.model_fields},
+                "plan_usage": (status_.get("plan_usage") or {}).get("windows") or {},
+                "node_id": node.id,
+                "node_name": node.name,
+                "node_status": str(node.status),
+                "reachable": True,
+            }
+        )
+    except ValidationError:
+        return base.model_copy(update={"reachable": True, "detail": "Unexpected node reply"})
+
+
+@router.get("/claude-subscription/nodes", response_model=list[ClaudeNodeOut])
+async def claude_subscription_nodes(principal: OperatorDep, db: DbDep) -> list[ClaudeNodeOut]:
+    """Nodes offering the Claude subscription runtime, each asked live
+    whether it is installed, signed in and serving the calling user."""
+    if principal.type != "user" or not principal.email:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Claude subscription accounts belong to a signed-in user"
+        )
+    nodes = [
+        n
+        for n in (await db.execute(select(Node).order_by(Node.name))).scalars()
+        if node_runtime.offers_claude(n)
+    ]
+    return list(await asyncio.gather(*(_claude_node(n, principal.email) for n in nodes)))
+
+
 # --- accounts ----------------------------------------------------------------------
 
 
@@ -148,6 +207,7 @@ async def connect_account(body: AccountCreate, principal: OperatorDep, db: DbDep
             scope=body.scope,
             base_url=body.base_url,
             api_key=key,
+            node_id=body.node_id,
         )
     except AccountError as exc:
         raise _http(exc) from None

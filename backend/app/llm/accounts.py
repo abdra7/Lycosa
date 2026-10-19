@@ -19,13 +19,15 @@ from urllib.parse import urlsplit
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.agenturl import InvalidAgentUrl, normalize_agent_url
 from app.core.config import get_settings
-from app.llm import catalog, vault
+from app.llm import catalog, node_runtime, vault
 from app.llm.adapters.base import health_from_error
 from app.llm.errors import (
     AuthenticationError,
     EndpointNotAllowedError,
     LLMError,
+    NodeUnavailableError,
     PermissionDeniedError,
     QuotaExceededError,
 )
@@ -44,7 +46,8 @@ from app.llm.netpolicy import (
 from app.llm.spec import AuthMethod, BaseUrlMode, ProviderKind, ProviderSpec
 from app.llm.types import HealthStatus, LLMRequest, Message
 from app.models.llm import LLMProviderAccount, LLMRoutingPolicy
-from app.models.user import ROLE_ADMIN
+from app.models.node import Node
+from app.models.user import ROLE_ADMIN, User
 from app.services.audit import audit
 
 MAX_ACCOUNTS_PER_OWNER = 50
@@ -131,6 +134,8 @@ def address_policy(account: LLMProviderAccount, *, private_only: bool = False) -
     spec = catalog.spec(account.provider)
     if spec.kind in (ProviderKind.CLOUD, ProviderKind.AGGREGATOR):
         return AddressPolicy(public_ok=False, label="none") if private_only else PUBLIC_ONLY
+    if spec.node_bound:
+        return node_runtime.node_policy(private_only=private_only)
     settings = get_settings()
     networks = parse_networks(
         settings.llm_local_networks
@@ -229,6 +234,7 @@ async def create_account(
     base_url: str | None = None,
     api_key: str | None = None,
     auth_method: AuthMethod | None = None,
+    node_id: uuid.UUID | None = None,
 ) -> LLMProviderAccount:
     if not catalog.known(provider):
         raise AccountError(422, "Unknown provider")
@@ -237,14 +243,26 @@ async def create_account(
         raise AccountError(403, "Only administrators manage deployment accounts")
     if scope == SCOPE_PERSONAL and actor.user_id is None:
         raise AccountError(403, "API-key callers cannot own personal accounts")
-    method = auth_method or (AuthMethod.API_KEY if api_key else AuthMethod.NONE)
+    if spec.node_bound and scope != SCOPE_PERSONAL:
+        # Anthropic does not allow one person's plan to serve other users (ADR-032)
+        raise AccountError(
+            422, f"{spec.display_name} accounts are personal: a plan may serve only its owner"
+        )
+    if spec.node_bound and base_url is not None:
+        raise AccountError(422, f"{spec.display_name} runs on a node and takes no endpoint URL")
+    if not spec.node_bound and node_id is not None:
+        raise AccountError(422, "Only node-run providers are bound to a node")
+    if api_key:
+        method = auth_method or AuthMethod.API_KEY
+    else:
+        method = auth_method or (AuthMethod.NODE_SIGN_IN if spec.node_bound else AuthMethod.NONE)
     if method not in spec.auth_methods:
         raise AccountError(
             422, f"{spec.display_name} does not support {method.value} authentication"
         )
     if method == AuthMethod.NONE and api_key:
         raise AccountError(422, "An API key was supplied for an unauthenticated account")
-    if method != AuthMethod.NONE:
+    if method in (AuthMethod.API_KEY, AuthMethod.OAUTH_PKCE):
         if not api_key:
             raise AccountError(422, f"{spec.display_name} needs an API key")
         try:
@@ -271,7 +289,8 @@ async def create_account(
     if any(a.provider == provider and a.label == label for a in existing):
         raise AccountError(409, "An account with this provider and label already exists")
 
-    url = resolve_base_url(spec, base_url)
+    node = await _bound_node(db, spec, node_id) if spec.node_bound else None
+    url = _node_url(node) if node is not None else resolve_base_url(spec, base_url)
     account = LLMProviderAccount(
         owner_user_id=owner,
         provider=provider,
@@ -281,12 +300,17 @@ async def create_account(
         status="active",
         api_access="unknown",
         created_by_user_id=actor.user_id,
+        node_id=node.id if node is not None else None,
     )
     if owner is not None:
-        from app.models import User
-
         account.owner = await db.get(User, owner)
-    account.is_local = await _locality(spec, url, address_policy(account))
+    if node is not None:
+        account.node = node
+        # the node runs the call, but the model may sit outside the LAN
+        # (Claude Code calls Anthropic): never a private/offline target
+        account.is_local = False
+    else:
+        account.is_local = await _locality(spec, url, address_policy(account))
     if api_key and url.startswith("http://") and not account.is_local:
         raise AccountError(422, "API keys need HTTPS unless the endpoint is on a local network")
     db.add(account)
@@ -299,12 +323,36 @@ async def create_account(
         actor_api_key_id=actor.api_key_id,
         resource_type="llm_account",
         resource_id=str(account.id),
-        detail=_audit_detail(account, auth_method=method.value),
+        detail=_audit_detail(
+            account,
+            auth_method=method.value,
+            **({"node_id": str(node.id)} if node is not None else {}),
+        ),
     )
     await db.flush()
     if api_key:
         await vault.store_credential(db, account, api_key)
     return account
+
+
+async def _bound_node(db: AsyncSession, spec: ProviderSpec, node_id: uuid.UUID | None) -> Node:
+    node = await db.get(Node, node_id) if node_id is not None else None
+    if node is None:
+        raise AccountError(422, "Choose the node that runs this account")
+    if not node_runtime.offers_provider(node, spec.id):
+        raise AccountError(
+            422,
+            f"This node does not offer {spec.display_name}; enable it on the node "
+            "(LYCOSA_CLAUDE_SUBSCRIPTION=true) and restart its agent",
+        )
+    return node
+
+
+def _node_url(node: Node) -> str:
+    try:
+        return normalize_agent_url(node.agent_url or "")
+    except InvalidAgentUrl:
+        raise AccountError(422, "The node has not registered a reachable agent") from None
 
 
 async def update_account(
@@ -320,6 +368,10 @@ async def update_account(
     if not can_manage(account, actor):
         raise AccountError(403, "Not permitted for this account")
     spec = catalog.spec(account.provider)
+    if spec.node_bound and base_url is not None:
+        raise AccountError(
+            422, f"{spec.display_name} follows its node; there is no endpoint to change"
+        )
     changed: list[str] = []
     if label is not None and label != account.label:
         clash = (
@@ -349,7 +401,7 @@ async def update_account(
             account.api_access = "unknown"
             changed.append("base_url")
     if api_key is not None:
-        if account.auth_method == AuthMethod.NONE.value:
+        if account.auth_method in (AuthMethod.NONE.value, AuthMethod.NODE_SIGN_IN.value):
             raise AccountError(422, "This account does not use an API key")
         try:
             vault.validate_secret(api_key)
@@ -413,6 +465,19 @@ async def delete_account(db: AsyncSession, actor: Actor, account: LLMProviderAcc
 async def connection_for(
     db: AsyncSession, account: LLMProviderAccount, *, private_only: bool = False
 ) -> Connection:
+    if catalog.spec(account.provider).node_bound:
+        # no stored credential: the node's own sign-in runs the call, and only
+        # for the account's owner (ADR-032)
+        node = await db.get(Node, account.node_id) if account.node_id else None
+        owner = await db.get(User, account.owner_user_id) if account.owner_user_id else None
+        if owner is None:
+            raise NodeUnavailableError(provider=account.provider)
+        return node_runtime.node_connection(
+            node,
+            provider=account.provider,
+            owner_email=owner.email,
+            timeout=float(get_settings().llm_request_timeout_seconds),
+        )
     credential = await vault.load_credential(db, account)
     return Connection(
         provider=account.provider,

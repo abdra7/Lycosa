@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lycosa_dashboard/core/brand.dart';
 import 'package:lycosa_dashboard/core/theme_mode.dart';
 
 class ThrowingThemeModeStore implements ThemeModeStore {
@@ -68,5 +69,18 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(store.value, 'light');
     });
+  });
+  test('disabled outlined and text buttons look disabled', () {
+    // Sprint 14 live QA: a disabled Install button looked clickable
+    for (final theme in [LycosaTheme.light(), LycosaTheme.dark()]) {
+      for (final style in [
+        theme.outlinedButtonTheme.style!,
+        theme.textButtonTheme.style!,
+      ]) {
+        final enabled = style.foregroundColor!.resolve({});
+        final disabled = style.foregroundColor!.resolve({WidgetState.disabled});
+        expect(disabled, isNot(enabled));
+      }
+    }
   });
 }

@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../../core/api_exception.dart';
 import '../../core/brand.dart';
 import '../../core/session.dart';
+import 'claude_subscription_dialog.dart';
 import 'connect_account_dialog.dart';
 import 'llm_dialogs.dart';
 import 'providers.dart';
@@ -99,6 +100,10 @@ class AiProvidersScreen extends ConsumerWidget {
                 accounts: accs.where((a) => a.provider == p.id).toList(),
                 isAdmin: isAdmin,
                 onChanged: () => _refresh(ref),
+                // Pro/Max plans have no API access; point to the plan card
+                planHint:
+                    p.id == 'anthropic' &&
+                    ps.any((other) => other.id == 'claude_subscription'),
               ),
           ],
           _ => const [
@@ -168,25 +173,29 @@ class _ProviderCard extends StatelessWidget {
     required this.accounts,
     required this.isAdmin,
     required this.onChanged,
+    this.planHint = false,
   });
 
   final LlmProvider provider;
   final List<LlmAccount> accounts;
   final bool isAdmin;
   final VoidCallback onChanged;
+  final bool planHint;
 
   String get _kind => switch (provider.kind) {
     'local' => 'Local',
     'aggregator' => 'Aggregator',
     'compatible' => 'Compatible',
+    'node' => 'Your plan, on your node',
     _ => 'Cloud',
   };
 
   Future<void> _connect(BuildContext context) async {
     final added = await showDialog<bool>(
       context: context,
-      builder: (_) =>
-          ConnectAccountDialog(provider: provider, isAdmin: isAdmin),
+      builder: (_) => provider.isNodeRun
+          ? ClaudeSubscriptionDialog(provider: provider)
+          : ConnectAccountDialog(provider: provider, isAdmin: isAdmin),
     );
     if (added == true) onChanged();
   }
@@ -217,6 +226,29 @@ class _ProviderCard extends StatelessWidget {
               ],
             ),
             CapabilityChips(provider.capabilities),
+            if (provider.isNodeRun && provider.notes.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(provider.notes.first, style: muted),
+              ),
+            if (planHint)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: muted?.color),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Have Claude Pro or Max? Those plans include no API '
+                        'access. Use the Claude subscription card instead: it '
+                        'runs Claude Code on your own node with your plan.',
+                        style: muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 4),
             if (accounts.isEmpty)
               Row(
@@ -276,11 +308,17 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
     };
   }
 
-  String get _accessText => switch (_a.apiAccess) {
-    'available' => 'API access: available',
-    'unavailable' => 'API access: unavailable',
-    _ => 'API access: not tested yet',
-  };
+  String get _accessText => _a.isNodeRun
+      ? switch (_a.apiAccess) {
+          'available' => 'Claude plan: ready',
+          'unavailable' => 'Claude plan: needs attention on the node',
+          _ => 'Claude plan: not tested yet',
+        }
+      : switch (_a.apiAccess) {
+          'available' => 'API access: available',
+          'unavailable' => 'API access: unavailable',
+          _ => 'API access: not tested yet',
+        };
 
   Future<void> _test() async {
     final client = ref.read(activeApiClientProvider);
@@ -294,9 +332,12 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
         builder: (_) => AlertDialog(
           title: Text('Test · ${_a.label}'),
           content: Text(switch (result.status) {
+            'ready' when _a.isNodeRun =>
+              result.detail.isEmpty ? 'Ready.' : '${result.detail}.',
             'ready' =>
               'Connected. ${result.modelsAvailable ?? 0} model(s) available'
                   '${result.latencyMs != null ? ' (${result.latencyMs} ms)' : ''}.',
+            'unauthorized' when _a.isNodeRun => result.detail,
             'unauthorized' =>
               '$apiAccessUnavailableMessage'
                   '${result.subscriptionNote != null ? '\n\n${result.subscriptionNote}' : ''}'
@@ -342,9 +383,13 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Disconnect ${_a.label}?'),
-        content: const Text(
-          'The stored credential is deleted and the account is removed from '
-          'every route. Revoke the key at the provider as well.',
+        content: Text(
+          _a.isNodeRun
+              ? 'The connection is removed from every route. Claude Code on '
+                    'the node stays signed in; run `claude auth logout` there '
+                    'to sign it out.'
+              : 'The stored credential is deleted and the account is removed '
+                    'from every route. Revoke the key at the provider as well.',
         ),
         actions: [
           TextButton(
@@ -380,6 +425,7 @@ class _AccountRowState extends ConsumerState<_AccountRow> {
       _a.isShared ? 'Shared' : (_a.mine ? 'Personal' : 'Another user\'s'),
       if (_a.isLocal) 'Local',
       if (_a.authMethod == 'oauth_pkce') 'Signed in',
+      if (_a.isNodeRun) 'Runs on ${_a.nodeName ?? 'a removed node'}',
       if (!_a.isActive) 'Disabled',
       _accessText,
     ];

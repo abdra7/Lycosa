@@ -34,15 +34,17 @@ class AdminScreen extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        // the panels take the window width, not their content's
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Text('Admin', style: Theme.of(context).textTheme.headlineSmall),
               const Spacer(),
+              // not "Providers": that is the nav section for LLM accounts
               TextButton.icon(
-                icon: const Icon(Icons.cloud_outlined),
-                label: const Text('Providers'),
+                icon: const Icon(Icons.key_outlined),
+                label: const Text('Legacy provider keys'),
                 onPressed: () => showDialog(
                   context: context,
                   builder: (_) => const ProvidersDialog(),
@@ -131,12 +133,35 @@ class _ApiKeysCard extends ConsumerWidget {
     WidgetRef ref,
     ApiKeyInfo key,
   ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Revoke ${key.name}?'),
+        content: const Text(
+          'Anything using this key stops working at once; a node using it is '
+          'cut off until it gets a new key. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
+    // the screen may be gone when the call returns; the container is not
+    final container = ProviderScope.containerOf(context, listen: false);
     try {
       await client.revokeApiKey(key.id);
-      ref.invalidate(apiKeysProvider);
-      ref.invalidate(auditLogsProvider);
+      container.invalidate(apiKeysProvider);
+      container.invalidate(auditLogsProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
@@ -172,37 +197,21 @@ class _AuditCard extends ConsumerWidget {
                 error: (e, _) => Text('Failed: $e'),
                 data: (list) => list.isEmpty
                     ? const Text('No audit entries.')
-                    : SingleChildScrollView(
-                        child: DataTable(
-                          dataRowMinHeight: 32,
-                          dataRowMaxHeight: 40,
-                          columns: const [
-                            DataColumn(label: Text('Time')),
-                            DataColumn(label: Text('Action')),
-                            DataColumn(label: Text('Actor')),
-                            DataColumn(label: Text('Resource')),
-                            DataColumn(label: Text('IP')),
-                          ],
-                          rows: [
-                            for (final entry in list)
-                              DataRow(
-                                cells: [
-                                  DataCell(
-                                    Text(
-                                      entry.createdAt
-                                          .toLocal()
-                                          .toString()
-                                          .substring(0, 19),
-                                    ),
+                    : LayoutBuilder(
+                        // at least the card's width; scrolls sideways when
+                        // the window is narrower than the table
+                        builder: (context, constraints) =>
+                            SingleChildScrollView(
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    minWidth: constraints.maxWidth,
                                   ),
-                                  DataCell(Text(entry.action)),
-                                  DataCell(Text(entry.actor)),
-                                  DataCell(Text(entry.resourceType ?? '—')),
-                                  DataCell(Text(entry.ipAddress ?? '—')),
-                                ],
+                                  child: _auditTable(list),
+                                ),
                               ),
-                          ],
-                        ),
+                            ),
                       ),
               ),
             ),
@@ -211,4 +220,30 @@ class _AuditCard extends ConsumerWidget {
       ),
     );
   }
+
+  DataTable _auditTable(List<AuditLogEntry> list) => DataTable(
+    dataRowMinHeight: 32,
+    dataRowMaxHeight: 40,
+    columns: const [
+      DataColumn(label: Text('Time')),
+      DataColumn(label: Text('Action')),
+      DataColumn(label: Text('Actor')),
+      DataColumn(label: Text('Resource')),
+      DataColumn(label: Text('IP')),
+    ],
+    rows: [
+      for (final entry in list)
+        DataRow(
+          cells: [
+            DataCell(
+              Text(entry.createdAt.toLocal().toString().substring(0, 19)),
+            ),
+            DataCell(Text(entry.action)),
+            DataCell(Text(entry.actor)),
+            DataCell(Text(entry.resourceType ?? '—')),
+            DataCell(Text(entry.ipAddress ?? '—')),
+          ],
+        ),
+    ],
+  );
 }

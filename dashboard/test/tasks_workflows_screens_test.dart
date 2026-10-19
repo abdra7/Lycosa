@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -99,6 +100,102 @@ void main() {
     expect(find.textContaining('succeeded'), findsWidgets);
   });
 
+  group('default route', () {
+    // Sprint 14 computer-use walkthrough: Tasks opened on the node/Ollama
+    // route even when no node had Ollama and a default model was set
+    MockClient routedController({
+      required bool withDefault,
+      List<http.Request>? captured,
+    }) => MockClient((request) async {
+      captured?.add(request);
+      switch (request.url.path) {
+        case '/api/v1/me':
+          return http.Response(
+            jsonEncode({'type': 'user', 'id': 'u1', 'role': 'operator'}),
+            200,
+          );
+        case '/api/v1/tasks' when request.method == 'POST':
+          return http.Response(jsonEncode(taskJson()), 201);
+        case '/api/v1/llm/routing':
+          return http.Response(
+            jsonEncode({
+              'purposes': ['default', 'coding'],
+              'personal': [],
+              'deployment': [
+                if (withDefault)
+                  {
+                    'purpose': 'default',
+                    'scope': 'deployment',
+                    'chain': [
+                      {'account_id': 'a1', 'model': 'gpt-x'},
+                    ],
+                    'updated_at': '2026-10-16T10:00:00Z',
+                  },
+              ],
+            }),
+            200,
+          );
+      }
+      return http.Response(jsonEncode([]), 200);
+    });
+
+    String? routeValue(WidgetTester tester) => tester
+        .widget<DropdownButton<String>>(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text('Route'),
+              matching: find.byType(DropdownButtonFormField<String>),
+            ),
+            matching: find.byType(DropdownButton<String>),
+          ),
+        )
+        .value;
+
+    testWidgets('a configured default model becomes the default route', (
+      tester,
+    ) async {
+      final captured = <http.Request>[];
+      await tester.pumpWidget(
+        appWith(
+          routedController(withDefault: true, captured: captured),
+          home: const Scaffold(body: TasksScreen()),
+        ),
+      );
+      await settle(tester);
+      expect(routeValue(tester), 'default');
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Prompt'),
+        'say hi',
+      );
+      await tester.tap(find.text('Run task'));
+      await settle(tester);
+      final body =
+          jsonDecode(
+                captured
+                    .lastWhere(
+                      (r) =>
+                          r.method == 'POST' && r.url.path == '/api/v1/tasks',
+                    )
+                    .body,
+              )
+              as Map<String, dynamic>;
+      expect(body['route'], 'default');
+      expect(body.containsKey('provider'), isFalse);
+    });
+
+    testWidgets('without a default model the node route stays', (tester) async {
+      await tester.pumpWidget(
+        appWith(
+          routedController(withDefault: false),
+          home: const Scaffold(body: TasksScreen()),
+        ),
+      );
+      await settle(tester);
+      expect(routeValue(tester), 'node');
+    });
+  });
+
   testWidgets('task list shows the execution trace when expanded', (
     tester,
   ) async {
@@ -132,8 +229,10 @@ void main() {
 
     expect(find.textContaining('paused'), findsWidgets);
     expect(find.text('draft'), findsOneWidget);
+    // statuses read as words, not identifiers
+    expect(find.text('approval · pending approval'), findsOneWidget);
+    expect(find.textContaining('pending_approval'), findsNothing);
     expect(find.text('gate'), findsOneWidget);
-    expect(find.textContaining('pending_approval'), findsOneWidget);
 
     await tester.tap(find.text('Approve'));
     await settle(tester);
@@ -144,5 +243,104 @@ void main() {
     expect(jsonDecode(approve.body), {'approved': true});
     expect(find.textContaining('Status: succeeded'), findsOneWidget);
     expect(find.text('Approve'), findsNothing); // bar gone once resumed
+  });
+  testWidgets(
+    'leaving Tasks while a task runs does not touch the disposed screen',
+    (tester) async {
+      // Sprint 14 live QA: switching sections during a long task called
+      // setState() on the disposed TasksScreen when the answer arrived
+      final release = Completer<void>();
+      final controller = MockClient((request) async {
+        final path = request.url.path;
+        if (path == '/api/v1/tasks' && request.method == 'POST') {
+          await release.future;
+          return http.Response(jsonEncode(taskJson()), 201);
+        }
+        if (path == '/api/v1/me') {
+          return http.Response(
+            jsonEncode({'type': 'user', 'id': 'u1', 'role': 'operator'}),
+            200,
+          );
+        }
+        return http.Response(jsonEncode([]), 200);
+      });
+      final showTasks = ValueNotifier(true);
+      await tester.pumpWidget(
+        appWith(
+          controller,
+          home: Scaffold(
+            body: ValueListenableBuilder<bool>(
+              valueListenable: showTasks,
+              builder: (_, show, _) =>
+                  show ? const TasksScreen() : const Text('elsewhere'),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Prompt'),
+        'a long task',
+      );
+      await tester.tap(find.text('Run task'));
+      await tester.pump();
+      showTasks.value = false; // the user opens another section
+      await settle(tester);
+      release.complete(); // the answer arrives afterwards
+      await settle(tester);
+      expect(find.text('elsewhere'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets('approval that returns after the bar is gone does not throw', (
+    tester,
+  ) async {
+    // Sprint 14 live QA: approving runs the next step before the reply, so
+    // the bar can be gone (run resumed, user went back) when it returns;
+    // ref.invalidate on the unmounted bar threw a StateError
+    final release = Completer<void>();
+    final controller = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/approve')) {
+        await release.future;
+        return http.Response(jsonEncode(runJson(status: 'succeeded')), 200);
+      }
+      if (path == '/api/v1/workflows/w1/runs/r1') {
+        return http.Response(jsonEncode(runJson()), 200);
+      }
+      if (path == '/api/v1/me') {
+        return http.Response(
+          jsonEncode({'type': 'user', 'id': 'u1', 'role': 'operator'}),
+          200,
+        );
+      }
+      return http.Response(jsonEncode([]), 200);
+    });
+    final showRun = ValueNotifier(true);
+    await tester.pumpWidget(
+      appWith(
+        controller,
+        home: Scaffold(
+          body: ValueListenableBuilder<bool>(
+            valueListenable: showRun,
+            builder: (_, show, _) => show
+                ? const RunScreen(
+                    workflowName: 'release',
+                    workflowId: 'w1',
+                    runId: 'r1',
+                  )
+                : const Text('elsewhere'),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+    await tester.tap(find.text('Approve'));
+    await tester.pump();
+    showRun.value = false; // the user goes back while the step runs
+    await settle(tester);
+    release.complete();
+    await settle(tester);
+    expect(tester.takeException(), isNull);
   });
 }

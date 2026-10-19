@@ -78,9 +78,13 @@ class _ConnectAccountDialogState extends ConsumerState<ConnectAccountDialog> {
     } on ApiException catch (e) {
       setState(() => _error = e.friendly);
     } on StateError catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) {
+        setState(() => _error = e.message);
+      }
     } on ControllerUnreachableException catch (e) {
-      setState(() => _error = e.friendly);
+      if (mounted) {
+        setState(() => _error = e.friendly);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -100,7 +104,9 @@ class _ConnectAccountDialogState extends ConsumerState<ConnectAccountDialog> {
       final callback = await receiver.start();
       final signIn = await client.startOpenRouterSignIn(callbackUrl: callback);
       _receiver = receiver;
-      setState(() => _signIn = signIn);
+      if (mounted) {
+        setState(() => _signIn = signIn);
+      }
       final opened = await ref.read(browserLauncherProvider)(
         signIn.authorizationUrl,
       );
@@ -138,7 +144,9 @@ class _ConnectAccountDialogState extends ConsumerState<ConnectAccountDialog> {
     } on ApiException catch (e) {
       setState(() => _error = e.friendly);
     } on StateError catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) {
+        setState(() => _error = e.message);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -121,6 +121,12 @@ class CredentialUnavailableError(LLMError):
     http_status = 409
 
 
+class NodeUnavailableError(LLMError):
+    code = "node_unavailable"
+    message = "The node that runs this account is not available; check that its agent is running"
+    http_status = 503
+
+
 class NoRouteError(LLMError):
     code = "no_llm_route"
     message = "No usable provider account/model is configured for this request"
@@ -143,6 +149,16 @@ _MODEL_HINTS = (
     "does not exist",
     "unknown model",
     "no such model",
+)
+# Bad keys that providers report as 400/403 rather than 401 (verified live
+# 2026-10-04: Gemini 400 API_KEY_INVALID "API key not valid", xAI 400
+# "Incorrect API key provided").
+_AUTH_HINTS = (
+    "api key not valid",
+    "api_key_invalid",
+    "incorrect api key",
+    "invalid api key",
+    "invalid x-api-key",
 )
 _QUOTA_HINTS = (
     "insufficient_quota",
@@ -200,7 +216,7 @@ def from_http(
 
     if any(h in signals for h in _CONTEXT_HINTS):
         return ContextLengthError(**kw)
-    if status == 401:
+    if status == 401 or (status in (400, 403) and any(h in signals for h in _AUTH_HINTS)):
         return AuthenticationError(**kw)
     if status == 402 or (status in (403, 429) and any(h in signals for h in _QUOTA_HINTS)):
         return QuotaExceededError(**kw)

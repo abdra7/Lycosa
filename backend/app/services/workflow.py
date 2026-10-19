@@ -6,15 +6,24 @@ Execution is synchronous per request (ADR-012/ADR-014): a run proceeds until
 it finishes or hits an approval step; approval resumes it inside the approve
 request. Task steps reuse the Phase 5 orchestrator wholesale, so scheduling,
 failover, and knowledge injection apply per step.
+
+Because a run lives inside a request, a controller crash or restart orphans
+it in `running`. Each worker holds a lease on the runs it is executing and
+renews it on a timer; the leader reaps `running` runs whose lease lapsed
+(ADR-034).
 """
 
 import asyncio
 import re
 import uuid
-from datetime import UTC, datetime
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.events import get_event_bus
 from app.core.logging import workflow_run_id_var
 from app.core.metrics import WORKFLOW_RUNS, WORKFLOW_STEPS
@@ -42,9 +51,29 @@ from app.services.orchestrator import submit_task
 
 _TEMPLATE_RE = re.compile(r"\{\{\s*(input|steps\.[a-z0-9_-]+\.output)\s*\}\}")
 
+STALE_RUN_ERROR = (
+    "orphaned: no controller worker is executing this run any more (a crash or "
+    "restart, or an unhandled error mid-run); marked failed by the stale-run reaper"
+)
+
+# Runs this process is executing right now (ADR-034). A run only executes
+# inside the request that started or approved it, so this set is exactly
+# this worker's share of the live runs.
+_live_runs: set[uuid.UUID] = set()
+
 
 class _StepFailed(Exception):
     pass
+
+
+@contextmanager
+def _executing(run_id: uuid.UUID) -> Iterator[None]:
+    """Hold the run's lease while this request executes it."""
+    _live_runs.add(run_id)
+    try:
+        yield
+    finally:
+        _live_runs.discard(run_id)
 
 
 def render(template: str, run_input: str, context: dict) -> str:
@@ -101,7 +130,8 @@ async def start_run(
         detail={"workflow": workflow.name},
     )
     await db.commit()
-    return await _execute_from(db, run, definition, 0, user_id, api_key_id)
+    with _executing(run.id):
+        return await _execute_from(db, run, definition, 0, user_id, api_key_id)
 
 
 async def resume_run(
@@ -142,8 +172,12 @@ async def resume_run(
     pending.status = StepRunStatus.SUCCEEDED
     _record_output(run, run.current_step, "approved")
     run.status = RunStatus.RUNNING
+    # a paused run holds no lease; without a fresh one, a run that waited
+    # longer than the stale threshold would be reaped as soon as it resumed
+    run.heartbeat_at = datetime.now(UTC)
     await db.commit()
-    return await _execute_from(db, run, definition, index + 1, user_id, api_key_id)
+    with _executing(run.id):
+        return await _execute_from(db, run, definition, index + 1, user_id, api_key_id)
 
 
 async def _execute_from(
@@ -354,3 +388,64 @@ async def _finish(
         )
     workflow_run_id_var.set(None)
     return run
+
+
+async def heartbeat_live_runs(db: AsyncSession) -> int:
+    """Renew the lease on every run this worker is executing (ADR-034).
+    Returns how many leases were renewed."""
+    if not _live_runs:
+        return 0
+    result = await db.execute(
+        update(WorkflowRun)
+        .where(WorkflowRun.id.in_(list(_live_runs)), WorkflowRun.status == RunStatus.RUNNING)
+        .values(heartbeat_at=datetime.now(UTC))
+        .execution_options(synchronize_session=False)
+    )
+    await db.commit()
+    return result.rowcount
+
+
+async def reap_stale_runs(db: AsyncSession) -> int:
+    """Fail `running` runs whose lease lapsed (ADR-034). The worker executing
+    them crashed or restarted, so they would otherwise stay `running` forever
+    and block deleting their workflow (ADR-033). A run that a worker is still
+    executing renews its lease every heartbeat interval and is never picked,
+    however long it has been running. Rows from before the lease fall back to
+    `started_at`. Returns how many runs were reaped."""
+    stale_after = get_settings().workflow_stale_after_seconds
+    cutoff = datetime.now(UTC) - timedelta(seconds=stale_after)
+    last_beat = func.coalesce(WorkflowRun.heartbeat_at, WorkflowRun.started_at)
+    stale = (WorkflowRun.status == RunStatus.RUNNING, last_beat < cutoff)
+
+    reaped = 0
+    for run in (await db.execute(select(WorkflowRun).where(*stale))).scalars().all():
+        # compare-and-set: a heartbeat that lands after the select keeps the run
+        claimed = await db.execute(
+            update(WorkflowRun)
+            .where(WorkflowRun.id == run.id, *stale)
+            .values(status=RunStatus.FAILED)
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            continue
+        closed = [sr for sr in run.step_runs if sr.status == StepRunStatus.RUNNING]
+        for step_run in closed:
+            step_run.status = StepRunStatus.FAILED
+            step_run.error = STALE_RUN_ERROR
+            step_run.finished_at = datetime.now(UTC)
+        await audit(
+            db,
+            action="workflow.run.reaped",
+            resource_type="workflow_run",
+            resource_id=str(run.id),
+            detail={
+                "step": run.current_step,
+                "last_heartbeat": (run.heartbeat_at or run.started_at).isoformat(),
+                "stale_after_seconds": stale_after,
+            },
+        )
+        await _finish(db, run, RunStatus.FAILED, error=STALE_RUN_ERROR)
+        for step_run in closed:
+            WORKFLOW_STEPS.labels(step_run.kind, "failed").inc()
+        reaped += 1
+    return reaped

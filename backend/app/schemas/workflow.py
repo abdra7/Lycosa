@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.models.task import TaskType
 from app.models.workflow import RunStatus, StepRunStatus
-from app.schemas.task import LLM_ROUTE_PATTERN, check_llm_target
+from app.schemas.task import LLM_ROUTE_PATTERN, NonBlankText, check_llm_target
 from app.services.provider_registry import validate_provider
 
 _STEP_ID = r"^[a-z0-9][a-z0-9_-]*$"
@@ -39,7 +39,7 @@ class _BaseStep(BaseModel):
 class TaskStepDef(_BaseStep):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["task"]
-    prompt: str = Field(min_length=1)
+    prompt: NonBlankText
     task_type: TaskType | None = None
     model: str | None = None
     provider: str = "ollama"
@@ -144,7 +144,7 @@ class WorkflowOut(BaseModel):
 class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    input: str = Field(min_length=1)
+    input: NonBlankText
 
 
 class ApproveRequest(BaseModel):

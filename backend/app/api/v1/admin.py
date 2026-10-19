@@ -10,7 +10,7 @@ from sqlalchemy import select
 from app.api.deps import DbDep, Principal, require_roles
 from app.core.config import get_settings
 from app.core.security import generate_api_key
-from app.models import ApiKey, AuditLog, Role
+from app.models import ApiKey, AuditLog, Role, User
 from app.models.user import ROLE_ADMIN
 from app.schemas.apikey import ApiKeyCreate, ApiKeyCreatedOut, ApiKeyOut
 from app.schemas.auth import AuditLogOut
@@ -148,10 +148,22 @@ async def list_audit_logs(
     db: DbDep,
     _principal: AdminDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
-) -> list[AuditLog]:
-    """Most recent audit entries. Admin only."""
-    result = await db.execute(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit))
-    return list(result.scalars())
+) -> list[AuditLogOut]:
+    """Most recent audit entries, each naming its actor (the user's email or
+    the API key's name) so the log reads without a lookup. Admin only."""
+    result = await db.execute(
+        select(AuditLog, User.email, ApiKey.name)
+        .outerjoin(User, User.id == AuditLog.actor_user_id)
+        .outerjoin(ApiKey, ApiKey.id == AuditLog.actor_api_key_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+    )
+    return [
+        AuditLogOut.model_validate(entry).model_copy(
+            update={"actor_email": email, "actor_api_key_name": key_name}
+        )
+        for entry, email, key_name in result.all()
+    ]
 
 
 @router.post("/api-keys", response_model=ApiKeyCreatedOut, status_code=status.HTTP_201_CREATED)

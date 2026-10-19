@@ -23,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, JSONVariant, TimestampMixin, UUIDPkMixin
+from app.models.node import Node
 from app.models.user import User
 
 
@@ -36,7 +37,8 @@ class LLMProviderAccount(UUIDPkMixin, TimestampMixin, Base):
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
     provider: Mapped[str] = mapped_column(String(40))
     label: Mapped[str] = mapped_column(String(100))
-    auth_method: Mapped[str] = mapped_column(String(20))  # api_key | oauth_pkce | none
+    # api_key | oauth_pkce | none | node_sign_in
+    auth_method: Mapped[str] = mapped_column(String(20))
     base_url: Mapped[str] = mapped_column(String(255))
     is_local: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active | disabled
@@ -46,7 +48,13 @@ class LLMProviderAccount(UUIDPkMixin, TimestampMixin, Base):
     last_test_detail: Mapped[str | None] = mapped_column(String(200))
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
 
+    # node-run providers (ADR-032): the node whose own sign-in runs the calls
+    node_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("nodes.id", ondelete="SET NULL"), index=True
+    )
+
     owner: Mapped[User | None] = relationship(foreign_keys=[owner_user_id], lazy="joined")
+    node: Mapped[Node | None] = relationship(foreign_keys=[node_id], lazy="joined")
 
 
 class LLMCredential(UUIDPkMixin, TimestampMixin, Base):

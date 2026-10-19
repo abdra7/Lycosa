@@ -170,6 +170,64 @@ void main() {
     );
   });
 
+  testWidgets('the Anthropic API card points Pro/Max users to their plan', (
+    tester,
+  ) async {
+    // Sprint 14 computer-use walkthrough: Claude Pro/Max users went for the
+    // Anthropic API-key card, which their plan cannot use
+    MockClient controller({required bool withSubscription}) => MockClient((
+      request,
+    ) async {
+      switch (request.url.path) {
+        case '/api/v1/me':
+          return http.Response(
+            jsonEncode({'type': 'user', 'id': 'u1', 'role': 'operator'}),
+            200,
+          );
+        case '/api/v1/llm/providers':
+          return http.Response(
+            jsonEncode([
+              providerJson('anthropic', 'Anthropic (Claude)'),
+              if (withSubscription)
+                {
+                  ...providerJson('claude_subscription', 'Claude subscription'),
+                  'kind': 'node',
+                },
+            ]),
+            200,
+          );
+        case '/api/v1/llm/routing':
+          return http.Response(
+            jsonEncode({'purposes': [], 'personal': [], 'deployment': []}),
+            200,
+          );
+      }
+      return http.Response(jsonEncode([]), 200);
+    });
+    Finder hint() => find.descendant(
+      of: find.ancestor(
+        of: find.text('Anthropic (Claude)'),
+        matching: find.byType(Card),
+      ),
+      matching: find.textContaining('Claude Pro or Max'),
+    );
+
+    await pumpScreen(tester, controller(withSubscription: true));
+    expect(hint(), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.ancestor(of: hint(), matching: find.byType(Card)),
+        matching: find.textContaining('Claude subscription'),
+      ),
+      findsWidgets,
+    );
+
+    // a controller without the subscription provider gets no dead pointer
+    await tester.pumpWidget(const SizedBox());
+    await pumpScreen(tester, controller(withSubscription: false));
+    expect(hint(), findsNothing);
+  });
+
   testWidgets('connect dialog explains subscriptions and hides the key', (
     tester,
   ) async {

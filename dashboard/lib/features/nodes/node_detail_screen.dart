@@ -185,10 +185,12 @@ class _IdentityCardState extends ConsumerState<_IdentityCard> {
 
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
+    // the screen may be gone when the call returns; the container is not
+    final container = ProviderScope.containerOf(context, listen: false);
     setState(() => _deleting = true);
     try {
       await client.deleteNode(node.id);
-      ref.invalidate(nodesProvider);
+      container.invalidate(nodesProvider);
       if (mounted) {
         Navigator.of(context).pop(); // back to the nodes list
         ScaffoldMessenger.of(
@@ -309,10 +311,12 @@ class _RoleCardState extends ConsumerState<_RoleCard> {
   Future<void> _save() async {
     final client = ref.read(activeApiClientProvider);
     if (client == null || _selected == null) return;
+    final container = ProviderScope.containerOf(context, listen: false);
+    final nodeId = widget.node.id;
     setState(() => _saving = true);
     try {
-      await client.patchNode(widget.node.id, role: _selected);
-      ref.invalidate(nodeDetailProvider(widget.node.id));
+      await client.patchNode(nodeId, role: _selected);
+      container.invalidate(nodeDetailProvider(nodeId));
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -479,6 +483,9 @@ class _LlmCardState extends ConsumerState<_LlmCard> {
   Future<void> _install(String model) async {
     final client = ref.read(activeApiClientProvider);
     if (client == null) return;
+    // a model pull can take minutes; the card may be gone by then
+    final container = ProviderScope.containerOf(context, listen: false);
+    final nodeId = widget.node.id;
     setState(() => _installing = model);
     try {
       await client.installNodeModel(widget.node.id, model);
@@ -500,8 +507,8 @@ class _LlmCardState extends ConsumerState<_LlmCard> {
         ).showSnackBar(SnackBar(content: Text(e.friendly)));
       }
     } finally {
-      ref.invalidate(llmRecommendationsProvider(widget.node.id));
-      ref.invalidate(nodeDetailProvider(widget.node.id));
+      container.invalidate(llmRecommendationsProvider(nodeId));
+      container.invalidate(nodeDetailProvider(nodeId));
       if (mounted) setState(() => _installing = null);
     }
   }
@@ -526,6 +533,15 @@ class _LlmCardState extends ConsumerState<_LlmCard> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   'Node is offline — bring the agent online to install models.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              )
+            else if (!widget.node.hasOllama)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Ollama is not detected on this node. Install it from '
+                  'ollama.com and restart the agent to run local models.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -573,7 +589,10 @@ class _LlmCardState extends ConsumerState<_LlmCard> {
                       const Text('installed')
                     else if (rec.runnable)
                       OutlinedButton(
-                        onPressed: online && _installing == null
+                        onPressed:
+                            online &&
+                                widget.node.hasOllama &&
+                                _installing == null
                             ? () => _install(rec.model)
                             : null,
                         child: _installing == rec.model
@@ -633,17 +652,18 @@ class _ProfileCard extends StatelessWidget {
           _KeyValue('OS', node.osName ?? '—'),
           _KeyValue(
             'Runtimes',
-            runtimes.isEmpty
-                ? 'none detected'
-                : runtimes
-                      .map(
-                        (r) =>
-                            '${r['name']}${(r['models'] as List?)?.isNotEmpty == true ? ' (${(r['models'] as List).length} models)' : ''}',
-                      )
-                      .join(', '),
+            [
+              for (final r in runtimes)
+                '${r['name']}${(r['models'] as List?)?.isNotEmpty == true ? ' (${(r['models'] as List).length} models)' : ''}',
+              if (node.offersClaude) "Claude Code (owner's plan)",
+            ].join(', ').ifEmpty('none detected'),
           ),
         ],
       ),
     );
   }
+}
+
+extension on String {
+  String ifEmpty(String fallback) => isEmpty ? fallback : this;
 }

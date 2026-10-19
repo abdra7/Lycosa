@@ -1,6 +1,27 @@
-"""Prometheus metrics (ADR-016). Exposed at /metrics."""
+"""Prometheus metrics (ADR-016). Exposed at /metrics.
 
-from prometheus_client import Counter, Gauge, Histogram
+With several uvicorn workers (ADR-028) every worker keeps its own values, so
+a scrape would only see the worker that served it. When
+PROMETHEUS_MULTIPROC_DIR is set (the image sets it; the launch command
+empties it before the workers start), prometheus_client keeps values in
+shared files and /metrics aggregates all workers.
+"""
+
+import os
+
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    make_asgi_app,
+    multiprocess,
+)
+
+MULTIPROC_DIR = os.environ.get("PROMETHEUS_MULTIPROC_DIR", "")
+if MULTIPROC_DIR:
+    # metrics write their files on creation, below
+    os.makedirs(MULTIPROC_DIR, exist_ok=True)
 
 HTTP_REQUESTS = Counter(
     "lycosa_http_requests_total",
@@ -54,7 +75,25 @@ LLM_FALLBACKS = Counter(
     "lycosa_llm_fallbacks_total", "Route fallbacks away from a failing provider", ["from_provider"]
 )
 
-NODES = Gauge("lycosa_nodes", "Nodes by status", ["status"])
-NODE_CPU = Gauge("lycosa_node_cpu_percent", "Node CPU utilization", ["node"])
-NODE_RAM = Gauge("lycosa_node_ram_percent", "Node RAM utilization", ["node"])
-NODE_TASKS = Gauge("lycosa_node_running_tasks", "Node running tasks", ["node"])
+# Gauges are written by whichever worker handles the heartbeat or sweep:
+# across workers the most recent write is the current value.
+NODES = Gauge("lycosa_nodes", "Nodes by status", ["status"], multiprocess_mode="mostrecent")
+NODE_CPU = Gauge(
+    "lycosa_node_cpu_percent", "Node CPU utilization", ["node"], multiprocess_mode="mostrecent"
+)
+NODE_RAM = Gauge(
+    "lycosa_node_ram_percent", "Node RAM utilization", ["node"], multiprocess_mode="mostrecent"
+)
+NODE_TASKS = Gauge(
+    "lycosa_node_running_tasks", "Node running tasks", ["node"], multiprocess_mode="mostrecent"
+)
+
+
+def metrics_app():
+    """The /metrics ASGI app: every worker's samples in multiprocess mode,
+    else this process's default registry."""
+    if not MULTIPROC_DIR:
+        return make_asgi_app()
+    registry = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry)
+    return make_asgi_app(registry=registry)

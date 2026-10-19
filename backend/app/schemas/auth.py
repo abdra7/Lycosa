@@ -40,3 +40,6 @@ class AuditLogOut(BaseModel):
     resource_id: str | None
     detail: dict[str, Any] | None
     ip_address: str | None
+    # who acted, resolved when read (ADR-033); None for anonymous events
+    actor_email: str | None = None
+    actor_api_key_name: str | None = None

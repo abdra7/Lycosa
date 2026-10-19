@@ -45,6 +45,9 @@ class Connection:
     policy: AddressPolicy = PUBLIC_ONLY
     timeout: float = 120.0
     resolver: Resolver | None = field(default=None, repr=False, compare=False)
+    # sent on every request of this connection (node-run providers name the
+    # Lycosa user the call is for)
+    headers: dict[str, str] = field(default_factory=dict, repr=False, compare=False)
 
 
 def build_client(conn: Connection) -> httpx.AsyncClient:

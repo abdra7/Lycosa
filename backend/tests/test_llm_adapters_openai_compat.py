@@ -460,3 +460,24 @@ async def test_health_check_is_a_real_authenticated_call():
     assert (await adapter.health_check(conn_for("deepseek"))).status == "unauthorized"
     assert (await adapter.health_check(conn_for("deepseek"))).status == "offline"
     assert (await adapter.health_check(conn_for("deepseek"))).status == "unknown"
+
+
+@respx.mock
+async def test_openrouter_health_checks_the_key_not_the_public_model_list():
+    """OpenRouter's /models is public: a bad key still gets 200 there. The
+    health check must use the authenticated GET /key (found in live QA)."""
+    respx.get("https://openrouter.ai/api/v1/models").mock(
+        return_value=httpx.Response(200, json={"data": [{"id": "a"}, {"id": "b"}]})
+    )
+    key_route = respx.get("https://openrouter.ai/api/v1/key").mock(
+        side_effect=[
+            httpx.Response(401, json={"error": {"message": "Missing Authentication header"}}),
+            httpx.Response(200, json={"data": {"label": "k", "limit": None, "usage": 0}}),
+        ]
+    )
+    adapter = catalog.get("openrouter")
+    denied = await adapter.health_check(conn_for("openrouter"))
+    assert denied.status == "unauthorized"
+    ready = await adapter.health_check(conn_for("openrouter"))
+    assert ready.status == "ready" and ready.models_available == 2
+    assert key_route.calls.last.request.headers["authorization"] == f"Bearer {KEY}"

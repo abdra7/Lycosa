@@ -17,6 +17,7 @@ from lycosa_agent.executor import create_app
 from lycosa_agent.hwprofile import collect_profile
 from lycosa_agent.knowledge import capabilities
 from lycosa_agent.metrics import collect_metrics
+from lycosa_agent.runtimes.claude_code import ClaudeCodeRuntime
 from lycosa_agent.runtimes.ollama import OllamaAdapter
 
 logger = logging.getLogger("lycosa.agent")
@@ -34,12 +35,36 @@ def _local_ip() -> str:
         return "127.0.0.1"
 
 
+def _with_capabilities(profile: dict, settings: AgentSettings) -> dict:
+    """What this agent can do, reported with its hardware profile."""
+    extra = profile.setdefault("extra", {})
+    extra["cloud_execution_capability"] = settings.cloud_execution_enabled
+    extra["agent_capabilities"] = {
+        **capabilities(),
+        "claude_subscription": settings.claude_subscription,
+    }
+    return profile
+
+
+def _claude_runtime(settings: AgentSettings) -> ClaudeCodeRuntime | None:
+    if not settings.claude_subscription:
+        return None
+    if not settings.claude_subscription_owner.strip():
+        raise SystemExit(
+            "LYCOSA_CLAUDE_SUBSCRIPTION_OWNER (the Lycosa user email this machine's "
+            "Claude plan serves) is required when LYCOSA_CLAUDE_SUBSCRIPTION=true"
+        )
+    return ClaudeCodeRuntime(
+        settings.claude_binary,
+        timeout_seconds=settings.claude_timeout_seconds,
+        max_concurrency=settings.claude_max_concurrency,
+    )
+
+
 async def _register_with_retry(
     client: ControllerClient, settings: AgentSettings, agent_url: str, agent_token: str
 ) -> dict:
-    profile = collect_profile(settings.ollama_url)
-    profile.setdefault("extra", {})["cloud_execution_capability"] = settings.cloud_execution_enabled
-    profile["extra"]["agent_capabilities"] = capabilities()
+    profile = _with_capabilities(collect_profile(settings.ollama_url), settings)
     for attempt, backoff in enumerate([0, *_REGISTER_BACKOFF_SECONDS]):
         if backoff:
             await asyncio.sleep(backoff)
@@ -115,11 +140,9 @@ async def _auto_configure_model(
         return None
     logger.info("auto-setup complete: %s is installed and ready", best["model"])
     try:  # re-register so the controller's inventory/scheduler see the model now
-        profile = (profile_factory or (lambda: collect_profile(settings.ollama_url)))()
-        profile.setdefault("extra", {})["cloud_execution_capability"] = (
-            settings.cloud_execution_enabled
+        profile = _with_capabilities(
+            (profile_factory or (lambda: collect_profile(settings.ollama_url)))(), settings
         )
-        profile["extra"]["agent_capabilities"] = capabilities()
         await client.register(
             settings.node_name, profile, agent_url=agent_url, agent_token=agent_token
         )
@@ -155,6 +178,7 @@ async def run(settings: AgentSettings) -> None:
     if not settings.api_key:
         raise SystemExit("LYCOSA_API_KEY is required (mint one via the controller admin API)")
 
+    claude = _claude_runtime(settings)
     agent_token = secrets.token_urlsafe(32)
     agent_url = settings.advertise_url or f"http://{_local_ip()}:{settings.exec_port}"
 
@@ -163,8 +187,14 @@ async def run(settings: AgentSettings) -> None:
 
     adapter = OllamaAdapter(settings.ollama_url)
     exec_app = create_app(
-        adapter, token=agent_token, cloud_enabled=settings.cloud_execution_enabled
+        adapter,
+        token=agent_token,
+        cloud_enabled=settings.cloud_execution_enabled,
+        claude=claude,
+        claude_owner=settings.claude_subscription_owner,
     )
+    if claude is not None:
+        logger.info("Claude subscription runtime enabled (runs this machine's Claude Code)")
     server = uvicorn.Server(
         uvicorn.Config(
             exec_app, host=settings.exec_host, port=settings.exec_port, log_level="warning"

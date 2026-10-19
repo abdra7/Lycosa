@@ -9,6 +9,7 @@ hard-coded here.
 
 from app.llm.adapters.anthropic import AnthropicAdapter
 from app.llm.adapters.base import LLMAdapter
+from app.llm.adapters.claude_subscription import ClaudeSubscriptionAdapter
 from app.llm.adapters.gemini import GeminiAdapter
 from app.llm.adapters.ollama import OllamaAdapter
 from app.llm.adapters.openai_compat import (
@@ -91,6 +92,38 @@ _SPECS: list[tuple[ProviderSpec, type[LLMAdapter]]] = [
             notes=("Models newer than Opus 4.6 accept only the default temperature.",),
         ),
         AnthropicAdapter,
+    ),
+    (
+        ProviderSpec(
+            id="claude_subscription",
+            display_name="Claude subscription",
+            kind=ProviderKind.NODE,
+            default_base_url="",  # the bound node's agent URL
+            base_url_mode=BaseUrlMode.USER,
+            auth_methods=(AuthMethod.NODE_SIGN_IN,),
+            capabilities=LLMCapabilities(
+                chat=True,
+                streaming=True,
+                tool_calling=False,
+                parallel_tools=False,
+                structured_output=False,
+                json_mode=False,
+                vision=False,
+                reasoning=None,
+                **_NO_EMBED,
+            ),
+            docs_url="https://code.claude.com/docs/en/legal-and-compliance",
+            notes=(
+                "Runs Claude Code on one of your nodes, signed in with your own Claude plan "
+                "(`claude auth login` on that machine). Lycosa never sees your Claude "
+                "credentials.",
+                "Personal use only: Anthropic does not allow one person's plan to serve other "
+                "users, so these accounts cannot be shared or used in deployment routes.",
+                "Calls count against your plan's usage limits, which assume ordinary "
+                "individual use.",
+            ),
+        ),
+        ClaudeSubscriptionAdapter,
     ),
     (
         ProviderSpec(

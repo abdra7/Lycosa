@@ -30,3 +30,12 @@ class AgentSettings(BaseSettings):
     # zero-config model setup: on first run with an empty Ollama, pull the
     # best-fit model for this hardware automatically (LYCOSA_AUTO_PULL_MODEL=false to opt out)
     auto_pull_model: bool = True
+
+    # Claude subscription runtime (ADR-032): runs this machine's own Claude
+    # Code, signed in by its owner with `claude auth login`. Off by default;
+    # serves only the Lycosa user named in claude_subscription_owner.
+    claude_subscription: bool = False
+    claude_subscription_owner: str = ""
+    claude_binary: str = "claude"
+    claude_timeout_seconds: int = Field(default=300, ge=10, le=3600)
+    claude_max_concurrency: int = Field(default=1, ge=1, le=4)

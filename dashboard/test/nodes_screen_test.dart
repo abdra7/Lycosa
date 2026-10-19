@@ -344,4 +344,51 @@ void main() {
     expect(find.textContaining('will not be shown again'), findsOneWidget);
     expect(find.textContaining('lycosa-agent run'), findsOneWidget);
   });
+  testWidgets('a node without Ollama says so and offers no Install', (
+    tester,
+  ) async {
+    // Sprint 14 UX: Install buttons were offered on a node with no local
+    // runtime, so every click could only fail
+    final node = nodeJson()
+      ..['hardware_profile'] = {
+        'cpu_model': 'Intel',
+        'runtimes': <Map<String, dynamic>>[],
+        'gpus': <Map<String, dynamic>>[],
+      };
+    await tester.pumpWidget(
+      appWith(
+        fakeController(nodes: [node]),
+        home: const NodeDetailScreen(nodeId: 'n1'),
+      ),
+    );
+    await settle(tester);
+    expect(find.textContaining('Ollama is not detected'), findsOneWidget);
+    final install = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Install'),
+    );
+    expect(install.onPressed, isNull);
+  });
+
+  testWidgets('node detail lists the Claude runtime the node offers', (
+    tester,
+  ) async {
+    final node = nodeJson()
+      ..['hardware_profile'] = {
+        'cpu_model': 'Intel',
+        'runtimes': <Map<String, dynamic>>[],
+        'gpus': <Map<String, dynamic>>[],
+        'extra': {
+          'agent_capabilities': {'claude_subscription': true},
+        },
+      };
+    await tester.pumpWidget(
+      appWith(
+        fakeController(nodes: [node]),
+        home: const NodeDetailScreen(nodeId: 'n1'),
+      ),
+    );
+    await settle(tester);
+    expect(find.textContaining("Claude Code (owner's plan)"), findsOneWidget);
+    expect(find.text('none detected'), findsNothing);
+  });
 }

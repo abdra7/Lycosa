@@ -80,10 +80,11 @@ async def complete_task(
         return {"error": "The provider returned no text"}
     account = result.target.account
     local = routing.is_local_target(account)
+    on_node = account.node_id is not None  # node-run provider (ADR-032)
     return {
         "output": response.content,
         "model": f"{account.provider}:{result.target.model}",
-        "node": None,
+        "node": str(account.node_id) if on_node else None,
         "usage": response.usage.model_dump(exclude_none=True, exclude={"reported_cost"}),
         "estimated_cost": result.estimated_cost,
         "cost_source": result.cost_source,
@@ -93,7 +94,7 @@ async def complete_task(
             "account_label": account.label,
             "model": result.target.model,
             "execution_mode": "local" if local else "cloud",
-            "executor": "controller",
+            "executor": "node" if on_node else "controller",
             "purpose": purpose,
             "fallback_index": result.fallback_index,
             "attempts": result.attempts,
@@ -102,7 +103,11 @@ async def complete_task(
                 "explicit account selection"
                 if body.llm_account_id
                 else f"routing policy '{purpose}'",
-                "local runtime" if local else "external provider",
+                "owner's own sign-in on the node"
+                if on_node
+                else "local runtime"
+                if local
+                else "external provider",
             ],
         },
     }
