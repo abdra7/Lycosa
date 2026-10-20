@@ -7,7 +7,7 @@
 //! at a time: `cargo test --test standalone -- --test-threads=1`.
 
 use std::net::{Ipv4Addr, TcpListener};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use lycosa_desktop_lib::supervisor::config::{Secrets, StandaloneConfig};
@@ -22,8 +22,8 @@ fn runtime() -> Option<PathBuf> {
     dir
 }
 
-fn supervisor(runtime: &PathBuf, data: &tempfile::TempDir) -> Supervisor {
-    Supervisor::new(runtime.clone(), data.path().to_path_buf(), "0.5.0")
+fn supervisor(runtime: &Path, data: &tempfile::TempDir) -> Supervisor {
+    Supervisor::new(runtime.to_path_buf(), data.path().to_path_buf(), "0.5.0")
 }
 
 async fn health(api: &str) -> bool {
