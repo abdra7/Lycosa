@@ -9,7 +9,8 @@ Created and maintained by [abdra7](https://github.com/abdra7).
 **Local Agents · Provider Adapters · Phantom Agents**
 
 Coordinate your own devices, approved cloud models, and isolated local inference
-from one desktop dashboard.
+from one desktop app — which can also run the whole controller on your own
+computer, no Docker or terminal needed.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-A8C7FA.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/abdra7/Lycosa?color=A8C7FA)](https://github.com/abdra7/Lycosa/releases/latest)
@@ -23,8 +24,9 @@ from one desktop dashboard.
 **Local Agents** on your devices, **Provider Adapters** for approved cloud models,
 and **Phantom Agents** for ephemeral inference in an isolated local container.
 A FastAPI controller manages routing, knowledge retrieval (RAG), workflow
-approvals and Usage telemetry. A Flutter desktop dashboard brings those controls
-together on Windows, macOS and Linux.
+approvals and Usage telemetry. The Lycosa desktop app (Tauri) brings those
+controls together on Windows, macOS and Linux, and can run the controller itself:
+PostgreSQL, Qdrant and the API ship inside it.
 
 Normal tasks retain their results and operational history. Phantom tasks use a
 separate API and dialog, return an answer once, and bypass persistent task
@@ -62,8 +64,12 @@ history. Both cloud adapters and Phantom execution require explicit setup.
 - **LAN discovery** — running agents announce themselves over mDNS; the
   dashboard finds every machine running `lycosa-agent` on your network.
 - **Live operations view** — REST + WebSocket streaming into a native
-  desktop dashboard (macOS / Windows / Linux), with Prometheus and Grafana
+  desktop app (macOS / Windows / Linux), with Prometheus and Grafana
   for metrics, including CPU/RAM and GPU/VRAM Usage where available.
+- **Standalone desktop controller** — install the app and choose *Run Lycosa
+  on this computer*: it starts its bundled PostgreSQL, Qdrant and Lycosa API,
+  signs you in, watches and restarts them, and stops them cleanly when it
+  closes. Opt into network-controller mode to let other devices join.
 
 ### Choose an execution path
 
@@ -162,7 +168,7 @@ and the [Agent capability/MCP guide](agent/CAPABILITIES.md).
 ```mermaid
 flowchart LR
     subgraph operator["Operator's machine"]
-        DASH["Desktop Dashboard\n(Flutter: macOS / Windows / Linux)"]
+        DASH["Desktop app\n(Tauri: macOS / Windows / Linux)\noptional built-in controller"]
     end
 
     subgraph controller["FastAPI controller"]
@@ -215,7 +221,10 @@ node. Phantom requests use their own authenticated execution path and never call
 the persistent orchestrator or cloud adapters. Session validation reads existing
 identity data; it does not create a Phantom task record.
 
-The standard deployment runs the controller and datastores with Docker Compose.
+The controller and datastores run either with Docker Compose (server
+deployments, multi-worker with Redis, Prometheus/Grafana) or inside the desktop
+app's standalone mode (one worker, bundled PostgreSQL and Qdrant, loopback-only
+unless network mode is on).
 Phantom additionally requires the explicit Linux host setup above. Multi-worker
 controllers require Redis for shared throttling, events and coordination;
 Phantom capacity limits apply separately to each controller worker.
@@ -225,12 +234,41 @@ the detailed architecture decision log is maintained in the project vault.
 
 ## Installation
 
-Lycosa has **two parts installed separately**:
+### Quick start: everything on one computer
+
+Download the desktop app for your OS from the
+[latest release](https://github.com/abdra7/Lycosa/releases/latest):
+
+| OS | Artifact |
+|---|---|
+| Windows 10/11 (x64) | `Lycosa-windows-x64-setup-<version>.exe` (per-user install) |
+| macOS 11+ (Apple silicon) | `Lycosa-macos-arm64-<version>.dmg` |
+| macOS 11+ (Intel) | `Lycosa-macos-x64-<version>.dmg` |
+| Linux (x86_64, glibc 2.35+) | `Lycosa-linux-amd64-<version>.deb` or `Lycosa-linux-x86_64-<version>.AppImage` |
+
+Open it and choose **Run Lycosa on this computer**. The first start takes
+about half a minute (it creates the database), then you are signed in as the
+generated local admin. Nothing else to install: the app carries its own
+PostgreSQL 16, Qdrant and Python runtime. Your data lives in the app data
+folder (`%LOCALAPPDATA%\com.lycosa.desktop`,
+`~/Library/Application Support/com.lycosa.desktop` or
+`~/.local/share/com.lycosa.desktop`) and survives updates and uninstalls;
+**This computer** in the app shows the services, logs, backups and the
+network-controller switch. See [desktop-tauri/README.md](desktop-tauri/README.md).
+
+The installers are not code-signed: on Windows choose *More info → Run anyway*;
+on macOS right-click the app and choose *Open* (or run
+`xattr -dr com.apple.quarantine /Applications/Lycosa.app`).
+
+### Server install: Docker controller + desktop app
+
+For an always-on controller on a server (multi-worker with Redis,
+Prometheus/Grafana), Lycosa has **two parts installed separately**:
 
 1. the **controller** — a headless Docker Compose stack (API, PostgreSQL,
    Qdrant, Prometheus, Grafana) on your server or main machine;
-2. the **desktop dashboard** — a native app on the operator's machine,
-   downloaded from GitHub Releases (not a container).
+2. the **desktop app** — on each operator's machine, from GitHub Releases
+   (not a container), choosing *Connect to a controller*.
 
 ### 1. Controller (server / main machine)
 
@@ -278,24 +316,17 @@ no route to Postgres, Qdrant or the API. Without `.env.grafana` it starts
 with `admin`/`admin` and forces a new password on first sign-in, so sign in
 once right after the first start.
 
-### 2. Desktop dashboard (operator's machine)
+### 2. Desktop app (operator's machine)
 
-Download the installer for your OS from the
-[latest release](https://github.com/abdra7/Lycosa/releases/latest):
-
-| OS | Artifact |
-|---|---|
-| macOS | `Lycosa-macos-<version>.dmg` |
-| Windows | `Lycosa-windows-setup-<version>.exe` |
-| Linux | `Lycosa-linux-<version>.AppImage` (or `.tar.gz`) |
-
-Launch it, enter the controller URL printed by the installer, and log in with
-the admin credentials you chose. Credentials are kept in the OS keychain;
-multiple controller profiles are supported.
+Install the app for your OS (table above), choose **Connect to a
+controller**, enter the controller URL printed by the installer, and sign in
+with the admin credentials you chose. Session tokens are kept in the OS
+keychain; multiple controller profiles are supported, and the app never
+starts local services for a remote controller.
 
 ### 3. Add nodes (each participating device)
 
-In the dashboard, **Nodes → Add node** mints a one-time node API key and
+In the desktop app, **Nodes → Add node** mints a one-time node API key and
 shows the exact commands to run on the new machine:
 
 ```bash
@@ -346,12 +377,13 @@ controller can actually reach.
 
 
 
-*Screenshots of the redesigned dashboard are coming with the next release.*
+*Screenshots of the Tauri desktop app are coming with a later release.*
 
 ## Deploy modes
 
-- **Single machine** — controller and one agent on the same box: a personal
-  AI workstation with dashboards, RAG, and workflows.
+- **Single machine** — the desktop app's standalone controller (optionally
+  with its local node): a personal AI workstation with RAG, workflows and
+  cloud or local models, no Docker needed.
 - **Multi-machine LAN** (the sweet spot) — controller on an always-on box,
   agents on every device worth using; the scheduler places work by role and
   capacity, with automatic failover between candidates.
@@ -388,7 +420,8 @@ The detailed backlog is maintained in the project vault.
 |---|---|
 | `backend/` | FastAPI controller, task/workflow orchestration, RAG, provider adapters and Phantom API |
 | `agent/` | Local Agent runtime, Usage telemetry and optional MCP companion |
-| `dashboard/` | Flutter desktop dashboard, provider controls and separate Phantom dialog |
+| `desktop-tauri/` | The desktop app: React + TypeScript UI, Rust shell and the supervisor of the standalone controller (Tauri 2) |
+| `dashboard/` | The previous Flutter desktop dashboard, kept as the reference implementation (no longer released) |
 | `infra/` | Docker Compose, Prometheus/Grafana configuration and isolated Phantom worker image |
 | `docs/` | Public feature guides, validation notes and brand assets; internal context lives in the project Vault |
 | `scripts/` | Install and release tooling |
@@ -408,12 +441,16 @@ uvicorn app.main:app --reload # run the API locally
 
 The `providers` extra enables SDK transport tests; provider requests in those tests
 use intercepted HTTP and synthetic credentials. Agent: install `.[dev]` and run
-the same test/lint commands from `agent/`. Dashboard: `flutter pub get`,
-`flutter test`, `flutter run -d macos|windows|linux` from `dashboard/`.
+the same test/lint commands from `agent/`. Desktop app: see
+[desktop-tauri/README.md](desktop-tauri/README.md) (`npm ci`, `npm test`,
+`npx tauri dev`; `python scripts/stage_runtime.py` stages the standalone
+runtime).
 
-Releases are cut by tagging `v*` — CI builds the backend image (GHCR) and
-the three desktop installers and attaches them to the GitHub Release. See
-[CHANGELOG.md](CHANGELOG.md) for release history.
+Releases are cut by tagging `v*` — CI builds the backend image (GHCR) and,
+on native Windows, Linux and macOS runners, the desktop installers with their
+bundled runtime; every package is installed and smoke-tested before it is
+attached to the GitHub Release. See [CHANGELOG.md](CHANGELOG.md) for release
+history.
 
 ## Contributing
 
