@@ -614,10 +614,10 @@ impl Supervisor {
             .await
             .procs
             .insert(ServiceName::Qdrant, proc);
-        services::wait_http_ok(
+        self.await_ready(
+            ServiceName::Qdrant,
             &format!("http://127.0.0.1:{}/readyz", ports.qdrant_http),
             Duration::from_secs(90),
-            || process::pid_alive(pid),
         )
         .await
         .map_err(|e| format!("Qdrant did not become ready: {e}"))?;
@@ -648,10 +648,10 @@ impl Supervisor {
             .await
             .procs
             .insert(ServiceName::Backend, proc);
-        services::wait_http_ok(
+        self.await_ready(
+            ServiceName::Backend,
             &format!("http://127.0.0.1:{}/healthz", ports.api),
             Duration::from_secs(180),
-            || process::pid_alive(pid),
         )
         .await
         .map_err(|e| format!("the Lycosa API did not become healthy: {e}"))?;
@@ -663,6 +663,60 @@ impl Supervisor {
             None,
         );
         Ok(())
+    }
+
+    /// Poll a service's HTTP probe until it answers 2xx. A service that
+    /// exits meanwhile fails at once, with its exit status and last log
+    /// lines: `try_wait` sees the real exit, where a pid check would still
+    /// find the unreaped (zombie) process alive on Unix.
+    async fn await_ready(
+        &self,
+        name: ServiceName,
+        url: &str,
+        timeout: Duration,
+    ) -> Result<(), String> {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .no_proxy()
+            .build()
+            .map_err(|e| e.to_string())?;
+        let deadline = tokio::time::Instant::now() + timeout;
+        loop {
+            if let Ok(response) = client.get(url).send().await {
+                if response.status().is_success() {
+                    return Ok(());
+                }
+            }
+            let exited = {
+                let mut live = self.inner.live.lock().await;
+                live.procs
+                    .get_mut(&name)
+                    .and_then(|p| p.child.try_wait().ok().flatten())
+            };
+            if let Some(status) = exited {
+                // let the output pump drain the last lines first
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                let tail: Vec<String> = self
+                    .inner
+                    .logs
+                    .tail(name.key(), 6)
+                    .into_iter()
+                    .map(|l| l.line)
+                    .collect();
+                return Err(if tail.is_empty() {
+                    format!("it exited during startup ({status})")
+                } else {
+                    format!("it exited during startup ({status}): {}", tail.join(" | "))
+                });
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(format!(
+                    "no healthy answer from {url} within {}s",
+                    timeout.as_secs()
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(400)).await;
+        }
     }
 
     /// Mint (once) a node key through the local API, then run the agent.
@@ -731,12 +785,13 @@ impl Supervisor {
             .await
             .procs
             .insert(ServiceName::Agent, proc);
-        let ready = services::wait_http_ok(
-            &format!("http://127.0.0.1:{}/healthz", ports.agent),
-            Duration::from_secs(60),
-            || process::pid_alive(pid),
-        )
-        .await;
+        let ready = self
+            .await_ready(
+                ServiceName::Agent,
+                &format!("http://127.0.0.1:{}/healthz", ports.agent),
+                Duration::from_secs(60),
+            )
+            .await;
         match ready {
             Ok(()) => {
                 self.set_service(

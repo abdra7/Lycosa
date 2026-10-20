@@ -1,5 +1,5 @@
 {
-  "_comment": "Pinned components of the standalone runtime (ADR-037). To update a component, change its version, URLs and sha256 digests together; the digests are the ones GitHub publishes for each release asset.",
+  "_comment": "Pinned components of the standalone runtime (ADR-037). Linux uses Qdrant's static musl build, which runs on any glibc. To update a component, change its version, URLs and sha256 digests together; the digests are the ones GitHub publishes for each release asset.",
   "python": {
     "version": "3.12.15",
     "source": "https://github.com/astral-sh/python-build-standalone/releases/tag/20261003",
@@ -61,8 +61,8 @@
         "sha256": "d395eb3d96c2196bbb8c611b800842928fb8b4997924b585bf42ce0ceb90fa1f"
       },
       "x86_64-unknown-linux-gnu": {
-        "url": "https://github.com/qdrant/qdrant/releases/download/v1.18.2/qdrant-x86_64-unknown-linux-gnu.tar.gz",
-        "sha256": "cd619c61d8d32dd176af88cf498714ecb765b7df9021d691862478d6ac35392c"
+        "url": "https://github.com/qdrant/qdrant/releases/download/v1.18.2/qdrant-x86_64-unknown-linux-musl.tar.gz",
+        "sha256": "40a6af44f8a496560c9d2352b6b2a0ada816aa48d0781c68f602582e67b3aea0"
       }
     }
   }

@@ -3,7 +3,6 @@
 //! supervisor owns spawning, readiness and restarts.
 
 use std::path::Path;
-use std::time::Duration;
 
 use super::config::Secrets;
 use super::paths::{DataLayout, RuntimeLayout};
@@ -190,37 +189,6 @@ pub fn agent_command(
         &dir,
         &env,
     )
-}
-
-/// Poll an HTTP endpoint on loopback until it answers 2xx.
-pub async fn wait_http_ok(
-    url: &str,
-    timeout: Duration,
-    alive: impl Fn() -> bool,
-) -> Result<(), String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .no_proxy()
-        .build()
-        .map_err(|e| e.to_string())?;
-    let deadline = tokio::time::Instant::now() + timeout;
-    loop {
-        if let Ok(response) = client.get(url).send().await {
-            if response.status().is_success() {
-                return Ok(());
-            }
-        }
-        if !alive() {
-            return Err("the process exited during startup".into());
-        }
-        if tokio::time::Instant::now() >= deadline {
-            return Err(format!(
-                "no healthy answer from {url} within {}s",
-                timeout.as_secs()
-            ));
-        }
-        tokio::time::sleep(Duration::from_millis(400)).await;
-    }
 }
 
 pub fn node_name() -> String {

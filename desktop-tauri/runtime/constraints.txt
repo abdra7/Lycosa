@@ -1,19 +1,23 @@
 # Exact versions for the standalone runtime's Python packages (ADR-037).
 # Taken from the environment that passed the backend (724) and agent (71)
-# suites on 2026-10-20. Platform-only packages that are not listed here
-# (uvloop, jeepney, SecretStorage, ...) resolve to their latest release.
+# suites on 2026-10-20. Intel macOS gets the newest releases that still ship
+# x86_64 wheels of the three packages that stopped shipping them.
+# Platform-only packages that are not listed here (uvloop, jeepney,
+# SecretStorage, ...) resolve to their latest release.
 alembic==1.19.2
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
 argon2-cffi==25.1.0
-argon2-cffi-bindings==26.1.0
+argon2-cffi-bindings==26.1.0; sys_platform != "darwin" or platform_machine != "x86_64"
+argon2-cffi-bindings==25.1.0; sys_platform == "darwin" and platform_machine == "x86_64"
 asyncpg==0.31.0
 certifi==2026.7.22
 cffi==2.1.1
 click==8.5.0
 colorama==0.4.6
-cryptography==50.0.1
+cryptography==50.0.1; sys_platform != "darwin" or platform_machine != "x86_64"
+cryptography==48.0.1; sys_platform == "darwin" and platform_machine == "x86_64"
 fastapi==0.141.1
 greenlet==3.5.5
 grpcio==1.83.1
@@ -62,4 +66,5 @@ urllib3==2.7.0
 uvicorn==0.52.4
 watchfiles==1.2.0
 websockets==17.1
-zeroconf==0.151.3
+zeroconf==0.151.3; sys_platform != "darwin" or platform_machine != "x86_64"
+zeroconf==0.148.0; sys_platform == "darwin" and platform_machine == "x86_64"
