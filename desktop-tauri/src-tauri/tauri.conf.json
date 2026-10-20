@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lycosa",
+  "version": "0.5.0",
+  "identifier": "com.lycosa.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lycosa",
+        "width": 1320,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 620,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "freezePrototype": true,
+      "capabilities": ["main-capability"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "abdra7",
+    "copyright": "Copyright (c) 2026 Lycosa contributors",
+    "license": "MIT",
+    "homepage": "https://github.com/abdra7/Lycosa",
+    "category": "DeveloperTool",
+    "shortDescription": "LAN-first AI orchestration for your own devices",
+    "longDescription": "Lycosa turns your workstations, laptops and homelab boxes into one cooperative AI fabric. The desktop app manages a controller on this computer (PostgreSQL, Qdrant and the Lycosa API, bundled) or connects to a controller elsewhere on your network.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "resources/runtime/": "runtime/"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  }
+}
