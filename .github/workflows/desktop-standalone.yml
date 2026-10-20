@@ -1,0 +1,134 @@
+name: Desktop standalone
+
+# The standalone runtime on every desktop OS (ADR-037): stage the pinned
+# Python + PostgreSQL + Qdrant, then run the supervisor's integration tests
+# and the smoke test against them, so a platform problem shows up before a
+# tag rather than at release time.
+
+on:
+  pull_request:
+    paths:
+      - "desktop-tauri/**"
+      - "backend/**"
+      - "agent/**"
+      - ".github/workflows/desktop-standalone.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  standalone:
+    name: Standalone runtime (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+          - name: linux-x86_64
+            os: ubuntu-22.04
+          - name: macos-arm64
+            os: macos-latest
+          - name: macos-x64
+            os: macos-15-intel
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop-tauri/package-lock.json
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Linux build dependencies (Tauri)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
+
+      - name: Stage the standalone runtime
+        run: python desktop-tauri/scripts/stage_runtime.py
+
+      - name: Build the frontend (embedded by the Rust build)
+        working-directory: desktop-tauri
+        run: |
+          npm ci
+          npx vite build
+
+      - name: Supervisor integration tests (real PostgreSQL, Qdrant, API)
+        working-directory: desktop-tauri/src-tauri
+        run: |
+          export LYCOSA_RUNTIME_DIR="$PWD/resources/runtime"
+          cargo test --test standalone -- --test-threads=1
+
+      - name: Smoke test (start, sign in, knowledge round trip, restart)
+        working-directory: desktop-tauri/src-tauri
+        run: |
+          export LYCOSA_RUNTIME_DIR="$PWD/resources/runtime"
+          cargo run --quiet -- --smoke-test --data-dir "$RUNNER_TEMP/lycosa-smoke" --report "$RUNNER_TEMP/smoke.json"
+
+      # Visual evidence that the webview renders the app and that IPC to the
+      # Rust side works on this OS: the first-run screen only shows "Run
+      # Lycosa on this computer" after the supervisor answered.
+      - name: UI render check (Linux, macOS)
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        working-directory: desktop-tauri
+        env:
+          SHOT: ui-${{ matrix.name }}.png
+        run: |
+          npx tauri build --debug --no-bundle
+          export LYCOSA_RUNTIME_DIR="$PWD/src-tauri/resources/runtime"
+          bin="$PWD/src-tauri/target/debug/lycosa-desktop"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get install -y xvfb imagemagick
+            export WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1
+            xvfb-run -a -s "-screen 0 1440x900x24" bash -c \
+              "\"$bin\" & app=\$!; sleep 30; import -window root \"$RUNNER_TEMP/$SHOT\"; kill \$app"
+          else
+            "$bin" & app=$!
+            sleep 30
+            screencapture -x "$RUNNER_TEMP/$SHOT"
+            kill $app
+          fi
+
+      - name: UI render check (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        working-directory: desktop-tauri
+        shell: pwsh
+        env:
+          SHOT: ui-${{ matrix.name }}.png
+        run: |
+          npx tauri build --debug --no-bundle
+          $env:LYCOSA_RUNTIME_DIR = "$PWD\src-tauri\resources\runtime"
+          $app = Start-Process -FilePath "$PWD\src-tauri\target\debug\lycosa-desktop.exe" -PassThru
+          Start-Sleep -Seconds 30
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          [System.Drawing.Graphics]::FromImage($bitmap).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save("$env:RUNNER_TEMP\$env:SHOT")
+          Stop-Process -Id $app.Id -Force
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ui-${{ matrix.name }}
+          path: ${{ runner.temp }}/ui-*.png
+          if-no-files-found: ignore
