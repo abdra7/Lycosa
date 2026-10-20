@@ -107,6 +107,19 @@ describe("session-driven root (setup → login → shell)", () => {
     await waitFor(() => expect(fake.called("session_switch")[0]!.args).toEqual({ id: "b" }));
   });
 
+  it("after a relaunch, the saved local session comes back once the controller is up", async () => {
+    const local = [{ id: "l", name: "This computer", baseUrl: "http://127.0.0.1:18000", kind: "local", signedIn: true }];
+    const fake = signedIn()
+      .on("session_restore", session({ principal: null, profiles: local, unreachable: true }))
+      .on("standalone_status", { ...STANDALONE_OFF, phase: "starting", enabled: true, stage: "Starting PostgreSQL" });
+    renderApp(fake);
+    expect(await screen.findByText("Starting PostgreSQL")).toBeInTheDocument();
+    fake.on("session_restore", session({ profiles: local }));
+    act(() => fake.emit("lycosa://standalone", { ...STANDALONE_OFF, phase: "running", enabled: true, apiUrl: "http://127.0.0.1:18000" }));
+    expect(await screen.findByRole("heading", { name: "Nodes" })).toBeInTheDocument();
+    expect(fake.called("standalone_sign_in")).toHaveLength(0);
+  });
+
   it("the local profile's sign-in uses the local controller", async () => {
     const local = [{ id: "l", name: "This computer", baseUrl: "http://127.0.0.1:18000", kind: "local", signedIn: false }];
     const fake = signedIn()

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { friendly } from "../../api/errors";
 import { BrandHero } from "../../components/brand";
@@ -12,6 +12,7 @@ import { AddControllerDialog } from "../setup/ConnectionForm";
 /** Sign-in for the active profile (token missing, expired or revoked). */
 export function LoginScreen() {
   const session = useSession();
+  const restoreSession = session.restore;
   const { status: local } = useStandalone();
   const profile = activeProfile(session.status);
   const ready = session.status.phase === "ready" ? session.status : null;
@@ -39,6 +40,14 @@ export function LoginScreen() {
   const isLocal = profile?.kind === "local";
   const localRunning = local?.phase === "running";
   const localStarting = local?.phase === "starting";
+
+  // The app starts its local controller in the background at launch, so a
+  // saved local session looks unreachable for its first seconds. Once the
+  // controller is up, restore that session instead of asking again.
+  const retryWhenUp = isLocal && localRunning && !!ready?.unreachable && !!profile?.signedIn;
+  useEffect(() => {
+    if (retryWhenUp) void restoreSession();
+  }, [retryWhenUp, restoreSession]);
 
   return (
     <div className="auth-page">
