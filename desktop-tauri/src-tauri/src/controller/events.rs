@@ -8,7 +8,7 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use serde::Serialize;
 use serde_json::Value;
-use tokio::task::JoinHandle;
+use tauri::async_runtime::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
 pub const RECONNECT_DELAY: Duration = Duration::from_secs(5);
@@ -32,7 +32,7 @@ impl EventsHub {
     pub fn start(&self, profile_id: &str, base_url: &str, token: &str, sink: Sink) {
         let mut current = self.current.lock().unwrap();
         if let Some((id, handle)) = current.as_ref() {
-            if id == profile_id && !handle.is_finished() {
+            if id == profile_id && !handle.inner().is_finished() {
                 return;
             }
         }
@@ -40,7 +40,10 @@ impl EventsHub {
             handle.abort();
         }
         let url = ws_url(base_url, token);
-        let handle = tokio::spawn(run(url, sink));
+        // Tauri's runtime, not tokio::spawn: synchronous commands run on the
+        // UI thread, which has no Tokio context, and a panic there aborts
+        // the whole app
+        let handle = tauri::async_runtime::spawn(run(url, sink));
         *current = Some((profile_id.to_string(), handle));
     }
 
@@ -99,6 +102,21 @@ mod tests {
             ws_url("https://ctl.example/lycosa", "t"),
             "wss://ctl.example/lycosa/api/v1/events?token=t"
         );
+    }
+
+    /// `events_start` is a synchronous command: it runs on the UI thread,
+    /// outside any Tokio runtime. Starting the stream there must not panic
+    /// (it did, and a panic in the webview callback aborted the app).
+    #[test]
+    fn starts_from_a_thread_without_a_tokio_runtime() {
+        let hub = Arc::new(EventsHub::default());
+        let worker = hub.clone();
+        std::thread::spawn(move || {
+            worker.start("p1", "http://127.0.0.1:9", "t", Arc::new(|_| {}));
+        })
+        .join()
+        .expect("starting the event stream panicked");
+        hub.stop(&(Arc::new(|_| {}) as Sink));
     }
 
     #[tokio::test]
