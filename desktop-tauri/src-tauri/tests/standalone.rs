@@ -134,8 +134,16 @@ async fn an_upgrade_backs_up_the_database_before_migrating() {
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
     assert_eq!(dumps.len(), 1, "{dumps:?}");
-    assert!(dumps[0].ends_with("before-0.5.0-from-0.4.0.dump"), "{dumps:?}");
-    assert!(StandaloneConfig::load(&config_path).last_app_version.as_deref() == Some("0.5.0"));
+    assert!(
+        dumps[0].ends_with("before-0.5.0-from-0.4.0.dump"),
+        "{dumps:?}"
+    );
+    assert!(
+        StandaloneConfig::load(&config_path)
+            .last_app_version
+            .as_deref()
+            == Some("0.5.0")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -171,7 +179,10 @@ async fn loopback_by_default_and_secrets_never_reach_the_logs() {
         .await
         .unwrap();
     let token = login["access_token"].as_str().unwrap().to_string();
-    let ws = format!("ws{}/api/v1/events?token={token}", api.trim_start_matches("http"));
+    let ws = format!(
+        "ws{}/api/v1/events?token={token}",
+        api.trim_start_matches("http")
+    );
     if let Ok((mut socket, _)) = tokio_tungstenite::connect_async(ws).await {
         let _ = socket.close(None).await;
     }

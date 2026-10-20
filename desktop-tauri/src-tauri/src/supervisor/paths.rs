@@ -31,9 +31,29 @@ pub struct RuntimeLayout {
     pub root: PathBuf,
 }
 
+/// Windows extended-length paths (`\\?\C:\...`, which Tauri's resource
+/// resolver returns for an installed app) back to ordinary ones. PostgreSQL's
+/// tools cannot work from a verbatim path: initdb then fails to find
+/// `postgres.exe` "in the same directory" as itself.
+pub fn plain(path: PathBuf) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        // only drive paths; other verbatim forms have no plain equivalent
+        if rest.as_bytes().get(1) == Some(&b':') {
+            return PathBuf::from(rest);
+        }
+    }
+    path
+}
+
 impl RuntimeLayout {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: plain(root.into()),
+        }
     }
 
     pub fn python(&self) -> PathBuf {
@@ -111,7 +131,9 @@ pub struct DataLayout {
 
 impl DataLayout {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: plain(root.into()),
+        }
     }
 
     pub fn pgdata(&self) -> PathBuf {
@@ -231,6 +253,32 @@ mod tests {
             backend: "0.5.0".into(),
         };
         assert_eq!(info.postgres_major(), Some(16));
+    }
+
+    #[test]
+    fn verbatim_paths_become_plain() {
+        assert_eq!(
+            plain(PathBuf::from(
+                r"\\?\C:\Users\me\AppData\Local\Lycosa\runtime"
+            )),
+            PathBuf::from(r"C:\Users\me\AppData\Local\Lycosa\runtime")
+        );
+        assert_eq!(
+            plain(PathBuf::from(r"\\?\UNC\server\share\x")),
+            PathBuf::from(r"\\server\share\x")
+        );
+        assert_eq!(
+            plain(PathBuf::from(r"\\?\Volume{abc}\x")),
+            PathBuf::from(r"\\?\Volume{abc}\x")
+        );
+        assert_eq!(
+            plain(PathBuf::from("/opt/lycosa")),
+            PathBuf::from("/opt/lycosa")
+        );
+        assert_eq!(
+            RuntimeLayout::new(r"\\?\D:\app\runtime").root,
+            PathBuf::from(r"D:\app\runtime")
+        );
     }
 
     #[test]

@@ -76,11 +76,14 @@ jobs:
           export LYCOSA_RUNTIME_DIR="$PWD/resources/runtime"
           cargo test --test standalone -- --test-threads=1
 
+      # no LYCOSA_RUNTIME_DIR here: the binary resolves its runtime the way an
+      # installed app does (Tauri copies the resources next to it), which is
+      # where a Windows `\\?\` resource path once broke initdb
       - name: Smoke test (start, sign in, knowledge round trip, restart)
         working-directory: desktop-tauri/src-tauri
         run: |
-          export LYCOSA_RUNTIME_DIR="$PWD/resources/runtime"
-          cargo run --quiet -- --smoke-test --data-dir "$RUNNER_TEMP/lycosa-smoke" --report "$RUNNER_TEMP/smoke.json"
+          cargo build --quiet
+          ./target/debug/lycosa-desktop --smoke-test --data-dir "$RUNNER_TEMP/lycosa-smoke" --report "$RUNNER_TEMP/smoke.json"
 
       # Visual evidence that the webview renders the app and that IPC to the
       # Rust side works on this OS: the first-run screen only shows "Run
