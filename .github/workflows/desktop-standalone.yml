@@ -122,7 +122,7 @@ jobs:
           export LYCOSA_RUNTIME_DIR="$PWD/src-tauri/resources/runtime"
           bin="$PWD/src-tauri/target/debug/lycosa-desktop"
           if [ "$RUNNER_OS" = "Linux" ]; then
-            sudo apt-get install -y xvfb imagemagick x11-utils
+            sudo apt-get install -y xvfb imagemagick x11-utils gdb
             export WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1
             cat > "$RUNNER_TEMP/shoot.sh" <<'SH'
           "$1" & app=$!
@@ -130,6 +130,12 @@ jobs:
           xwininfo -root -tree | grep -i lycosa || echo "no Lycosa window found"
           win=$(xwininfo -root -tree | grep -i '"Lycosa"' | awk '{print $1}' | head -1)
           [ -n "$win" ] && xwininfo -id "$win" | grep -E "Map State|geometry"
+          # a window that never maps means the main thread is stuck: show
+          # where every thread is
+          if [ -n "$win" ] && xwininfo -id "$win" | grep -q IsUnMapped; then
+            echo "window not mapped; thread backtraces:"
+            sudo gdb -p "$app" -batch -ex "thread apply all bt 25" 2>/dev/null | grep -E "^Thread|^#" | head -300
+          fi
           # without a window manager the toplevel may not be readable on its
           # own; the virtual screen holds nothing but the app, so fall back
           # to capturing all of it
