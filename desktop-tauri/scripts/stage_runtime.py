@@ -73,7 +73,16 @@ POSTGRES_BIN_PRUNE = (
 # libtcl, which are not bundled, so they could never load, and the AppImage
 # tooling fails on their unresolvable dependencies. The embedded-SQL (ECPG)
 # client libraries go with the ecpg tools: nothing Lycosa runs links them.
-POSTGRES_LIB_PRUNE = ("*plperl*", "*plpython*", "*pltcl*", "libecpg*", "libpgtypes*")
+# uuid-ossp links libossp-uuid, which is not shipped on Linux; Lycosa makes
+# its UUIDs in Python and creates no extensions.
+POSTGRES_LIB_PRUNE = (
+    "*plperl*",
+    "*plpython*",
+    "*pltcl*",
+    "libecpg*",
+    "libpgtypes*",
+    "uuid-ossp*",
+)
 
 
 def log(message: str) -> None:
