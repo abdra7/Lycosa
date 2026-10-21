@@ -35,6 +35,13 @@ fn runtime_override() -> Option<std::path::PathBuf> {
 }
 
 pub fn run() {
+    // WebKitGTK's DMA-BUF renderer draws a blank window where no usable GPU
+    // path exists (virtual machines, some NVIDIA drivers, Xvfb). Turn it off
+    // unless the user chose otherwise; set before any thread starts.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
     // reqwest and tokio-tungstenite share one TLS crypto provider
     let _ = rustls::crypto::ring::default_provider().install_default();
     let context = tauri::generate_context!();

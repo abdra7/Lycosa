@@ -99,10 +99,17 @@ jobs:
           export LYCOSA_RUNTIME_DIR="$PWD/src-tauri/resources/runtime"
           bin="$PWD/src-tauri/target/debug/lycosa-desktop"
           if [ "$RUNNER_OS" = "Linux" ]; then
-            sudo apt-get install -y xvfb imagemagick
+            sudo apt-get install -y xvfb imagemagick x11-utils
             export WEBKIT_DISABLE_COMPOSITING_MODE=1 LIBGL_ALWAYS_SOFTWARE=1
-            xvfb-run -a -s "-screen 0 1440x900x24" bash -c \
-              "\"$bin\" & app=\$!; sleep 30; import -window root \"$RUNNER_TEMP/$SHOT\"; kill \$app"
+            cat > "$RUNNER_TEMP/shoot.sh" <<'SH'
+          "$1" & app=$!
+          sleep 30
+          xwininfo -root -tree | grep -i lycosa || echo "no Lycosa window found"
+          win=$(xwininfo -root -tree | grep -i '"Lycosa"' | awk '{print $1}' | head -1)
+          import -window "${win:-root}" "$2"
+          kill $app
+          SH
+            xvfb-run -a -s "-screen 0 1440x900x24" bash "$RUNNER_TEMP/shoot.sh" "$bin" "$RUNNER_TEMP/$SHOT"
           else
             "$bin" & app=$!
             sleep 30
