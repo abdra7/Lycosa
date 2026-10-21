@@ -114,6 +114,32 @@ jobs:
           NO_STRIP: "true"
         run: npx tauri build --verbose --bundles "$BUNDLES"
 
+      # linuxdeploy rewrites the rpath of every ELF file in the AppDir,
+      # including the bundled runtime, and patchelf corrupts static-PIE
+      # executables such as the musl Qdrant (it then dies with SIGSEGV). Put
+      # the staged runtime back unmodified, so the AppImage carries the same
+      # bytes as the .deb and the integration tests, then repack it with the
+      # AppImage plugin Tauri just used.
+      - name: Restore the unmodified runtime inside the AppImage
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          appimage=$(realpath desktop-tauri/src-tauri/target/release/bundle/appimage/*.AppImage)
+          staged=$(realpath desktop-tauri/src-tauri/resources/runtime)
+          plugin=$(ls "$HOME"/.cache/tauri/linuxdeploy-plugin-appimage*.AppImage | head -1)
+          work="$RUNNER_TEMP/appimage-repack"
+          rm -rf "$work" && mkdir -p "$work" && cd "$work"
+          "$appimage" --appimage-extract >/dev/null
+          runtime=squashfs-root/usr/lib/Lycosa/runtime
+          test -x "$runtime/qdrant/qdrant" || { echo "no runtime at $runtime" >&2; exit 1; }
+          rm -rf "$runtime"
+          cp -a "$staged" "$runtime"
+          rm -f "$runtime/.gitkeep"
+          cmp "$runtime/qdrant/qdrant" "$staged/qdrant/qdrant"
+          rm "$appimage"
+          ARCH=x86_64 LDAI_OUTPUT="$appimage" APPIMAGE_EXTRACT_AND_RUN=1 "$plugin" --appdir squashfs-root
+          ls -la "$appimage"
+
       - name: Install the .exe, smoke-test it, uninstall (data kept)
         if: runner.os == 'Windows'
         shell: pwsh
