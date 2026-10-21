@@ -67,6 +67,10 @@ POSTGRES_BIN_PRUNE = (
     "ecpg*",
     "pgbench*",
 )
+# Procedural languages Lycosa never uses. They link libperl, libpython and
+# libtcl, which are not bundled, so they could never load, and the AppImage
+# tooling fails on their unresolvable dependencies.
+POSTGRES_LIB_PRUNE = ("*plperl*", "*plpython*", "*pltcl*")
 
 
 def log(message: str) -> None:
@@ -233,6 +237,10 @@ def stage_postgres(spec: dict, cache: Path, work: Path, out: Path) -> Path:
     for pattern in POSTGRES_BIN_PRUNE:
         for path in (postgres / "bin").glob(pattern):
             path.unlink()
+    for pattern in POSTGRES_LIB_PRUNE:
+        for path in [*(postgres / "lib").rglob(pattern), *(postgres / "share" / "extension").glob(pattern)]:
+            if path.is_file():
+                path.unlink()
     # Windows debug symbols and import libraries
     for path in [*postgres.rglob("*.pdb"), *postgres.rglob("*.lib")]:
         path.unlink()

@@ -109,7 +109,10 @@ jobs:
         working-directory: desktop-tauri
         env:
           BUNDLES: ${{ matrix.bundles }}
-        run: npx tauri build --bundles "$BUNDLES"
+          # linuxdeploy's bundled strip is older than some of the runtime's
+          # binaries and fails on them; they are already stripped upstream
+          NO_STRIP: "true"
+        run: npx tauri build --verbose --bundles "$BUNDLES"
 
       - name: Install the .exe, smoke-test it, uninstall (data kept)
         if: runner.os == 'Windows'
