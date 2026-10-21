@@ -61,172 +61,27 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/lycosa-backend:${{ steps.ver.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/lycosa-backend:latest
 
-  desktop:
-    name: Desktop (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: windows-x64
-            os: windows-latest
-            bundles: nsis
-          - name: linux-x86_64
-            # the oldest supported Ubuntu with webkit2gtk-4.1: the packages
-            # then run on any newer glibc
-            os: ubuntu-22.04
-            bundles: deb,appimage
-          - name: macos-arm64
-            os: macos-latest
-            bundles: app,dmg
-          - name: macos-x64
-            os: macos-15-intel
-            bundles: app,dmg
-    defaults:
-      run:
-        shell: bash
+  version:
+    name: Version from tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set version from tag and check it matches every component
-        id: ver
+      - id: ver
         run: |
           version="${GITHUB_REF_NAME#v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] \
             || { echo "tag $GITHUB_REF_NAME is not a semver version" >&2; exit 1; }
-          base="${version%%[-+]*}"
-          python3 - "$base" <<'PY'
-          import json, re, sys, tomllib
-          want = sys.argv[1]
-          found = {
-              "desktop-tauri/package.json": json.load(open("desktop-tauri/package.json"))["version"],
-              "desktop-tauri/src-tauri/tauri.conf.json": json.load(open("desktop-tauri/src-tauri/tauri.conf.json"))["version"],
-              "desktop-tauri/src-tauri/Cargo.toml": tomllib.load(open("desktop-tauri/src-tauri/Cargo.toml", "rb"))["package"]["version"],
-              "backend/pyproject.toml": tomllib.load(open("backend/pyproject.toml", "rb"))["project"]["version"],
-          }
-          bad = {k: v for k, v in found.items() if v != want}
-          if bad:
-              sys.exit(f"tag version {want} does not match: {bad}")
-          print(f"all components at {want}")
-          PY
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: desktop-tauri/package-lock.json
-
-      - name: Rust toolchain
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-          rustc --version
-
-      - name: Linux build dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
-            libsoup-3.0-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev \
-            patchelf file libfuse2
-
-      - name: Stage the standalone runtime (pinned + verified)
-        run: python desktop-tauri/scripts/stage_runtime.py
-
-      - name: Install frontend dependencies
-        working-directory: desktop-tauri
-        run: npm ci
-
-      - name: Build the app and its bundles
-        working-directory: desktop-tauri
-        env:
-          BUNDLES: ${{ matrix.bundles }}
-        run: npx tauri build --bundles "$BUNDLES"
-
-      - name: Install the .exe, smoke-test it, uninstall (data kept)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $setup = Get-ChildItem desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
-          $p = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "installer exited with $($p.ExitCode)" }
-          $dir = Join-Path $env:LOCALAPPDATA 'Lycosa'
-          $exe = Join-Path $dir 'lycosa-desktop.exe'
-          if (-not (Test-Path $exe)) { Get-ChildItem -Recurse -Depth 1 $dir; throw "not installed at $exe" }
-          $report = Join-Path $env:RUNNER_TEMP 'smoke.json'
-          $s = Start-Process -FilePath $exe -ArgumentList '--smoke-test', '--data-dir', (Join-Path $env:RUNNER_TEMP 'lycosa-smoke'), '--report', $report -Wait -PassThru -NoNewWindow
-          Get-Content $report
-          if ($s.ExitCode -ne 0) { throw "smoke test failed ($($s.ExitCode))" }
-          # an uninstall must not erase user data
-          $data = Join-Path $env:LOCALAPPDATA 'com.lycosa.desktop'
-          New-Item -ItemType Directory -Force $data | Out-Null
-          Set-Content (Join-Path $data 'keep.txt') 'user data'
-          $u = Start-Process -FilePath (Join-Path $dir 'uninstall.exe') -ArgumentList '/S', "_?=$dir" -Wait -PassThru
-          if ($u.ExitCode -ne 0) { throw "uninstaller exited with $($u.ExitCode)" }
-          if (Test-Path $exe) { throw "the app is still installed" }
-          if (-not (Test-Path (Join-Path $data 'keep.txt'))) { throw "uninstall removed user data" }
-          Write-Host "installed, smoke-tested and uninstalled; user data kept"
-
-      - name: Install the .deb and the AppImage, smoke-test both, remove (data kept)
-        if: runner.os == 'Linux'
-        run: |
-          bundle=desktop-tauri/src-tauri/target/release/bundle
-          sudo apt-get install -y "./$(ls $bundle/deb/*.deb)"
-          /usr/bin/lycosa-desktop --smoke-test --data-dir "$RUNNER_TEMP/smoke-deb" --report "$RUNNER_TEMP/smoke-deb.json"
-          appimage=$(ls $bundle/appimage/*.AppImage)
-          chmod +x "$appimage"
-          APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --smoke-test --data-dir "$RUNNER_TEMP/smoke-appimage" --report "$RUNNER_TEMP/smoke-appimage.json"
-          data="$HOME/.local/share/com.lycosa.desktop"
-          mkdir -p "$data" && echo "user data" > "$data/keep.txt"
-          sudo apt-get remove -y lycosa-desktop
-          test ! -e /usr/bin/lycosa-desktop
-          test -f "$data/keep.txt" || { echo "removal erased user data" >&2; exit 1; }
-          echo "installed, smoke-tested and removed; user data kept"
-
-      - name: Install from the .dmg and smoke-test
-        if: runner.os == 'macOS'
-        run: |
-          dmg=$(ls desktop-tauri/src-tauri/target/release/bundle/dmg/*.dmg)
-          mnt="$RUNNER_TEMP/lycosa-dmg"
-          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mnt"
-          cp -R "$mnt/Lycosa.app" "$RUNNER_TEMP/Lycosa.app"
-          hdiutil detach "$mnt"
-          codesign --verify --verbose "$RUNNER_TEMP/Lycosa.app" || true
-          "$RUNNER_TEMP/Lycosa.app/Contents/MacOS/lycosa-desktop" --smoke-test \
-            --data-dir "$RUNNER_TEMP/lycosa-smoke" --report "$RUNNER_TEMP/smoke.json"
-
-      - name: Collect the installers under release names
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-          NAME: ${{ matrix.name }}
-        run: |
-          bundle=desktop-tauri/src-tauri/target/release/bundle
-          mkdir -p dist-release
-          case "$NAME" in
-            windows-x64)
-              cp "$(ls $bundle/nsis/*-setup.exe)" "dist-release/Lycosa-windows-x64-setup-$VERSION.exe" ;;
-            linux-x86_64)
-              cp "$(ls $bundle/deb/*.deb)" "dist-release/Lycosa-linux-amd64-$VERSION.deb"
-              cp "$(ls $bundle/appimage/*.AppImage)" "dist-release/Lycosa-linux-x86_64-$VERSION.AppImage" ;;
-            macos-arm64)
-              cp "$(ls $bundle/dmg/*.dmg)" "dist-release/Lycosa-macos-arm64-$VERSION.dmg" ;;
-            macos-x64)
-              cp "$(ls $bundle/dmg/*.dmg)" "dist-release/Lycosa-macos-x64-$VERSION.dmg" ;;
-          esac
-          ls -la dist-release
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: installer-${{ matrix.name }}
-          path: dist-release/*
-          if-no-files-found: error
+  # build, install, smoke-test and upload on native runners; the same
+  # workflow runs as a dry run on pull requests labeled release-check
+  desktop:
+    name: Desktop
+    needs: version
+    uses: ./.github/workflows/desktop-bundles.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
 
   release:
     name: Create GitHub Release
