@@ -129,7 +129,11 @@ jobs:
           sleep 30
           xwininfo -root -tree | grep -i lycosa || echo "no Lycosa window found"
           win=$(xwininfo -root -tree | grep -i '"Lycosa"' | awk '{print $1}' | head -1)
-          import -window "${win:-root}" "$2"
+          [ -n "$win" ] && xwininfo -id "$win" | grep -E "Map State|geometry"
+          # without a window manager the toplevel may not be readable on its
+          # own; the virtual screen holds nothing but the app, so fall back
+          # to capturing all of it
+          import -window "${win:-root}" "$2" || import -window root "$2"
           kill $app
           SH
             xvfb-run -a -s "-screen 0 1440x900x24" bash "$RUNNER_TEMP/shoot.sh" "$bin" "$RUNNER_TEMP/$SHOT"

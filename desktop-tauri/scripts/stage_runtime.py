@@ -66,11 +66,14 @@ POSTGRES_BIN_PRUNE = (
     "testplug*",
     "ecpg*",
     "pgbench*",
+    "libecpg*",
+    "libpgtypes*",
 )
 # Procedural languages Lycosa never uses. They link libperl, libpython and
 # libtcl, which are not bundled, so they could never load, and the AppImage
-# tooling fails on their unresolvable dependencies.
-POSTGRES_LIB_PRUNE = ("*plperl*", "*plpython*", "*pltcl*")
+# tooling fails on their unresolvable dependencies. The embedded-SQL (ECPG)
+# client libraries go with the ecpg tools: nothing Lycosa runs links them.
+POSTGRES_LIB_PRUNE = ("*plperl*", "*plpython*", "*pltcl*", "libecpg*", "libpgtypes*")
 
 
 def log(message: str) -> None:
@@ -333,6 +336,33 @@ def smoke_check(python_root: Path, out: Path) -> None:
     subprocess.run([str(python_exe(python_root)), "-c", code], check=True, env=env)
 
 
+def check_linked_libraries(out: Path) -> None:
+    """Fail if any ELF file in the runtime links a library that cannot be found.
+
+    The AppImage tooling resolves every shared library of every ELF file it
+    bundles and stops at the first one it cannot find. Checking them all here
+    reports every gap at once, at staging time.
+    """
+    missing: dict[str, list[str]] = {}
+    checked = 0
+    for path in sorted(out.rglob("*")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        with path.open("rb") as fh:
+            if fh.read(4) != b"\x7fELF":
+                continue
+        checked += 1
+        result = subprocess.run(["ldd", str(path)], capture_output=True, text=True, check=False)
+        for line in result.stdout.splitlines():
+            if "=> not found" in line:
+                missing.setdefault(line.split()[0], []).append(str(path.relative_to(out)))
+    if missing:
+        for library, users in sorted(missing.items()):
+            log(f"unresolved {library}: needed by {', '.join(users)}")
+        raise SystemExit(f"{len(missing)} shared libraries cannot be resolved")
+    log(f"all shared libraries resolve ({checked} ELF files)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
@@ -365,6 +395,8 @@ def main() -> None:
     write_backend_metadata(python_root)
     compile_bytecode(python_root, out)
     smoke_check(python_root, out)
+    if sys.platform == "linux":
+        check_linked_libraries(out)
 
     info = {
         "target": target,
