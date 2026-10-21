@@ -1,0 +1,69 @@
+{
+  "_comment": "Pinned components of the standalone runtime (ADR-037). Linux uses Qdrant's static musl build, which runs on any glibc. To update a component, change its version, URLs and sha256 digests together; the digests are the ones GitHub publishes for each release asset.",
+  "python": {
+    "version": "3.12.15",
+    "source": "https://github.com/astral-sh/python-build-standalone/releases/tag/20261003",
+    "targets": {
+      "x86_64-pc-windows-msvc": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.12.15%2B20261003-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        "sha256": "6fba7f2ae506facf41d457ea8293c7497910a675c69a4e954875169410a50402"
+      },
+      "aarch64-apple-darwin": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.12.15%2B20261003-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        "sha256": "ad8d0c637c0a36b967b310e2c07254f4d2ca8cabaa7699e55ed6290aceb481a2"
+      },
+      "x86_64-apple-darwin": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.12.15%2B20261003-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        "sha256": "562c30864ece2cb1d3e0ad66a1acd498611a47e5a10ce81b99158bef1ccbd355"
+      },
+      "x86_64-unknown-linux-gnu": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.12.15%2B20261003-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        "sha256": "731af898886c5f821890dc901eca3c651cca8e51fa7308c159d12a1194aeac91"
+      }
+    }
+  },
+  "postgres": {
+    "version": "16.15.0",
+    "source": "https://github.com/theseus-rs/postgresql-binaries/releases/tag/16.15.0",
+    "targets": {
+      "x86_64-pc-windows-msvc": {
+        "url": "https://github.com/theseus-rs/postgresql-binaries/releases/download/16.15.0/postgresql-16.15.0-x86_64-pc-windows-msvc.tar.gz",
+        "sha256": "157bd7322f8c653f06b0373d1b2280e9cb238b6a6d3bd05541aeb8f33885a8ad"
+      },
+      "aarch64-apple-darwin": {
+        "url": "https://github.com/theseus-rs/postgresql-binaries/releases/download/16.15.0/postgresql-16.15.0-aarch64-apple-darwin.tar.gz",
+        "sha256": "46f6382024d9b633d1f4b4903ffef8c2404e00ae83098d628c00591048cb0512"
+      },
+      "x86_64-apple-darwin": {
+        "url": "https://github.com/theseus-rs/postgresql-binaries/releases/download/16.15.0/postgresql-16.15.0-x86_64-apple-darwin.tar.gz",
+        "sha256": "dfae21b2b931f1d8d1103afb6e8e108fdd94c6f407ce24d35b6cd0ad34f286d1"
+      },
+      "x86_64-unknown-linux-gnu": {
+        "url": "https://github.com/theseus-rs/postgresql-binaries/releases/download/16.15.0/postgresql-16.15.0-x86_64-unknown-linux-gnu.tar.gz",
+        "sha256": "77dd669eda3985ea8be26256f6af28d3c8414152ada713797555bb7423b4486a"
+      }
+    }
+  },
+  "qdrant": {
+    "version": "1.18.2",
+    "source": "https://github.com/qdrant/qdrant/releases/tag/v1.18.2",
+    "targets": {
+      "x86_64-pc-windows-msvc": {
+        "url": "https://github.com/qdrant/qdrant/releases/download/v1.18.2/qdrant-x86_64-pc-windows-msvc.zip",
+        "sha256": "b2b262cba6f78cf4fa794ae78d73a8f70a221c93c76c75ac8fd6fe95d809b142"
+      },
+      "aarch64-apple-darwin": {
+        "url": "https://github.com/qdrant/qdrant/releases/download/v1.18.2/qdrant-aarch64-apple-darwin.tar.gz",
+        "sha256": "859f487e316ae1bda3b5d7c1e129a0a7344424d992503c188979ca6ac1b47253"
+      },
+      "x86_64-apple-darwin": {
+        "url": "https://github.com/qdrant/qdrant/releases/download/v1.18.2/qdrant-x86_64-apple-darwin.tar.gz",
+        "sha256": "d395eb3d96c2196bbb8c611b800842928fb8b4997924b585bf42ce0ceb90fa1f"
+      },
+      "x86_64-unknown-linux-gnu": {
+        "url": "https://github.com/qdrant/qdrant/releases/download/v1.18.2/qdrant-x86_64-unknown-linux-musl.tar.gz",
+        "sha256": "40a6af44f8a496560c9d2352b6b2a0ada816aa48d0781c68f602582e67b3aea0"
+      }
+    }
+  }
+}

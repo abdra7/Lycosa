@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-21
+
+Sprint 15: the desktop app moves from Flutter to **Tauri 2 + React +
+TypeScript** and becomes standalone (ADR-037). Install it and choose *Run
+Lycosa on this computer*: the app starts its own bundled PostgreSQL, Qdrant
+and Lycosa API, signs you in and supervises them. No Python, Node, Docker or
+terminal needed. It still connects to any existing controller, such as the
+Docker install.
+
+This release also ships Sprints 13 and 14, which were merged after v0.4.0.
+
 Sprint 13: a universal, provider-independent LLM layer with user-owned provider
 accounts (ADR-031). Additive: legacy provider routes, task and workflow
 contracts, and stored data are unchanged.
@@ -15,8 +26,81 @@ desktop Chat screen, fixes from a live end-to-end QA run and a desktop
 walkthrough (ADR-033), and leases that clean up work a controller crash
 orphaned (ADR-034…036).
 
+### Supported platforms and install
+
+| OS | Download | Notes |
+|---|---|---|
+| Windows 10/11, x64 | `Lycosa-windows-x64-setup-0.5.0.exe` | Per-user install, no administrator needed. Unsigned: *More info → Run anyway*. |
+| macOS 11+, Apple silicon | `Lycosa-macos-arm64-0.5.0.dmg` | Drag Lycosa to Applications. Unsigned (ad-hoc): right-click → *Open*, or run `xattr -dr com.apple.quarantine /Applications/Lycosa.app`. |
+| macOS 11+, Intel | `Lycosa-macos-x64-0.5.0.dmg` | As above. |
+| Linux x86_64, glibc 2.35+ (Ubuntu 22.04+, Debian 12+) | `Lycosa-linux-amd64-0.5.0.deb` or `Lycosa-linux-x86_64-0.5.0.AppImage` | `sudo apt install ./Lycosa-linux-amd64-0.5.0.deb`, or `chmod +x` and run the AppImage. Needs WebKitGTK 4.1, which the `.deb` installs. |
+
+Then open Lycosa and choose **Run Lycosa on this computer** (the first start
+takes about half a minute) or **Connect to a controller**. `SHA256SUMS.txt`
+lists every installer's checksum. The controller image is
+`ghcr.io/abdra7/lycosa-backend:0.5.0` for Docker installs.
+
+### How this release was tested
+
+- **Every installer, on its own OS:** CI built each package on a native
+  runner and installed it: the Windows `.exe` silently, the Linux `.deb`
+  with `apt` (and the AppImage as-is), and the macOS app from its `.dmg`.
+  It then ran the app's smoke test. That test starts the bundled
+  PostgreSQL, Qdrant and API, signs in, sends a document through the
+  knowledge pipeline and retrieves it, stops cleanly, restarts, and
+  checks the data survived. On Windows and Linux the package was then
+  uninstalled, and CI checked that user data was kept. The same workflow
+  ran as a dry run on the pull request before the tag.
+- **Real services per OS:** the supervisor's integration tests run against
+  real PostgreSQL, Qdrant and the API on Windows, Linux, macOS arm64 and
+  macOS x64. A render check opens the app's window on each OS.
+- **On a Windows 11 PC, by hand,** with the CI-built installer:
+  - first run, about 25 s from *Start on this computer* to signed in;
+  - relaunch, with the services starting by themselves;
+  - the local node, the nodes graph and node detail;
+  - a LAN scan;
+  - closing the window, which stops every service in under 4 s;
+  - recovery after the app was force-killed.
+- **Suites:** backend 724, agent 70, desktop Rust 42 unit + 6 integration
+  (real services), desktop frontend 71, runtime staging 4, and 120 for the
+  Flutter reference app.
+
 ### Added
 
+- **Tauri desktop app** (`desktop-tauri/`, ADR-037) — every screen of the
+  Flutter dashboard, ported with its behavior:
+  - controller profiles, sign-in and the live event stream;
+  - Nodes, with a list, the force-directed graph, LAN discovery and Add
+    node;
+  - node detail, with usage, GPU, hardware, role and model install;
+  - Tasks and Phantom, Chat, Workflows with approvals, and Knowledge;
+  - Providers, with accounts, routing, tests, OpenRouter sign-in and the
+    Claude subscription;
+  - Admin.
+
+  New in this version:
+  - remove a saved controller;
+  - after any 401 the app re-checks the session and returns to sign-in.
+- **Standalone controller** — *This computer* runs PostgreSQL 16, Qdrant
+  1.18.2 and the Lycosa API from a pinned runtime bundled with the app.
+  - Startup is ordered, with readiness checks: database, migrations, admin
+    account, API.
+  - One-click sign-in with a generated admin account.
+  - A crashed service is restarted, at most three times in ten minutes.
+  - Everything stops cleanly when the app closes.
+  - The service status, the redacted logs and a *Back up now* (`pg_dump`)
+    button are in the app.
+  - Optional: a **local node**, the agent on this computer, with a node key
+    minted for it.
+  - Optional: **network-controller mode**, where the API listens on the LAN
+    so other devices can join. Off by default; loopback-only otherwise.
+- **Release pipeline** — on native Windows, Linux and macOS runners: stage
+  the runtime, build the installers, install each one and run
+  `lycosa-desktop --smoke-test`. The test starts the services, signs in,
+  sends a document through PostgreSQL and Qdrant, stops, restarts and
+  checks the data survived. Only then is the package uploaded with a
+  `SHA256SUMS.txt`. A new `Desktop standalone` workflow runs the
+  supervisor's integration tests on every OS for pull requests.
 - **Claude subscription** (ADR-032) — a node can run its owner's own,
   unmodified Claude Code, signed in with their Claude plan (`claude auth
   login`, Anthropic's own flow). Lycosa never signs in to Claude and never
@@ -87,6 +171,23 @@ orphaned (ADR-034…036).
 
 ### Security
 
+- Desktop app boundary (ADR-037):
+  - The webview has no shell, filesystem, HTTP or opener access, only 32
+    typed commands granted one by one.
+  - Requests go through a Rust proxy that reaches only `/api/v1/*` and
+    `/healthz`, adds the token itself, never follows redirects, and requires
+    HTTPS or loopback for API keys and Phantom input.
+  - Session tokens stay in the OS keychain, never in the webview or a file.
+  - Uploads use a Rust-side file picker.
+  - The CSP is strict.
+- Standalone controller:
+  - Every secret is generated (PostgreSQL password, Qdrant API key, JWT
+    secret, admin password) and kept owner-only.
+  - PostgreSQL uses SCRAM and loopback only; Qdrant runs with an API key
+    and on loopback only.
+  - Every service log line is redacted before it is stored or shown,
+    including the `?token=` that the backend's access log carries (Backlog
+    O1).
 - Account credentials are AES-256-GCM encrypted with the account id as
   associated data; the key never touches the database, and a malformed key
   fails startup. This works in the Docker image and with `WORKERS>1`, where
@@ -139,10 +240,58 @@ orphaned (ADR-034…036).
 
 ### Changed
 
+- **The desktop installers are now the Tauri app.** The release assets are
+  `Lycosa-windows-x64-setup-<v>.exe` (per-user NSIS),
+  `Lycosa-linux-amd64-<v>.deb`, `Lycosa-linux-x86_64-<v>.AppImage`,
+  `Lycosa-macos-arm64-<v>.dmg` and `Lycosa-macos-x64-<v>.dmg`. The Flutter
+  dashboard (`dashboard/`) is no longer released; it stays in the repo, with
+  its CI job, as the reference implementation.
+- The desktop app identifier is `com.lycosa.desktop`. Flutter-era saved
+  controller profiles are not imported: add your controller again on first
+  launch.
 - CI type-checks `backend/app/llm` with mypy. `cryptography` is now a declared
   backend dependency (it was already installed through `keyring`).
 - The one-shot startup ingest recovery and its `ingest-recovery` lock are
   replaced by the ingestion lease (ADR-036).
+
+### Upgrade notes
+
+- **Docker controllers:** the API image runs migrations `0008` → `0012` on
+  start. Back up the database and the `api_data` volume first: the volume
+  now holds `credential-encryption.key`, without which stored provider keys
+  cannot be decrypted.
+- **Desktop:** install the new app. It does not reuse the Flutter app's
+  saved profiles. The standalone controller keeps its data in
+  `%LOCALAPPDATA%\com.lycosa.desktop`, `~/Library/Application
+  Support/com.lycosa.desktop` or `~/.local/share/com.lycosa.desktop`.
+  Updates and uninstalls leave that data in place, and later versions back
+  up the database before migrating it.
+
+### Known limitations
+
+- The installers are not code-signed (as before). On Windows, use *More
+  info → Run anyway*. On macOS, right-click and choose *Open*, or clear the
+  quarantine flag.
+- The standalone controller runs one API worker without Redis, Prometheus
+  or Grafana. Use the Docker install for a multi-worker, monitored
+  controller.
+- Models are not bundled. Use LLM provider accounts, or install Ollama (on
+  this computer, with the local node, or on any node).
+- Windows caps paths at 260 characters, and Qdrant nests its files deeply.
+  Very long user-profile paths can make collections fail; the app logs a
+  warning when the data folder path is long.
+- The standalone PostgreSQL major is 16. A future major upgrade needs its
+  own migration step.
+- The macOS and Linux builds were verified on clean CI machines (install,
+  smoke test, render check), not yet by hand on a physical Mac or Linux
+  desktop.
+- Linux: before showing its window, the app (like every Tauri app) asks
+  the desktop portal for the light/dark setting. Where a portal is
+  installed but not working, the window appears only after that request
+  times out (about 30 s on CI).
+- The Linux packages were tested on Ubuntu 22.04. The bundled PostgreSQL
+  also uses common system libraries (readline, for one), so the AppImage
+  expects a desktop distribution with glibc 2.35 or newer.
 
 ## [0.4.0] - 2026-07-12
 

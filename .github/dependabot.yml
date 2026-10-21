@@ -71,3 +71,29 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # Tauri desktop app, frontend — reads desktop-tauri/package.json
+  - package-ecosystem: "npm"
+    directory: "/desktop-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "desktop"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      desktop-npm-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # Tauri desktop app, Rust side — reads desktop-tauri/src-tauri/Cargo.toml
+  - package-ecosystem: "cargo"
+    directory: "/desktop-tauri/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels: ["dependencies", "desktop"]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      desktop-cargo-minor-patch:
+        update-types: ["minor", "patch"]
