@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-10-20
+## [0.5.0] - 2026-10-21
 
 Sprint 15: the desktop app moves from Flutter to **Tauri 2 + React +
 TypeScript** and becomes standalone (ADR-037). Install it and choose *Run
@@ -25,6 +25,45 @@ Sprint 14: use your own Claude plan through a node's Claude Code (ADR-032), a
 desktop Chat screen, fixes from a live end-to-end QA run and a desktop
 walkthrough (ADR-033), and leases that clean up work a controller crash
 orphaned (ADR-034…036).
+
+### Supported platforms and install
+
+| OS | Download | Notes |
+|---|---|---|
+| Windows 10/11, x64 | `Lycosa-windows-x64-setup-0.5.0.exe` | Per-user install, no administrator needed. Unsigned: *More info → Run anyway*. |
+| macOS 11+, Apple silicon | `Lycosa-macos-arm64-0.5.0.dmg` | Drag Lycosa to Applications. Unsigned (ad-hoc): right-click → *Open*, or run `xattr -dr com.apple.quarantine /Applications/Lycosa.app`. |
+| macOS 11+, Intel | `Lycosa-macos-x64-0.5.0.dmg` | As above. |
+| Linux x86_64, glibc 2.35+ (Ubuntu 22.04+, Debian 12+) | `Lycosa-linux-amd64-0.5.0.deb` or `Lycosa-linux-x86_64-0.5.0.AppImage` | `sudo apt install ./Lycosa-linux-amd64-0.5.0.deb`, or `chmod +x` and run the AppImage. Needs WebKitGTK 4.1, which the `.deb` installs. |
+
+Then open Lycosa and choose **Run Lycosa on this computer** (the first start
+takes about half a minute) or **Connect to a controller**. `SHA256SUMS.txt`
+lists every installer's checksum. The controller image is
+`ghcr.io/abdra7/lycosa-backend:0.5.0` for Docker installs.
+
+### How this release was tested
+
+- **Every installer, on its own OS:** CI built each package on a native
+  runner and installed it: the Windows `.exe` silently, the Linux `.deb`
+  with `apt` (and the AppImage as-is), and the macOS app from its `.dmg`.
+  It then ran the app's smoke test. That test starts the bundled
+  PostgreSQL, Qdrant and API, signs in, sends a document through the
+  knowledge pipeline and retrieves it, stops cleanly, restarts, and
+  checks the data survived. On Windows and Linux the package was then
+  uninstalled, and CI checked that user data was kept. The same workflow
+  ran as a dry run on the pull request before the tag.
+- **Real services per OS:** the supervisor's integration tests run against
+  real PostgreSQL, Qdrant and the API on Windows, Linux, macOS arm64 and
+  macOS x64. A render check opens the app's window on each OS.
+- **On a Windows 11 PC, by hand,** with the CI-built installer:
+  - first run, about 25 s from *Start on this computer* to signed in;
+  - relaunch, with the services starting by themselves;
+  - the local node, the nodes graph and node detail;
+  - a LAN scan;
+  - closing the window, which stops every service in under 4 s;
+  - recovery after the app was force-killed.
+- **Suites:** backend 724, agent 70, desktop Rust 42 unit + 6 integration
+  (real services), desktop frontend 71, runtime staging 4, and 120 for the
+  Flutter reference app.
 
 ### Added
 
@@ -243,6 +282,16 @@ orphaned (ADR-034…036).
   warning when the data folder path is long.
 - The standalone PostgreSQL major is 16. A future major upgrade needs its
   own migration step.
+- The macOS and Linux builds were verified on clean CI machines (install,
+  smoke test, render check), not yet by hand on a physical Mac or Linux
+  desktop.
+- Linux: before showing its window, the app (like every Tauri app) asks
+  the desktop portal for the light/dark setting. Where a portal is
+  installed but not working, the window appears only after that request
+  times out (about 30 s on CI).
+- The Linux packages were tested on Ubuntu 22.04. The bundled PostgreSQL
+  also uses common system libraries (readline, for one), so the AppImage
+  expects a desktop distribution with glibc 2.35 or newer.
 
 ## [0.4.0] - 2026-07-12
 
