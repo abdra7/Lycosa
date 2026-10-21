@@ -113,6 +113,15 @@ jobs:
       - name: Build the frontend (embedded by the Rust build)
         run: npx vite build
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Test the runtime staging script
+        run: |
+          pip install pytest==9.1.1
+          python -m pytest scripts -q
+
       - name: Linux build dependencies (Tauri)
         run: |
           sudo apt-get update

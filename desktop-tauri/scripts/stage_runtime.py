@@ -234,14 +234,8 @@ def clean_env() -> dict[str, str]:
     return env
 
 
-def stage_postgres(spec: dict, cache: Path, work: Path, out: Path) -> Path:
-    archive = download(spec["url"], spec["sha256"], cache)
-    extract(archive, work / "postgres")
-    root = single_child(work / "postgres")
-    if (root / "pgsql").is_dir():  # EDB-style layout
-        root = root / "pgsql"
-    shutil.move(str(root), out / "postgres")
-    postgres = out / "postgres"
+def prune_postgres(postgres: Path) -> None:
+    """Remove what Lycosa never runs from a PostgreSQL install."""
     for name in POSTGRES_PRUNE:
         shutil.rmtree(postgres / name, ignore_errors=True)
     for doc in ("share/doc", "share/man"):
@@ -251,11 +245,24 @@ def stage_postgres(spec: dict, cache: Path, work: Path, out: Path) -> Path:
             path.unlink()
     for pattern in POSTGRES_LIB_PRUNE:
         for path in [*(postgres / "lib").rglob(pattern), *(postgres / "share" / "extension").glob(pattern)]:
-            if path.is_file():
+            # a symlink goes too, even once its target is gone (is_file()
+            # follows the link, so a dangling one would be skipped)
+            if path.is_symlink() or path.is_file():
                 path.unlink()
     # Windows debug symbols and import libraries
     for path in [*postgres.rglob("*.pdb"), *postgres.rglob("*.lib")]:
         path.unlink()
+
+
+def stage_postgres(spec: dict, cache: Path, work: Path, out: Path) -> Path:
+    archive = download(spec["url"], spec["sha256"], cache)
+    extract(archive, work / "postgres")
+    root = single_child(work / "postgres")
+    if (root / "pgsql").is_dir():  # EDB-style layout
+        root = root / "pgsql"
+    shutil.move(str(root), out / "postgres")
+    postgres = out / "postgres"
+    prune_postgres(postgres)
     for binary in ("postgres", "initdb", "pg_ctl", "pg_isready", "psql", "pg_dump"):
         exe = postgres / "bin" / (binary + (".exe" if os.name == "nt" else ""))
         if not exe.is_file():
@@ -345,6 +352,15 @@ def smoke_check(python_root: Path, out: Path) -> None:
     subprocess.run([str(python_exe(python_root)), "-c", code], check=True, env=env)
 
 
+def check_no_dangling_symlinks(out: Path) -> None:
+    """Fail if a symlink in the runtime points nowhere: Tauri refuses to bundle it."""
+    dangling = [p for p in out.rglob("*") if p.is_symlink() and not p.exists()]
+    if dangling:
+        for path in dangling:
+            log(f"dangling symlink {path.relative_to(out)} -> {os.readlink(path)}")
+        raise SystemExit(f"{len(dangling)} dangling symlinks in the runtime")
+
+
 def check_linked_libraries(out: Path) -> None:
     """Fail if any ELF file in the runtime links a library that cannot be found.
 
@@ -404,6 +420,7 @@ def main() -> None:
     write_backend_metadata(python_root)
     compile_bytecode(python_root, out)
     smoke_check(python_root, out)
+    check_no_dangling_symlinks(out)
     if sys.platform == "linux":
         check_linked_libraries(out)
 
