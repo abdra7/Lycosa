@@ -11,7 +11,9 @@ contributor (human or agent) follows these conventions.
 /backend   FastAPI services (control plane: orchestrator, agent manager,
            scheduler, knowledge router, workflow engine, node recommendation)
 /agent     Local Agent runtime — the installable unit that runs on each node
-/dashboard Flutter / Flutter Web operator dashboard
+/desktop-tauri
+           Tauri desktop app: React + TypeScript UI, Rust shell, supervisor
+           of the standalone controller
 /infra     docker compose, Kubernetes manifests, Prometheus/Grafana config
 /docs      architecture decisions, roadmap, backlog, retros, primer
 /scripts   install scripts, release tooling, one-off automation

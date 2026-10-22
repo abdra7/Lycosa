@@ -421,7 +421,6 @@ The detailed backlog is maintained in the project vault.
 | `backend/` | FastAPI controller, task/workflow orchestration, RAG, provider adapters and Phantom API |
 | `agent/` | Local Agent runtime, Usage telemetry and optional MCP companion |
 | `desktop-tauri/` | The desktop app: React + TypeScript UI, Rust shell and the supervisor of the standalone controller (Tauri 2) |
-| `dashboard/` | The previous Flutter desktop dashboard, kept as the reference implementation (no longer released) |
 | `infra/` | Docker Compose, Prometheus/Grafana configuration and isolated Phantom worker image |
 | `docs/` | Public feature guides, validation notes and brand assets; internal context lives in the project Vault |
 | `scripts/` | Install and release tooling |
