@@ -26,19 +26,6 @@ updates:
       agent-minor-patch:
         update-types: ["minor", "patch"]
 
-  # Flutter Desktop dashboard — reads dashboard/pubspec.yaml
-  - package-ecosystem: "pub"
-    directory: "/dashboard"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    labels: ["dependencies", "dashboard"]
-    commit-message:
-      prefix: "chore(deps)"
-    groups:
-      dashboard-minor-patch:
-        update-types: ["minor", "patch"]
-
   # Backend Docker base image — reads backend/Dockerfile
   - package-ecosystem: "docker"
     directory: "/backend"
