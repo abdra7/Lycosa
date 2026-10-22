@@ -1,6 +1,5 @@
 // The one seam between the UI and the Rust side (ADR-037). Production uses
-// Tauri's IPC; tests install a fake with `setTransport`, the way the
-// Flutter tests overrode Riverpod providers.
+// Tauri's IPC; tests install a fake with `setTransport`.
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";

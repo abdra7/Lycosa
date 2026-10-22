@@ -1,4 +1,4 @@
-// Server state with the Flutter app's polling cadence: the node list and
+// Server state and its polling cadence: the node list and
 // recent tasks every 10 s, one node every 5 s (its agent heartbeats every
 // 5 s), a workflow run every 3 s until it finishes. Every key is dropped
 // when the active profile changes (SessionProvider clears the cache).

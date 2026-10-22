@@ -270,8 +270,7 @@ impl Streams {
 
 /// POST a streaming request and hand each event to `emit` until the stream
 /// ends, breaks, or `cancel` fires. The first byte must arrive within two
-/// minutes (as in the Flutter client); after that the model may take as long
-/// as it needs.
+/// minutes; after that the model may take as long as it needs.
 pub async fn stream(
     client: &Client,
     base_url: &str,

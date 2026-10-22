@@ -211,8 +211,7 @@ impl ProfileStore {
         (views, active_id(&state))
     }
 
-    /// The active profile: the saved choice, else the first one (as the
-    /// Flutter app did).
+    /// The active profile: the saved choice, else the first one.
     pub fn active(&self) -> Option<Profile> {
         let state = self.state.lock().unwrap();
         let id = active_id(&state)?;

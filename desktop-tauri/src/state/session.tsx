@@ -1,4 +1,4 @@
-// Session state (the port of the Flutter SessionController, ADR-015):
+// Session state (ADR-015):
 // saved controller profiles, the active one, and who is signed in there.
 // Tokens never reach this side; Rust holds them in the OS keychain.
 

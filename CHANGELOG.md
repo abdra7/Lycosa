@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- **The Flutter dashboard (`dashboard/`)** is gone from the repository,
+  together with its CI job ("Dashboard analyze + test") and its Dependabot
+  entry (ADR-039). The Tauri app in `desktop-tauri/` is the only desktop
+  app; v0.5.0 already shipped only Tauri installers, so nothing changes for
+  users. The Flutter app remains in git history and in the v0.1.0–v0.4.0
+  releases.
+
 ## [0.5.0] - 2026-10-21
 
 Sprint 15: the desktop app moves from Flutter to **Tauri 2 + React +

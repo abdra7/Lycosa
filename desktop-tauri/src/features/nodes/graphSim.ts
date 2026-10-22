@@ -1,4 +1,4 @@
-// The star-topology force simulation of the Flutter graph view: every pair
+// The star-topology force simulation of the node graph view: every pair
 // repels, each device is sprung to a rest distance from the controller hub,
 // and a gentle pull keeps the whole graph centered.
 

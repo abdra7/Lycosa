@@ -9,7 +9,7 @@ body:
       options:
         - backend (controller API)
         - agent (node runtime)
-        - dashboard (desktop app)
+        - desktop app (desktop-tauri)
         - install scripts / packaging
         - infra (compose, prometheus, grafana)
     validations:

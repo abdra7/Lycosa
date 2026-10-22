@@ -2,10 +2,9 @@
 
 The Lycosa desktop app for Windows, macOS and Linux: a React + TypeScript
 interface in a Tauri 2 shell, with a Rust side that talks to controllers and
-can run a whole controller on this computer (standalone mode). It replaces the
-Flutter dashboard in [`../dashboard`](../dashboard), which stays in the repo as
-the reference implementation. The design is recorded as ADR-037 in the
-project's decision log.
+can run a whole controller on this computer (standalone mode). It is the only
+Lycosa desktop app. The design is recorded as ADR-037 in the project's
+decision log.
 
 ## Two ways to use it
 
@@ -98,30 +97,32 @@ in the app config folder, and their tokens are in the OS keychain.
   different major is refused with a clear message rather than touched, so a
   future major upgrade ships its own migration step.
 
-## Feature parity with the Flutter app
+## Features
 
-| Area | Flutter (`dashboard/`) | Tauri (`desktop-tauri/`) | Status |
-|---|---|---|---|
-| Connection setup, multiple profiles, switch, sign in/out | `setup/`, `auth/`, `core/session.dart`, `core/profiles.dart` | `features/setup`, `features/auth`, `state/session.tsx`, `controller/profiles.rs` | Ported; adds *Remove controller* and re-validation after any 401 |
-| Secure credential storage | `flutter_secure_storage` (whole profile list in the keychain) | profile names/URLs in `profiles.json`, tokens per profile in the keychain via `keyring` | Ported; tokens never reach the webview |
-| Live events + reconnect, alert snackbars, node-list refresh | `core/events.dart`, `shell_screen.dart` | `controller/events.rs`, `state/events.ts`, `features/shell` | Ported |
-| Nodes list, status, usage | `nodes_screen.dart` | `features/nodes/NodesScreen.tsx` | Ported |
-| Node graph (star topology, drag, pan, zoom, full screen) | `nodes_graph_view.dart` | `NodesGraph.tsx`, `graphSim.ts` (same physics) | Ported |
-| Node detail: usage, GPU, hardware, role, model recommendations + install, delete | `node_detail_screen.dart`, `gpu_usage.dart` | `NodeDetail.tsx` | Ported |
-| Add node (mint key, per-OS commands, localhost → LAN IP) | `add_node_dialog.dart` | `AddNodeDialog.tsx`, `netinfo.rs` | Ported; adds a hint when the local controller is not in network mode |
-| LAN discovery (mDNS) incl. Windows virtual-adapter handling | `discovery.dart` (`SafeRawDatagramSocket`) | `discovery.rs` (`mdns-sd`, per-interface) | Ported |
-| Tasks: provider, LLM routes, accounts, default-route preselection, results, recent + trace | `tasks_screen.dart` | `TasksScreen.tsx` | Ported |
-| Phantom (HTTPS/loopback only, no history, 60 s clear) | `phantom_dialog.dart` | `PhantomDialog.tsx` (+ Rust transport check) | Ported |
-| Chat (SSE streaming, stop, target picker) | `chat/` | `features/chat`, `controller/http.rs` | Ported |
-| Workflows: create (templates), view, run, approve/reject, delete | `workflows/` | `WorkflowsScreen.tsx`, `RunView.tsx` | Ported |
-| Knowledge: collections, upload, retrieval playground | `knowledge_screen.dart` | `KnowledgeScreen.tsx` (picker in Rust) | Ported |
-| Providers: accounts, capabilities, test, models, routing & fallback, prompt test | `llm/` | `features/llm` | Ported |
-| OpenRouter PKCE sign-in (loopback receiver) | `openrouter_sign_in.dart` | `oauth.rs`, `ConnectAccountDialog.tsx` | Ported |
-| Claude subscription connect (ADR-032) | `claude_subscription_dialog.dart` | `ClaudeSubscriptionDialog.tsx` | Ported |
-| Admin: API keys + revoke, audit log, legacy provider keys | `admin/` | `features/admin` | Ported |
-| Light/dark theme without a flash | `core/theme_mode.dart` | `theme-boot.ts`, `state/theme.tsx` | Ported (stored in local storage; it is not a secret) |
-| Run the controller on this computer | — | `supervisor/`, `features/local` | New |
-| Desktop acceptance harness against a live controller | `integration_test/` | `src-tauri/tests/standalone.rs` + `--smoke-test` | Different scope: the Rust tests drive the real bundled services. The UI is covered by fake-IPC flow tests, not a live UI harness yet (backlog). |
+UI code is under `src/`, Rust code under `src-tauri/src/`.
+
+| Area | Code | Notes |
+|---|---|---|
+| Connection setup, multiple profiles, switch, sign in/out, remove a controller | `features/setup`, `features/auth`, `state/session.tsx`, `controller/profiles.rs` | The session is re-validated after any 401 |
+| Secure credential storage | `controller/profiles.rs` (`keyring`) | Profile names and URLs in `profiles.json`, one token per profile in the keychain; tokens never reach the webview |
+| Live events + reconnect, alert toasts, node-list refresh | `controller/events.rs`, `state/events.ts`, `features/shell` | |
+| Nodes list, status, usage | `features/nodes/NodesScreen.tsx` | |
+| Node graph (star topology, drag, pan, zoom, full screen) | `NodesGraph.tsx`, `graphSim.ts` | |
+| Node detail: usage, GPU, hardware, role, model recommendations + install, delete | `NodeDetail.tsx` | |
+| Add node (mint key, per-OS commands, localhost → LAN IP) | `AddNodeDialog.tsx`, `netinfo.rs` | Hints when the local controller is not in network mode |
+| LAN discovery (mDNS) incl. Windows virtual-adapter handling | `discovery.rs` (`mdns-sd`, per-interface) | |
+| Tasks: provider, LLM routes, accounts, default-route preselection, results, recent + trace | `TasksScreen.tsx` | |
+| Phantom (HTTPS/loopback only, no history, 60 s clear) | `PhantomDialog.tsx` (+ Rust transport check) | |
+| Chat (SSE streaming, stop, target picker) | `features/chat`, `controller/http.rs` | |
+| Workflows: create (templates), view, run, approve/reject, delete | `WorkflowsScreen.tsx`, `RunView.tsx` | |
+| Knowledge: collections, upload, retrieval playground | `KnowledgeScreen.tsx` (file picker in Rust) | |
+| Providers: accounts, capabilities, test, models, routing & fallback, prompt test | `features/llm` | |
+| OpenRouter PKCE sign-in (loopback receiver) | `oauth.rs`, `ConnectAccountDialog.tsx` | |
+| Claude subscription connect (ADR-032) | `ClaudeSubscriptionDialog.tsx` | |
+| Admin: API keys + revoke, audit log, legacy provider keys | `features/admin` | |
+| Light/dark theme without a flash | `theme-boot.ts`, `state/theme.tsx` | Stored in local storage (it is not a secret) |
+| Run the controller on this computer | `supervisor/`, `features/local` | See *Standalone mode in detail* above |
+| Acceptance tests against the real bundled services | `src-tauri/tests/standalone.rs`, `--smoke-test` | The UI is covered by fake-IPC flow tests; a live UI harness is on the backlog |
 
 ## Development
 

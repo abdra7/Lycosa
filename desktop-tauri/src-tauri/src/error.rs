@@ -1,7 +1,6 @@
 //! Errors returned to the frontend. Each variant is a tagged JSON object
 //! (`{"kind": "api", ...}`), so the TypeScript client can tell a controller
-//! error envelope (ADR-007) from an unreachable controller, as the Flutter
-//! client did with `ApiException` and `ControllerUnreachableException`.
+//! error envelope (ADR-007) from an unreachable controller.
 
 use serde::Serialize;
 

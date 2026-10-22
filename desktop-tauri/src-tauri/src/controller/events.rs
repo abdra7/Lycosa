@@ -1,6 +1,6 @@
 //! The controller's live event stream (`WS /api/v1/events`, ADR-016), held
-//! open in Rust for the active profile and forwarded to the webview, with
-//! the Flutter app's five-second reconnect.
+//! open in Rust for the active profile and forwarded to the webview; a
+//! dropped connection is retried every five seconds.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
