@@ -1,4 +1,4 @@
-// Shared display rules (LycosaColors.status and friends in the Flutter app).
+// Shared display rules: status colors, heartbeat ages, labels and numbers.
 
 /** Status → color: the same green or red on every screen. */
 export function statusColor(status: string): string {

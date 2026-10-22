@@ -1,5 +1,5 @@
 // Controller API shapes, exactly as the JSON arrives (snake_case), plus the
-// derived helpers the Flutter models had as getters.
+// derived helpers the screens share.
 
 export interface Principal {
   type: "user" | "api_key";

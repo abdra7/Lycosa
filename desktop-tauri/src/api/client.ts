@@ -1,7 +1,7 @@
 // Typed client for the Lycosa controller API (ADR-015, ported to
 // TypeScript in ADR-037). Each call goes through the Rust proxy, which adds
-// the active profile's URL and token; per-call timeouts match the Flutter
-// client's.
+// the active profile's URL and token. Slow calls (model installs, task
+// and workflow runs) set their own, longer timeout.
 
 import { transport, type ApiCall, type SseEvent } from "../ipc/transport";
 import type {

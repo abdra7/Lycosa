@@ -14,8 +14,8 @@ interface ToastApi {
 
 const ToastContext = createContext<ToastApi>({ show: () => {} });
 
-/** The app's snackbars: short messages at the bottom, gone after a few
- * seconds (alerts stay six, as in the Flutter shell). */
+/** The app's toasts: short messages at the bottom, gone after a few
+ * seconds (alerts stay six). */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const next = useRef(1);

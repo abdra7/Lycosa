@@ -14,7 +14,7 @@ import { ToastProvider } from "./state/toast";
 export function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
-      // the Flutter app never retried; a failed load shows its error at once
+      // no retries: a failed load shows its error at once
       queries: { retry: false, refetchOnWindowFocus: false, staleTime: 0 },
       mutations: { retry: false },
     },

@@ -1,4 +1,4 @@
-/* Lycosa brand tokens (ported from dashboard/lib/core/brand.dart): the
+/* Lycosa brand tokens: the
    accent #A8C7FA is shared; neutrals flip between light and dark. Status
    colors are fixed so "running" green reads the same on every screen. */
 :root {

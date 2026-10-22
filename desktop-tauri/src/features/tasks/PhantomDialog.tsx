@@ -37,7 +37,7 @@ export function PhantomDialog({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  // switching controllers closes the dialog, as in the Flutter app
+  // switching controllers closes the dialog
   useEffect(() => {
     if (profileId !== openedFor.current) onClose();
   }, [profileId, onClose]);

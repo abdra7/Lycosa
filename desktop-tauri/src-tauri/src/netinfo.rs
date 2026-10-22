@@ -4,7 +4,7 @@
 
 /// The most likely real LAN IPv4: VirtualBox host-only (192.168.56.x),
 /// Docker/WSL (172.16–31.x) and link-local (169.254.x) are skipped;
-/// 192.168.x beats 10.x beats anything else (the Flutter app's rule).
+/// 192.168.x beats 10.x beats anything else.
 pub fn best_lan_ipv4<'a>(addresses: impl IntoIterator<Item = &'a str>) -> Option<String> {
     let mut candidates: Vec<&str> = addresses
         .into_iter()

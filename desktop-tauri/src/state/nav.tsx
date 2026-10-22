@@ -1,6 +1,6 @@
 // State-driven navigation inside the shell (no router, as in ADR-015): a
 // selected section plus a stack of pushed views (node detail, a workflow
-// run), the equivalent of the Flutter Navigator.push.
+// run).
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 

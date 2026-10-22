@@ -124,7 +124,7 @@ function CreateCollectionDialog({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="stack-8">
-        <TextField label="Name" value={name} onChange={setName} placeholder="flutter-docs" autoFocus onEnter={() => void create()} />
+        <TextField label="Name" value={name} onChange={setName} placeholder="product-docs" autoFocus onEnter={() => void create()} />
         <TextField label="Description (optional)" value={description} onChange={setDescription} />
         {error && <p className="error-text">{error}</p>}
       </div>
