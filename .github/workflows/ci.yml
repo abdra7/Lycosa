@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -90,7 +90,7 @@ jobs:
       - name: Build the frontend (embedded by the Rust build)
         run: npx vite build
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
