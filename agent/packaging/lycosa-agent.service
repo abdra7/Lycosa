@@ -7,6 +7,9 @@ Wants=network-online.target
 Type=simple
 # put LYCOSA_CONTROLLER_URL / LYCOSA_API_KEY (and overrides) in this file:
 EnvironmentFile=/etc/lycosa/agent.env
+# REQUIRED: replace this with the full path printed by install-agent.sh.
+# Set User= to the account that installed the agent; pipx installs per-user.
+# Example: User=lycosa / ExecStart=/home/lycosa/.local/bin/lycosa-agent run
 ExecStart=/usr/local/bin/lycosa-agent run
 Restart=on-failure
 RestartSec=10

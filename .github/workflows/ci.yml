@@ -38,9 +38,13 @@ jobs:
       - name: Test (pytest)
         run: pytest
 
-  agent:
-    name: Agent lint + test
-    runs-on: ubuntu-latest
+  agent_platforms:
+    name: Agent lint + test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: agent
@@ -62,6 +66,20 @@ jobs:
 
       - name: Test (pytest)
         run: pytest
+
+  # Keep the required branch-protection check stable as the matrix evolves.
+  agent:
+    name: Agent lint + test
+    needs: agent_platforms
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all agent platforms to pass
+        env:
+          MATRIX_RESULT: ${{ needs.agent_platforms.result }}
+        run: |
+          echo "Agent platform checks: $MATRIX_RESULT"
+          test "$MATRIX_RESULT" = "success"
 
   desktop:
     name: Desktop lint + test
