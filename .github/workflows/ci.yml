@@ -39,8 +39,12 @@ jobs:
         run: pytest
 
   agent:
-    name: Agent lint + test
-    runs-on: ubuntu-latest
+    name: Agent lint + test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: agent

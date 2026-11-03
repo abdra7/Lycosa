@@ -128,6 +128,13 @@ describe("nodes", () => {
     expect(fake.apiCall("POST", "/api/v1/admin/api-keys")[0]!.body).toEqual({ name: "garage", role: "node" });
     expect(screen.getByText(/\$env:LYCOSA_CONTROLLER_URL = "http:\/\/192\.168\.1\.20:8000"/)).toBeInTheDocument();
     expect(screen.getByText(/Using this controller's LAN IP \(192\.168\.1\.20\)/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("New device operating system"), "unix");
+    expect(screen.getByText(/install-agent\.sh/)).toBeInTheDocument();
+    expect(screen.getByText(/Open a new terminal, then register/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$env:LYCOSA_CONTROLLER_URL/)).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("New device operating system"), "windows");
+    expect(screen.getByText(/install-agent\.ps1/)).toBeInTheDocument();
+    expect(fake.apiCall("POST", "/api/v1/admin/api-keys")).toHaveLength(1);
   });
 });
 

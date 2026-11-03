@@ -4,7 +4,7 @@ import { api } from "../../api/client";
 import { friendly } from "../../api/errors";
 import type { MintedApiKey } from "../../api/types";
 import { Icon } from "../../components/icons";
-import { Banner, Button, CodeBlock, Dialog, TextField } from "../../components/ui";
+import { Banner, Button, CodeBlock, Dialog, SelectField, TextField } from "../../components/ui";
 import { transport } from "../../ipc/transport";
 import { activeProfile, useSession } from "../../state/session";
 import { useStandalone } from "../../state/standalone";
@@ -48,7 +48,8 @@ export function AddNodeDialog({ onClose }: { onClose: () => void }) {
   const { info, status: local } = useStandalone();
   const profile = activeProfile(session.status);
   const configured = profile?.baseUrl ?? "http://<controller>:8000";
-  const windows = info?.os === "windows";
+  const [targetOs, setTargetOs] = useState<"windows" | "unix" | null>(null);
+  const windows = (targetOs ?? (info?.os === "windows" ? "windows" : "unix")) === "windows";
   const [name, setName] = useState("");
   const [minted, setMinted] = useState<MintedApiKey | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -126,10 +127,18 @@ export function AddNodeDialog({ onClose }: { onClose: () => void }) {
           <pre className="code mono" style={{ userSelect: "text" }}>
             {minted.api_key}
           </pre>
-          <p className="small muted">{windows ? "On the new machine (Windows PowerShell):" : "On the new machine (macOS / Linux):"}</p>
+          <SelectField
+            label="New device operating system"
+            value={windows ? "windows" : "unix"}
+            onChange={setTargetOs}
+            options={[
+              { value: "windows", label: "Windows (PowerShell)" },
+              { value: "unix", label: "macOS / Linux (Bash)" },
+            ]}
+          />
           <p>1. Install the agent (once per machine):</p>
           <CodeBlock text={commands!.install} />
-          <p>2. Register it and start:</p>
+          <p>2. {windows ? "Register it and start:" : "Open a new terminal, then register it and start:"}</p>
           <CodeBlock text={commands!.run} copyable />
           <UrlHint loopback={loopback && !localExposed} lanIp={lanIp} windows={windows} />
         </div>
