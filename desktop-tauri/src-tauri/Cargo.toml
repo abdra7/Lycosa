@@ -1,6 +1,6 @@
 [package]
 name = "lycosa-desktop"
-version = "0.5.0"
+version = "0.5.1"
 description = "Lycosa desktop app: controller client and supervisor of the standalone local services"
 authors = ["abdra7"]
 license = "MIT"

@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-08
+
+### Added
+
+- **CLI workspaces and sessions** replace the Tasks screen, with saved
+  conversations, per-session provider/model settings, node selection,
+  concurrent execution, and archive/restore controls. Session history is
+  isolated to its owner and stored by the controller.
+
+### Fixed
+
+- A single session fills the workspace; additional sessions automatically
+  share the available space. Long transcripts scroll inside their session.
+- Node dropdowns use readable colors in both light and dark themes.
+- The native title bar follows the selected app theme. On Windows 11, its
+  caption, text and border colors match the interface.
+- Bundled Python source refreshes invalidate stale bytecode, preventing
+  missing workspace/session endpoints. Runtime metadata now replaces the
+  previous backend version and verifies the exact version before packaging.
+- Agent installation and node setup work across Windows, macOS and Linux;
+  explicitly selected nodes are honored when executing a session.
+
+### Changed
+
+- Updated the desktop, installer and repository branding with the supplied
+  Lycosa spider artwork; removed the redundant logo from the app header.
+
+### Upgrading
+
+- Download the **0.5.1 installer for your operating system** from the release
+  assets, close Lycosa, and install it over the existing app. User data is
+  retained and the bundled controller applies the new database migration
+  when it starts. Existing installations do not update automatically.
+- If using a remote controller, update it to 0.5.1 as well to enable the new
+  workspace/session APIs.
+
 ### Removed
 
 - **The Flutter dashboard (`dashboard/`)** is gone from the repository,
@@ -590,7 +626,9 @@ desktop dashboard.
   image, desktop installers (.dmg / .exe / .AppImage) built by a tagged
   release workflow, and an agent installer script.
 
-[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/abdra7/Lycosa/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/abdra7/Lycosa/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/abdra7/Lycosa/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/abdra7/Lycosa/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/abdra7/Lycosa/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/abdra7/Lycosa/compare/v0.2.1...v0.3.0
