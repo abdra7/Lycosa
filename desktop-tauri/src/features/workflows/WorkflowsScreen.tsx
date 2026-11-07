@@ -38,7 +38,7 @@ export function WorkflowsScreen() {
   const remove = async (w: WorkflowInfo) => {
     const ok = await confirm({
       title: "Delete workflow?",
-      message: `"${w.name}" and its run history will be permanently deleted. Tasks its steps ran stay under Tasks. This cannot be undone.`,
+      message: `"${w.name}" and its run history will be permanently deleted. Tasks its steps ran stay in CLI task history. This cannot be undone.`,
       confirmLabel: "Delete",
       danger: true,
     });

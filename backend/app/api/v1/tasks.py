@@ -4,7 +4,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from app.api.deps import DbDep, Principal, require_roles
 from app.db.session import get_runtime_sessionmaker
@@ -18,6 +18,23 @@ logger = logging.getLogger("lycosa.tasks")
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 OperatorDep = Annotated[Principal, Depends(require_roles(ROLE_ADMIN, ROLE_OPERATOR))]
+
+
+def _visible_to(principal: Principal):
+    """Legacy tasks stay shared; CLI transcripts remain principal-owned.
+
+    The payload marker survives deleting a session and unlinking its FK, so
+    deletion cannot accidentally publish its transcript in shared history.
+    """
+    owner = (
+        Task.created_by_user_id == principal.id
+        if principal.type == "user"
+        else Task.created_by_api_key_id == principal.id
+    )
+    legacy = and_(
+        Task.cli_session_id.is_(None), Task.payload["cli_session_id"].as_string().is_(None)
+    )
+    return or_(legacy, owner)
 
 
 @router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
@@ -55,11 +72,11 @@ def _log_orphaned_dispatch(dispatch: "asyncio.Task[Task]") -> None:
 @router.get("", response_model=list[TaskOut])
 async def list_tasks(
     db: DbDep,
-    _principal: OperatorDep,
+    principal: OperatorDep,
     status_filter: Annotated[TaskStatus | None, Query(alias="status")] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[TaskOut]:
-    query = select(Task).order_by(Task.queued_at.desc()).limit(limit)
+    query = select(Task).where(_visible_to(principal)).order_by(Task.queued_at.desc()).limit(limit)
     if status_filter is not None:
         query = query.where(Task.status == status_filter)
     tasks = (await db.execute(query)).scalars().all()
@@ -67,9 +84,11 @@ async def list_tasks(
 
 
 @router.get("/{task_id}", response_model=TaskOut)
-async def get_task(task_id: uuid.UUID, db: DbDep, _principal: OperatorDep) -> TaskOut:
+async def get_task(task_id: uuid.UUID, db: DbDep, principal: OperatorDep) -> TaskOut:
     """Task detail including the execution trace (one entry per attempt)."""
-    task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    task = (
+        await db.execute(select(Task).where(Task.id == task_id, _visible_to(principal)))
+    ).scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     return TaskOut.model_validate(task)

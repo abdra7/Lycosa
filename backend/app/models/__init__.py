@@ -2,6 +2,7 @@
 (required for Alembic autogenerate and metadata.create_all in tests)."""
 
 from app.models.audit import AuditLog
+from app.models.cli import CliSession, CliWorkspace
 from app.models.knowledge import (
     Document,
     DocumentStatus,
@@ -27,6 +28,8 @@ __all__ = [
     "AgentCapability",
     "ApiKey",
     "AuditLog",
+    "CliSession",
+    "CliWorkspace",
     "Document",
     "DocumentStatus",
     "EmbeddingJob",

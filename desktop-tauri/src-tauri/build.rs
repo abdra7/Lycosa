@@ -3,6 +3,7 @@
 /// permission (capabilities/main.json), instead of all app commands being
 /// open by default.
 const COMMANDS: &[&str] = &[
+    "set_window_theme",
     "app_info",
     "session_state",
     "session_restore",

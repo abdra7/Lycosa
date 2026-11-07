@@ -38,7 +38,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 log = "0.4"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Security", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.170"

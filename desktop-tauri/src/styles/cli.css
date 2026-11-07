@@ -1,0 +1,76 @@
+/* CLI sessions follow the supplied workspace reference, using app theme tokens. */
+.cli-screen { --cli-accent: #3978de; --cli-canvas: #f1f4f8; --cli-surface: #fbfcfe; height: 100%; min-height: 0; background: var(--cli-canvas); display: flex; flex-direction: column; overflow: hidden; }
+:root[data-theme="dark"] .cli-screen { --cli-accent: #a8c7fa; --cli-canvas: #151c28; --cli-surface: #1b2637; }
+.cli-header { min-height: 68px; flex-shrink: 0; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.cli-heading, .cli-controls, .cli-workspace-button, .cli-card-title, .cli-card-actions { display: flex; align-items: center; gap: 10px; }
+.cli-heading { min-width: 0; }
+.cli-heading > svg { color: var(--cli-accent); flex-shrink: 0; }
+.cli-heading h1 { font-size: 14px; font-weight: 650; white-space: nowrap; }
+.cli-badge { font-size: 10px; color: var(--text-2); background: var(--bg-2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 9px; white-space: nowrap; }
+.cli-workspace-button { font-size: 12px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2); cursor: pointer; }
+.cli-workspace-button strong { max-width: 190px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cli-screen .dot { width: 6px; height: 6px; }
+.cli-menu-wrap { position: relative; }
+.cli-menu { width: 255px; max-height: 65vh; overflow-y: auto; font-size: 12px; }
+.cli-menu button { overflow-wrap: anywhere; }
+.cli-menu button:disabled { opacity: .4; cursor: default; }
+.cli-menu .selected { color: var(--cli-accent); background: var(--primary-light); }
+.cli-menu hr { border: 0; border-top: 1px solid var(--border); margin: 6px; }
+.cli-menu-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-2); padding: 9px; }
+.cli-screen button:focus-visible { outline: 2px solid var(--cli-accent); outline-offset: 2px; }
+.cli-content { padding: 16px 20px 24px; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.cli-viewbar { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 12px; margin: 0 1px 12px; color: var(--text-2); font-size: 11px; }
+.cli-viewbar .btn { font-size: 11px; padding-right: 0; color: var(--cli-accent); }
+/* Fill the remaining workspace; add rows only when cards need more room.
+   Keep a usable minimum height, with each transcript scrolling independently. */
+.cli-grid { flex: 1 0 auto; display: grid; grid-template-columns: repeat(var(--cli-columns,1),minmax(0,1fr)); grid-auto-rows: minmax(280px,1fr); gap: 16px; }
+.cli-card { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 3px #23395203; }
+.cli-card.selected { border-color: color-mix(in srgb,var(--cli-accent) 55%,var(--border)); box-shadow: 0 0 0 1px color-mix(in srgb,var(--cli-accent) 10%,transparent); }
+.cli-card-header { min-height: 48px; flex-shrink: 0; display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--cli-surface); border-bottom: 1px solid var(--border); }
+.cli-card-title { flex: 1; min-width: 100px; gap: 7px; }
+.cli-session-select { border: 0; padding: 2px 0; background: transparent; cursor: pointer; font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.cli-token { font-size: 9px; color: #9b650c; background: #fffbeb; border: 1px solid #f2d99e; padding: 3px 7px; border-radius: 12px; white-space: nowrap; }
+:root[data-theme="dark"] .cli-token { color: #edc573; border-color: #655332; background: #3c3425; }
+.cli-card-actions { gap: 4px; margin-left: auto; max-width: 100%; }
+.cli-card-actions .icon-btn { width: 23px; height: 25px; border-radius: 6px; }
+.cli-card-actions .icon-btn svg { width: 14px; height: 14px; }
+.cli-node-picker { display: flex; align-items: stretch; min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--border); background: var(--bg); border-radius: 6px; font-size: 10px; }
+.cli-node-label { display: flex; align-items: center; gap: 5px; padding: 5px 6px; border-right: 1px solid var(--border); color: var(--text-2); background: var(--bg-2); white-space: nowrap; }
+.cli-node-picker select { border: 0; background: var(--bg); color: var(--text); padding: 4px; font-size: 10px; min-width: 0; max-width: 140px; text-overflow: ellipsis; cursor: pointer; }
+.cli-node-picker select:disabled { opacity: .65; cursor: default; }
+.cli-terminal { flex: 1 1 0; min-height: 0; overflow: auto; padding: 16px; font: 11px/1.8 "Cascadia Mono",Consolas,monospace; color: var(--text-2); scrollbar-width: thin; }
+.cli-terminal p { margin: 0 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cli-terminal-label { font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; }
+.cli-welcome { color: var(--text); font-weight: 600; }
+.cli-ready { padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-2); }
+.cli-prompt { background: var(--primary-light); border: 1px solid color-mix(in srgb,var(--cli-accent) 12%,var(--border)); padding: 9px 10px; border-radius: 7px; color: var(--cli-accent); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cli-task-status { display: flex; align-items: center; gap: 6px; font-size: 10px; margin-top: -5px !important; }
+.cli-output { color: var(--text); user-select: text; }
+.cli-turn + .cli-turn { margin-top: 20px; }
+.cli-trace { font-size: 10px; margin-bottom: 12px; }
+.cli-trace summary { cursor: pointer; color: var(--text-2); }
+.cli-trace p { margin: 6px 0 0; }
+.cli-composer { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--cli-surface); padding: 11px; display: flex; gap: 7px; }
+.cli-input-wrap { display: flex; align-items: center; gap: 7px; width: 100%; border: 1px solid var(--border); background: var(--bg); border-radius: 7px; padding: 0 9px; color: var(--text-2); }
+.cli-input-wrap:focus-within { border-color: var(--cli-accent); box-shadow: 0 0 0 2px color-mix(in srgb,var(--cli-accent) 15%,transparent); }
+.cli-input-wrap input { width: 100%; min-width: 0; border: 0; outline: none; background: transparent; padding: 10px 0; color: var(--text); font: 11px Consolas,monospace; }
+.cli-input-wrap input::placeholder { color: var(--text-2); opacity: .8; }
+.cli-input-wrap button { border: 0; background: transparent; padding: 3px; display: flex; color: var(--cli-accent); cursor: pointer; }
+.cli-input-wrap button:disabled { opacity: .4; cursor: default; }
+.cli-archive-note { color: var(--text-2); font-size: 10px; align-items: center; min-height: 58px; }
+.cli-empty { display: flex; align-items: center; flex-direction: column; text-align: center; gap: 14px; padding: 80px 24px; color: var(--text-2); }
+.cli-empty > svg { color: var(--cli-accent); }
+.cli-empty h2 { font-size: 18px; color: var(--text); }
+.cli-empty p { font-size: 12px; }
+.cli-empty .btn { margin-top: 6px; border-radius: 8px; }
+.cli-error { flex-shrink: 0; margin-bottom: 16px; }
+.cli-dialog-field { margin: 16px 0 12px; }
+.cli-session-options { display: grid; gap: 8px; max-height: 300px; overflow: auto; margin: 14px 0; }
+.cli-session-option { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; overflow-wrap: anywhere; }
+.cli-session-option input { width: 16px; height: 16px; margin: 0; flex-shrink: 0; accent-color: #3978de; }
+.cli-settings-row { display: grid; grid-template-columns: 150px 1fr; gap: 12px; }
+.cli-history { font-size: 12px; }
+.cli-history .cli-prompt { margin-bottom: 12px; }
+.cli-history .cli-output { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width:1150px) { .cli-grid { grid-template-columns: repeat(min(var(--cli-columns,1),2),minmax(0,1fr)); } .cli-badge { display: none; } }
+@media (max-width:720px) { .cli-grid { grid-template-columns: minmax(0,1fr); } .cli-header { padding: 12px; flex-wrap: wrap; gap: 12px; } .cli-controls { margin-left: auto; } .cli-workspace-button { padding: 8px; } .cli-workspace-button strong { max-width: 145px; } .cli-content { padding: 12px; } .cli-viewbar { font-size: 10px; } .cli-heading { gap: 7px; } .cli-menu { width: 240px; max-width: calc(100vw - 95px); } .cli-settings-row { grid-template-columns: 1fr; } }

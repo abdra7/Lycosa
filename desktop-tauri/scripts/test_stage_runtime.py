@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import py_compile
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,37 @@ _SCRIPT = Path(__file__).with_name("stage_runtime.py")
 _spec = importlib.util.spec_from_file_location("stage_runtime", _SCRIPT)
 stage = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(stage)
+
+
+def test_application_refresh_replaces_unchecked_bytecode_and_detects_later_edits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    (tmp_path / "agent").mkdir()
+    source = backend / "cli_runtime_probe.py"
+    source.write_text("value = 'old'\n")
+    old_time = source.stat().st_mtime_ns
+    cache = py_compile.compile(
+        str(source), invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH
+    )
+    source.write_text("value = 'new'\n")
+    os.utime(source, ns=(old_time, old_time))
+
+    def imported_value() -> str:
+        return subprocess.check_output(
+            [sys.executable, "-B", "-c", "import cli_runtime_probe; print(cli_runtime_probe.value)"],
+            cwd=backend, env=stage.clean_env(), text=True,
+        ).strip()
+
+    assert imported_value() == "old"  # Reproduces the bundled-runtime regression.
+    monkeypatch.setattr(stage, "python_exe", lambda _: Path(sys.executable))
+    stage.compile_application_bytecode(tmp_path / "python", tmp_path)
+    assert int.from_bytes(Path(cache).read_bytes()[4:8], "little") == 3
+    assert imported_value() == "new"
+    source.write_text("value = 'fix'\n")
+    os.utime(source, ns=(old_time, old_time))
+    assert imported_value() == "fix"  # Hash validation works with -B/read-only caches.
 
 
 def _symlink(link: Path, target: str) -> None:
