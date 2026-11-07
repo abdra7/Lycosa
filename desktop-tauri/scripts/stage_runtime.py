@@ -288,35 +288,41 @@ def stage_qdrant(spec: dict, cache: Path, work: Path, out: Path) -> Path:
 def stage_sources(out: Path) -> None:
     backend = out / "backend"
     for tree in BACKEND_TREES:
-        shutil.copytree(REPO / "backend" / tree, backend / tree, ignore=IGNORED)
+        shutil.copytree(REPO / "backend" / tree, backend / tree, ignore=IGNORED, dirs_exist_ok=True)
     for file in BACKEND_FILES:
         (backend / file).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO / "backend" / file, backend / file)
     shutil.copytree(
-        REPO / "agent" / "lycosa_agent", out / "agent" / "lycosa_agent", ignore=IGNORED
+        REPO / "agent" / "lycosa_agent", out / "agent" / "lycosa_agent", ignore=IGNORED,
+        dirs_exist_ok=True,
     )
 
 
+def compile_application_bytecode(python_root: Path, out: Path) -> None:
+    """Always replace app caches, including old unchecked-hash bytecode.
+
+    Checked hashes tolerate installer mtime changes while ensuring refreshed
+    backend/agent sources are actually loaded, even in a read-only install.
+    """
+    for directory in (out / "backend", out / "agent"):
+        subprocess.run(
+            [str(python_exe(python_root)), "-m", "compileall", "-q", "-f",
+             "--invalidation-mode", "checked-hash", str(directory)],
+            env=clean_env(), check=True,
+        )
+
+
 def compile_bytecode(python_root: Path, out: Path) -> None:
-    """Precompile with unchecked hashes: installers rewrite file mtimes and
-    the install dir is often read-only, so mtime-checked .pyc would be
-    recompiled in memory on every start."""
+    """Dependencies are immutable; application sources must be hash-checked."""
     exe = str(python_exe(python_root))
     # the stdlib (and the site-packages inside it) may hold a few files
     # that never compile (templates, py2 fixtures): best effort there
-    for directory, strict in (
-        (stdlib_dir(python_root), False),
-        (out / "backend", True),
-        (out / "agent", True),
-    ):
-        result = subprocess.run(
-            [exe, "-m", "compileall", "-q", "-j", "0", "--invalidation-mode",
-             "unchecked-hash", str(directory)],
-            env=clean_env(),
-            check=False,
-        )
-        if result.returncode != 0 and strict:
-            raise SystemExit(f"compileall failed for {directory}")
+    subprocess.run(
+        [exe, "-m", "compileall", "-q", "-j", "0", "--invalidation-mode",
+         "unchecked-hash", str(stdlib_dir(python_root))],
+        env=clean_env(), check=False,
+    )
+    compile_application_bytecode(python_root, out)
 
 
 def backend_version() -> str:
@@ -347,9 +353,17 @@ def smoke_check(python_root: Path, out: Path) -> None:
         "import asyncpg, alembic, uvicorn, fastapi, qdrant_client, cryptography, "
         "pwdlib, psutil, zeroconf; import lycosa_agent.main; "
         "from app.version import APP_VERSION; assert APP_VERSION != '0.0.0+dev', APP_VERSION; "
-        "print('imports ok, backend', APP_VERSION)"
+        "from app.api.v1.router import api_v1_router; "
+        "probe = fastapi.FastAPI(); probe.include_router(api_v1_router); "
+        "paths = probe.openapi()['paths']; "
+        "assert '/api/v1/cli/workspaces' in paths, 'Bundled backend is missing CLI workspaces'; "
+        "assert '/api/v1/cli/sessions/{session_id}/tasks' in paths, 'Bundled backend is missing CLI execution'; "
+        "print('imports and CLI routes ok, backend', APP_VERSION)"
     )
-    subprocess.run([str(python_exe(python_root)), "-c", code], check=True, env=env)
+    subprocess.run(
+        [str(python_exe(python_root)), "-c", code],
+        check=True, env=env, cwd=out / "backend",
+    )
 
 
 def check_no_dangling_symlinks(out: Path) -> None:
@@ -392,13 +406,27 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
+    parser.add_argument(
+        "--refresh-sources", action="store_true",
+        help="Refresh backend/agent code and checked bytecode in an existing runtime, without downloads",
+    )
     args = parser.parse_args()
 
     if sys.version_info < (3, 11, 4):
         raise SystemExit("stage_runtime.py needs Python 3.11.4+ (tarfile extraction filters)")
+    out: Path = args.out.resolve()
+    if args.refresh_sources:
+        python_root = out / "python"
+        if not (out / "runtime.json").is_file() or not python_exe(python_root).is_file():
+            raise SystemExit(f"No staged runtime to refresh at {out}; stage it first")
+        stage_sources(out)
+        write_backend_metadata(python_root)
+        compile_application_bytecode(python_root, out)
+        smoke_check(python_root, out)
+        log(f"refreshed application sources and checked bytecode at {out}")
+        return
     target = host_target()
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    out: Path = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     previous = [p for p in out.iterdir() if p.name != ".gitkeep"]
     if previous:

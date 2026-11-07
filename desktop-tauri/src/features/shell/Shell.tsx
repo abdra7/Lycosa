@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { isApiError } from "../../api/errors";
 import { eventSummary, principalName } from "../../api/types";
-import { Brand } from "../../components/brand";
 import { Icon } from "../../components/icons";
 import { IconButton, StatusDot, useConfirm, useOutsideClick } from "../../components/ui";
 import { useLiveEvents } from "../../state/events";
@@ -26,7 +25,7 @@ import { WorkflowsScreen } from "../workflows/WorkflowsScreen";
 
 const SECTIONS: { id: Section; label: string; icon: string }[] = [
   { id: "nodes", label: "Nodes", icon: "nodes" },
-  { id: "tasks", label: "Tasks", icon: "tasks" },
+  { id: "tasks", label: "CLI", icon: "terminal" },
   { id: "chat", label: "Chat", icon: "chat" },
   { id: "workflows", label: "Workflows", icon: "workflows" },
   { id: "knowledge", label: "Knowledge", icon: "knowledge" },
@@ -60,7 +59,7 @@ export function Shell() {
         {sections.map((s) => (
           <button
             key={s.id}
-            className="nav-item"
+            className={`nav-item${s.id === "admin" ? " nav-item-bottom" : ""}`}
             aria-current={nav.section === s.id ? "page" : undefined}
             onClick={() => nav.go(s.id)}
           >
@@ -149,8 +148,7 @@ function Header() {
   };
 
   return (
-    <header className="shell-header">
-      <Brand />
+    <header className="shell-header" aria-label="Application header">
       <span className="spacer" />
       {!keychain && (
         <span className="chip small" title="No OS keychain is available, so sign-ins last until the app closes.">

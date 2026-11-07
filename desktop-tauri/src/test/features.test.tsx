@@ -138,72 +138,7 @@ describe("nodes", () => {
   });
 });
 
-describe("tasks", () => {
-  it("preselects the default route and submits through it", async () => {
-    const fake = signedIn()
-      .route("GET /api/v1/llm/routing", { purposes: ["default"], personal: [{ purpose: "default", scope: "personal", chain: [{ account_id: "a1", model: "m" }] }], deployment: [] })
-      .route("POST /api/v1/tasks", { id: "t1", type: "general", status: "succeeded", queued_at: "", payload: { prompt: "hi" }, result: { output: "Hello there" } });
-    renderApp(fake);
-    await go("Tasks");
-    await waitFor(() => expect(screen.getByLabelText("Route")).toHaveValue("default"));
-    const user = userEvent.setup();
-    await user.type(screen.getByLabelText("Prompt"), "hi");
-    await user.click(screen.getByRole("button", { name: "Run task" }));
-    expect(await screen.findByText("Hello there")).toBeInTheDocument();
-    expect(fake.apiCall("POST", "/api/v1/tasks")[0]!.body).toEqual({ prompt: "hi", route: "default" });
-  });
-
-  it("an explicit API account needs a model; a Claude plan defaults it", async () => {
-    const accounts = [
-      { id: "a1", provider: "openai", provider_name: "OpenAI", label: "Work", scope: "personal", mine: true, usable: true, manageable: true, auth_method: "api_key", base_url: "", is_local: false, status: "active", api_access: "available", credential_configured: true },
-      { id: "c1", provider: "claude_subscription", provider_name: "Claude subscription", label: "My Claude", scope: "personal", mine: true, usable: true, manageable: true, auth_method: "node_sign_in", base_url: "", is_local: false, status: "active", api_access: "available", credential_configured: false, node_name: "desk" },
-    ];
-    const fake = signedIn().route("GET /api/v1/llm/accounts", accounts).route("POST /api/v1/tasks", { id: "t", type: "general", status: "succeeded", queued_at: "" });
-    renderApp(fake);
-    await go("Tasks");
-    const user = userEvent.setup();
-    await user.selectOptions(await screen.findByLabelText("Route"), "account:a1");
-    await user.type(screen.getByLabelText("Prompt"), "hi");
-    await user.click(screen.getByRole("button", { name: "Run task" }));
-    expect(await screen.findByText("Enter the model to use with Work.")).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Route"), "account:c1");
-    expect(screen.getByText(/Runs Claude Code on desk/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Run task" }));
-    await waitFor(() => expect(fake.apiCall("POST", "/api/v1/tasks")[0]!.body).toEqual({ prompt: "hi", llm_account_id: "c1", model: "default" }));
-  });
-
-  it("keeps the task running message when the controller drops the connection", async () => {
-    const fake = signedIn().route("POST /api/v1/tasks", () => {
-      throw { kind: "unreachable", base_url: "http://10.0.0.5:8000", message: "the request timed out" };
-    });
-    renderApp(fake);
-    await go("Tasks");
-    const user = userEvent.setup();
-    await user.type(await screen.findByLabelText("Prompt"), "long job");
-    await user.click(screen.getByRole("button", { name: "Run task" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("the task may still be running; watch Recent below.");
-  });
-
-  it("lists recent tasks with their execution trace", async () => {
-    const fake = signedIn().route("GET /api/v1/tasks", [
-      { id: "t", type: "coding", status: "failed", queued_at: "", payload: { prompt: "fix it" }, error: "all nodes failed", executions: [{ node_id: "n1", attempt: 1, status: "failed", error: "timeout" }] },
-    ]);
-    renderApp(fake);
-    await go("Tasks");
-    expect(await screen.findByText("fix it")).toBeInTheDocument();
-    expect(screen.getByText("failed · coding · 1 attempt(s)")).toBeInTheDocument();
-    expect(screen.getByText("attempt 1: failed — timeout")).toBeInTheDocument();
-  });
-
-  it("phantom runs show once and cannot run without a configured model", async () => {
-    const fake = signedIn().route("GET /api/v1/phantom/capabilities", { enabled: false, models: [] });
-    renderApp(fake);
-    await go("Tasks");
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Phantom task (no history)" }));
-    expect(await screen.findByText("Ask the controller administrator to configure an isolated local model.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run Phantom" })).toBeDisabled();
-  });
-});
+// CLI session, task history and Phantom flows are covered in cli.test.tsx.
 
 describe("workflows", () => {
   const WF = { id: "w1", name: "Plan and do", description: null, definition: { steps: [{ id: "plan", kind: "task" }, { id: "gate", kind: "approval" }] } };

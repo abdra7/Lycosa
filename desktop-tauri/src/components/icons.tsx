@@ -3,7 +3,11 @@
 
 const PATHS: Record<string, string> = {
   nodes: "M4 5h16v5H4zM4 14h16v5H4zM7 7.5h.01M7 16.5h.01",
-  tasks: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM10 8.5v7l6-3.5z",
+  terminal: "M5 6l6 6-6 6M14 18h6",
+  grid: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
+  archive: "M3 3h18v4H3zM5 7v14h14V7M10 11h4",
+  chevron: "M6 9l6 6 6-6",
+  settings: "M4 7h16M4 17h16M9 4v6M15 14v6",
   chat: "M4 5h16v11H9l-5 4z",
   workflows: "M6 3v6M6 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 15v6M18 6a3 3 0 1 0 0 .01M18 9v3a3 3 0 0 1-3 3H9",
   knowledge: "M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2zM4 5v16M8 7h7",

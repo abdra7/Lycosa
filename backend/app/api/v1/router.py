@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     admin,
     auth,
+    cli,
     knowledge,
     llm,
     me,
@@ -22,6 +23,7 @@ api_v1_router.include_router(admin.router)
 api_v1_router.include_router(nodes.router)
 api_v1_router.include_router(recommendations.router)
 api_v1_router.include_router(tasks.router)
+api_v1_router.include_router(cli.router)
 api_v1_router.include_router(knowledge.router)
 api_v1_router.include_router(workflows.router)
 api_v1_router.include_router(phantom.router)

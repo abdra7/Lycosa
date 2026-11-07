@@ -54,6 +54,12 @@ class Task(UUIDPkMixin, TimestampMixin, Base):
 
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_by_api_key_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("api_keys.id"))
+    # A CLI transcript links the task before dispatch, so it survives a
+    # disconnected desktop or a controller restart. History remains when the
+    # user deletes its session.
+    cli_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("cli_sessions.id", ondelete="SET NULL"), index=True
+    )
 
     queued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)

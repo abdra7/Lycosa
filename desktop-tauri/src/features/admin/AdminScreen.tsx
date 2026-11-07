@@ -178,7 +178,7 @@ function LegacyKeysDialog({ onClose }: { onClose: () => void }) {
       const selected = list.find((p) => p["name"] === provider);
       setMessage(
         selected?.["credential_configured"] === true
-          ? "Key configured (not yet validated). Use Tasks to test the model."
+          ? "Key configured (not yet validated). Use a CLI session to test the model."
           : "No key configured.",
       );
     } catch {
@@ -214,7 +214,7 @@ function LegacyKeysDialog({ onClose }: { onClose: () => void }) {
     >
       <div className="stack-12">
         <p>
-          Controller-wide keys for the older provider route (Tasks → Route: "Provider above"). To connect accounts, pick
+          Controller-wide keys for the provider route in CLI session settings. To connect accounts, pick
           models and set routing, use the Providers section instead.
         </p>
         <p className="small muted">

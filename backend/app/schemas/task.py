@@ -63,10 +63,17 @@ class TaskCreate(BaseModel):
     # universal LLM layer (ADR-031): a provider account + model, or a purpose
     llm_account_id: uuid.UUID | None = None
     route: str | None = Field(default=None, pattern=LLM_ROUTE_PATTERN)
+    # Explicit node selection is a hard constraint, not a routing preference.
+    node_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def _llm_target(self) -> "TaskCreate":
         check_llm_target(self)
+        if self.node_id is not None:
+            if self.uses_llm_layer:
+                raise ValueError("node_id cannot be combined with llm_account_id/route")
+            if self.provider not in {"ollama", "anthropic"}:
+                raise ValueError("node_id is only supported for node-executed providers")
         return self
 
     @property

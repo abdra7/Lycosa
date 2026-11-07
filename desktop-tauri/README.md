@@ -23,11 +23,25 @@ one is called *This computer*.
 
 | Piece | Where | Notes |
 |---|---|---|
-| UI | webview (React) | Gets no shell, file, network or opener permission: 32 typed commands only (`src-tauri/capabilities/main.json`). |
+| UI | webview (React) | Gets no shell, file, network or opener permission: validated commands only (`src-tauri/capabilities/main.json`). |
 | Controller requests | Rust (`src-tauri/src/controller`) | Only `/api/v1/*` and `/healthz` of the active profile. The token is added in Rust. Redirects are never followed. API keys and Phantom input need HTTPS or a loopback controller. |
 | Session tokens | OS keychain | Windows Credential Manager, macOS Keychain or Secret Service. Without a keychain they stay in memory, and the header says so. |
 | Live events, chat streaming, LAN scan, OpenRouter sign-in | Rust | WebSocket with a 5 s reconnect; SSE parsing; mDNS (`mdns-sd`); a one-shot 127.0.0.1 listener. |
 | Standalone services | Rust supervisor (`src-tauri/src/supervisor`) | PostgreSQL → Qdrant → migrations → admin seed → API → optional agent. |
+
+### Native title bar and theme
+
+The saved light/dark choice is sent to Rust through `set_window_theme` at
+startup and whenever the theme changes, including before sign-in. Tauri's
+`set_theme` updates the native window controls. On Windows 11 (build 22000+),
+`DwmSetWindowAttribute` also sets the caption, text, and border colors to the
+UI's `--bg`, `--text`, and `--border` tokens. Windows 10 retains its native
+light/dark frame if custom caption colors are unsupported. Native resizing,
+window buttons, and Snap Layouts stay available.
+
+The implementation is in `src-tauri/src/appearance.rs`; a Rust regression
+test checks its palette against `src/styles/app.css`. See Microsoft's
+[DWM attribute reference](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute).
 
 ### Standalone mode in detail
 
@@ -111,7 +125,7 @@ UI code is under `src/`, Rust code under `src-tauri/src/`.
 | Node detail: usage, GPU, hardware, role, model recommendations + install, delete | `NodeDetail.tsx` | |
 | Add node (mint key, per-OS commands, localhost → LAN IP) | `AddNodeDialog.tsx`, `netinfo.rs` | Hints when the local controller is not in network mode |
 | LAN discovery (mDNS) incl. Windows virtual-adapter handling | `discovery.rs` (`mdns-sd`, per-interface) | |
-| Tasks: provider, LLM routes, accounts, default-route preselection, results, recent + trace | `TasksScreen.tsx` | |
+| CLI: persistent workspaces, concurrent sessions, node selection, transcripts, archive/restore | `TasksScreen.tsx` | Session settings retain provider, LLM routes, accounts, models and knowledge retrieval; previous tasks remain in task history. |
 | Phantom (HTTPS/loopback only, no history, 60 s clear) | `PhantomDialog.tsx` (+ Rust transport check) | |
 | Chat (SSE streaming, stop, target picker) | `features/chat`, `controller/http.rs` | |
 | Workflows: create (templates), view, run, approve/reject, delete | `WorkflowsScreen.tsx`, `RunView.tsx` | |
@@ -159,3 +173,38 @@ says the runtime is not bundled.
 `npx tauri build` produces the installers for the current OS. Release builds
 run in CI on native runners (`.github/workflows/release.yml`), which also
 install each package and run `--smoke-test` before publishing.
+
+## CLI workspaces
+
+The CLI section replaces the single task form with a grid of independent
+sessions. Create a workspace, add sessions, and send prompts to the selected
+node or configured provider. Session settings expose task type, model, LLM
+routes/accounts, and knowledge retrieval. Completed exchanges become context
+for the next prompt. This is an interface to Lycosa's AI task dispatcher;
+it does not execute arbitrary operating-system shell commands.
+
+Workspaces, session settings, transcripts, and archive state are stored on
+the controller and scoped to the signed-in user or API key. The desktop polls
+for results after navigation or reconnect. Different sessions run concurrently;
+each individual session accepts one task at a time. Archive/restore and delete
+are unavailable while a session is running. Deleting a session preserves its
+task execution and audit records in task history.
+
+Selecting a node pins execution to that node. A missing, offline, or
+incompatible node produces an error rather than choosing another computer.
+LLM routes and accounts select their own execution target; clear the node
+selection to use those options. The token badge shows reported usage only.
+
+This feature requires backend migration `0013`. Standalone startup applies
+migrations automatically. For a remote controller,
+deploy the updated backend and run `alembic upgrade head` before opening CLI.
+If developing against an already staged desktop runtime, refresh its backend
+sources, migrations and bytecode before rebuilding the app:
+
+```bash
+python scripts/stage_runtime.py --refresh-sources
+```
+
+This uses the bundled Python without downloading dependencies. Application
+bytecode uses checked hashes, so updated sources cannot be hidden by stale
+caches. Restart the local controller after refreshing an existing build.

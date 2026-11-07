@@ -168,11 +168,25 @@ describe("shell", () => {
   });
 
   it("toggles and remembers the theme", async () => {
-    renderApp(signedIn());
+    const fake = signedIn();
+    renderApp(fake);
+    await waitFor(() => expect(fake.called("set_window_theme").at(-1)?.args).toEqual({ mode: "light" }));
     await userEvent.setup().click(await screen.findByRole("button", { name: "Switch to dark mode" }));
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(localStorage.getItem("lycosa_theme_mode")).toBe("dark");
     expect(screen.getByRole("button", { name: "Switch to light mode" })).toBeInTheDocument();
+    await waitFor(() => expect(fake.called("set_window_theme").at(-1)?.args).toEqual({ mode: "dark" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Switch to light mode" }));
+    await waitFor(() => expect(fake.called("set_window_theme").at(-1)?.args).toEqual({ mode: "light" }));
+    expect(localStorage.getItem("lycosa_theme_mode")).toBe("light");
+  });
+
+  it("restores the native title bar's saved theme before sign-in", async () => {
+    localStorage.setItem("lycosa_theme_mode", "dark");
+    const fake = firstRun();
+    renderApp(fake);
+    await screen.findByText("Run Lycosa on this computer");
+    await waitFor(() => expect(fake.called("set_window_theme").at(-1)?.args).toEqual({ mode: "dark" }));
   });
 
   it("adds a controller from the account menu", async () => {

@@ -2,6 +2,7 @@
 //! Rust side that talks to controllers and supervises the standalone local
 //! services.
 
+pub mod appearance;
 pub mod commands;
 pub mod controller;
 pub mod discovery;
@@ -121,6 +122,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            appearance::set_window_theme,
             commands::app_info,
             commands::session_state,
             commands::session_restore,

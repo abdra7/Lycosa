@@ -6,6 +6,7 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "allow-set-window-theme",
     "allow-app-info",
     "allow-session-state",
     "allow-session-restore",

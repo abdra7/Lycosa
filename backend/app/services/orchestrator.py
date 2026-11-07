@@ -152,6 +152,9 @@ async def submit_task(
     body: TaskCreate,
     created_by_user_id: uuid.UUID | None,
     created_by_api_key_id: uuid.UUID | None,
+    *,
+    cli_session_id: uuid.UUID | None = None,
+    execution_prompt: str | None = None,
 ) -> Task:
     task_type = classify(body.prompt, body.type)
     task = Task(
@@ -164,6 +167,10 @@ async def submit_task(
             "knowledge_collection": body.knowledge_collection,
             "provider": body.provider,
             "requires_privacy": body.requires_privacy,
+            **({"node_id": str(body.node_id)} if body.node_id else {}),
+            # Ownership protection must outlive session deletion, which
+            # unlinks the FK but retains execution and audit records.
+            **({"cli_session_id": str(cli_session_id)} if cli_session_id else {}),
             **(
                 {
                     "llm_account_id": str(body.llm_account_id) if body.llm_account_id else None,
@@ -175,6 +182,7 @@ async def submit_task(
         },
         created_by_user_id=created_by_user_id,
         created_by_api_key_id=created_by_api_key_id,
+        cli_session_id=cli_session_id,
     )
     db.add(task)
     await db.flush()
@@ -191,7 +199,15 @@ async def submit_task(
     )
     await db.commit()
     with _executing(task.id):
-        return await _execute(db, task, body, task_type, created_by_user_id, created_by_api_key_id)
+        return await _execute(
+            db,
+            task,
+            body,
+            task_type,
+            created_by_user_id,
+            created_by_api_key_id,
+            execution_prompt=execution_prompt,
+        )
 
 
 async def _execute(
@@ -201,6 +217,8 @@ async def _execute(
     task_type: TaskType,
     created_by_user_id: uuid.UUID | None,
     created_by_api_key_id: uuid.UUID | None,
+    *,
+    execution_prompt: str | None = None,
 ) -> Task:
     if body.provider != "ollama" and body.requires_privacy:
         return await _finish(
@@ -212,7 +230,7 @@ async def _execute(
 
     # knowledge injection: explicit query wins; retrieval-type tasks use the
     # prompt itself. The agent never learns where knowledge lives (FR-9).
-    prompt = body.prompt
+    prompt = execution_prompt if execution_prompt is not None else body.prompt
     knowledge_query = body.knowledge_query or (
         body.prompt if task_type == TaskType.RETRIEVAL else None
     )
@@ -244,7 +262,7 @@ async def _execute(
         if not retrieval_failed:
             if knowledge and knowledge.chunks:
                 # ground the answer in the retrieved context (ADR-019)
-                prompt = _grounded_prompt(knowledge.context_text, body.prompt)
+                prompt = _grounded_prompt(knowledge.context_text, prompt)
             else:
                 # retrieval succeeded but nothing relevant: return the grounded
                 # refusal instead of letting the LLM answer from outside knowledge
@@ -316,6 +334,10 @@ async def _execute(
     decisions = await route_candidates(
         db, task_type, body, credentials_available=credentials_available
     )
+    if body.node_id is not None:
+        decisions = [decision for decision in decisions if decision.node.id == body.node_id]
+        for decision in decisions:
+            decision.reasons.append("explicitly selected node; failover to other nodes disabled")
     candidates = [decision.node for decision in decisions]
     max_attempts = get_settings().task_max_attempts
 
@@ -326,8 +348,13 @@ async def _execute(
             task,
             TaskStatus.FAILED,
             error=(
-                f"No compatible online node for task type {task_type.value!r} "
-                f"(needs an online node with role in [{roles}] and a reachable agent; "
+                (
+                    f"Selected node {body.node_id} is unavailable or incompatible for "
+                    f"task type {task_type.value!r}; no other node was used. "
+                    if body.node_id is not None
+                    else f"No compatible online node for task type {task_type.value!r} "
+                )
+                + f"(needs an online node with role in [{roles}] and a reachable agent; "
                 "check node status and role assignments)"
             ),
         )
