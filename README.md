@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/lycosa-logo.png" alt="Lycosa" width="160" />
+<img src="docs/assets/lycosa-logo.png" alt="Lycosa spider logo" width="200" height="200" />
 
 # Lycosa — Local, Cloud & Ephemeral AI Orchestration
 
