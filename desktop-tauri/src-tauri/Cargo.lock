@@ -2209,7 +2209,7 @@ version = "0.5.0"
 dependencies = [
  "chrono",
  "futures-util",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "if-addrs",
  "keyring",
  "libc",
