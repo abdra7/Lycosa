@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
 import os
 import py_compile
@@ -15,6 +16,29 @@ _SCRIPT = Path(__file__).with_name("stage_runtime.py")
 _spec = importlib.util.spec_from_file_location("stage_runtime", _SCRIPT)
 stage = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(stage)
+
+
+def test_backend_metadata_refresh_replaces_the_previous_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(stage, "stdlib_dir", lambda _: tmp_path)
+    monkeypatch.setattr(stage, "backend_version", lambda: "0.5.0")
+    stage.write_backend_metadata(tmp_path)
+    site = tmp_path / "site-packages"
+    unrelated = site / "another_package-1.0.dist-info"
+    unrelated.mkdir()
+    (unrelated / "METADATA").write_text("Name: another-package\nVersion: 1.0\n")
+
+    monkeypatch.setattr(stage, "backend_version", lambda: "0.5.1")
+    stage.write_backend_metadata(tmp_path)
+    stage.write_backend_metadata(tmp_path)
+
+    versions = [
+        dist.version for dist in importlib.metadata.distributions(path=[str(site)])
+        if dist.metadata["Name"] == "lycosa-backend"
+    ]
+    assert versions == ["0.5.1"]
+    assert (unrelated / "METADATA").is_file()
 
 
 def test_application_refresh_replaces_unchecked_bytecode_and_detects_later_edits(

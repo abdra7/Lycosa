@@ -336,7 +336,14 @@ def write_backend_metadata(python_root: Path) -> None:
     `importlib.metadata.version("lycosa-backend")` (app/version.py, shown by
     /healthz) report the real version instead of 0.0.0+dev."""
     version = backend_version()
-    dist = stdlib_dir(python_root) / "site-packages" / f"lycosa_backend-{version}.dist-info"
+    site = stdlib_dir(python_root) / "site-packages"
+    # A source refresh can reuse a runtime staged for an earlier release.
+    # Multiple metadata directories make importlib report the old version.
+    for stale in site.glob("lycosa_backend-*.dist-info"):
+        if stale.is_symlink() or stale.resolve().parent != site.resolve():
+            raise SystemExit(f"backend metadata escapes the staged site-packages: {stale}")
+        shutil.rmtree(stale)
+    dist = site / f"lycosa_backend-{version}.dist-info"
     dist.mkdir(parents=True, exist_ok=True)
     (dist / "METADATA").write_text(
         f"Metadata-Version: 2.1\nName: lycosa-backend\nVersion: {version}\n", encoding="utf-8"
@@ -352,7 +359,7 @@ def smoke_check(python_root: Path, out: Path) -> None:
     code = (
         "import asyncpg, alembic, uvicorn, fastapi, qdrant_client, cryptography, "
         "pwdlib, psutil, zeroconf; import lycosa_agent.main; "
-        "from app.version import APP_VERSION; assert APP_VERSION != '0.0.0+dev', APP_VERSION; "
+        f"from app.version import APP_VERSION; assert APP_VERSION == {backend_version()!r}, APP_VERSION; "
         "from app.api.v1.router import api_v1_router; "
         "probe = fastapi.FastAPI(); probe.include_router(api_v1_router); "
         "paths = probe.openapi()['paths']; "

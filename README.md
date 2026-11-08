@@ -55,6 +55,9 @@ history. Both cloud adapters and Phantom execution require explicit setup.
   registration and recommended one of **AI Compute · Hybrid · Knowledge ·
   Tool · Vision · Storage**, with a human-readable rationale and per-role
   confidence scores. Accept the recommendation or override it.
+- **CLI workspaces and sessions** — saved conversations with per-session
+  provider, model and node settings. One session fills the workspace;
+  additional sessions share it and can run concurrently.
 - **Task scheduling** — the scheduler places work by role and
   capacity and retries on the next best candidate when a node drops.
 - **Knowledge routing (RAG)** — upload documents into collections, embed
@@ -126,7 +129,7 @@ Claude Code:
 2. Start its agent with `LYCOSA_CLAUDE_SUBSCRIPTION=true` and
    `LYCOSA_CLAUDE_SUBSCRIPTION_OWNER=<your Lycosa email>`.
 3. In the desktop app, open **Providers → Claude subscription → Connect**,
-   pick the node and connect. Then use it from **Chat**, Tasks, workflows or
+   pick the node and connect. Then use it from **Chat**, CLI sessions, workflows or
    a personal route.
 
 Lycosa never sees your Claude credentials; the node runs the unmodified
@@ -137,7 +140,7 @@ See ADR-032.
 
 ### Phantom Agents
 
-Use **Tasks → Phantom task (no history)** to run a configured local model through
+Use **CLI → Phantom task (no history)** to run a configured local model through
 `POST /api/v1/phantom/tasks`. Each container has no network, read-only model
 weights, bounded resources and temporary scratch space. The response is returned
 only after Docker confirms removal; it cannot be retrieved from Recent Tasks.
@@ -245,6 +248,12 @@ Download the desktop app for your OS from the
 | macOS 11+ (Apple silicon) | `Lycosa-macos-arm64-<version>.dmg` |
 | macOS 11+ (Intel) | `Lycosa-macos-x64-<version>.dmg` |
 | Linux (x86_64, glibc 2.35+) | `Lycosa-linux-amd64-<version>.deb` or `Lycosa-linux-x86_64-<version>.AppImage` |
+
+**Updating an existing installation:** download the latest installer from
+the release's **Assets**, close Lycosa, and install it over the previous
+version. Your workspaces and app data are retained. Installations do not
+update automatically when new source code is pushed to GitHub. For a remote
+controller, update its backend too; CLI sessions require backend 0.5.1 or newer.
 
 Open it and choose **Run Lycosa on this computer**. The first start takes
 about half a minute (it creates the database), then you are signed in as the
