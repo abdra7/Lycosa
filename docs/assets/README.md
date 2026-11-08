@@ -11,13 +11,20 @@ The desktop setup and sign-in screens use the same logo at
 `desktop-tauri/public/lycosa_logo.png`. The app, installer, and taskbar icons live in
 `desktop-tauri/src-tauri/icons/`.
 
-To regenerate the desktop icons, run this from `desktop-tauri/`:
+The native icons use a tighter canvas than the presentation logo so they
+match the visible size of other apps in the taskbar and Task Manager. The
+artwork fills about 94% of the icon height, with transparent margins and its
+original proportions preserved. The supplied source artwork stays unchanged.
 
-```sh
-npm run tauri -- icon ../docs/assets/lycosa-logo-source.png --output ../reports/branding/icons
+To regenerate the desktop icons on Windows, run this from the repository root
+(requires PowerShell 7 and the installed desktop npm dependencies):
+
+```powershell
+pwsh -File desktop-tauri/scripts/generate_icons.ps1
 ```
 
-Copy `32x32.png`, `64x64.png`, `128x128.png`, `128x128@2x.png`, `icon.png`,
-`icon.ico`, and `icon.icns` from that output into `src-tauri/icons/`. Copy
-`icon.png` to both `public/lycosa_logo.png` and `../docs/assets/lycosa-logo.png`.
-The generator's other platform outputs are not used by the desktop app.
+The script fits the visible source artwork onto a 1024 px canvas, uses Tauri
+to produce the standard icon formats, and copies the seven desktop assets
+into `desktop-tauri/src-tauri/icons/`. Intermediate files go into the ignored
+`reports/branding/app-icons/` directory. README and sign-in presentation logos
+retain their existing layout.

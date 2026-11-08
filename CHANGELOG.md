@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Enlarged the visible desktop icon by removing excess transparent padding
+  before generating native icon sizes. The existing spider artwork now fills
+  the taskbar, Task Manager and window icon area like other desktop apps.
+
 ## [0.5.1] - 2026-11-08
 
 ### Added
